@@ -1,0 +1,9 @@
+livekit-agents==1.5.1
+livekit-plugins-google==1.5.1
+livekit-plugins-cartesia==1.5.1
+livekit-plugins-sarvam==1.5.1
+livekit>=1.1.2,<2
+python-dotenv==1.0.1
+httpx>=0.28.1,<1
+supabase>=2.28.3,<3
+pydantic>=2.9,<3
