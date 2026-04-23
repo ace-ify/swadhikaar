@@ -247,7 +247,7 @@ export default function PatientRecordsPage() {
                             {row.blood_glucose}
                           </TableCell>
                           <TableCell className="font-mono text-sm">
-                            {row.bmi.toFixed(1)}
+                            {row.bmi?.toFixed(1) ?? "—"}
                           </TableCell>
                           <TableCell className="text-sm">{row.weight} kg</TableCell>
                           <TableCell className="text-sm">

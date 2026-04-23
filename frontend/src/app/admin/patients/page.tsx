@@ -215,7 +215,7 @@ export default function AdminPatientsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">All Patients</h1>
-          <p className="text-sm text-slate-500">
+          <div className="text-sm text-slate-500">
             {loading ? (
               <Skeleton className="h-3 w-48 mt-1" />
             ) : (
@@ -223,7 +223,7 @@ export default function AdminPatientsPage() {
                 new Set(allPatients.map((p) => p.camp)).size
               } health camps${error ? " (sample data)" : ""}`
             )}
-          </p>
+          </div>
         </div>
         <Button variant="outline" onClick={handleExportCSV}>Export CSV</Button>
       </div>

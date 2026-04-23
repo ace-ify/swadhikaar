@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 
 function getSupabase() {
@@ -31,45 +31,54 @@ function useSupabaseQuery<T>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const optionsKey = JSON.stringify(options);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      let query = getSupabase()
-        .from(table)
-        .select(options?.select || "*");
 
-      if (options?.eq) {
-        for (const [col, val] of options.eq) {
+    const currentOptions = optionsRef.current;
+    const select = currentOptions?.select || "*";
+    const eq = currentOptions?.eq;
+    const order = currentOptions?.order;
+    const limit = currentOptions?.limit;
+
+    try {
+      let query = getSupabase().from(table).select(select);
+
+      if (eq) {
+        for (const [col, val] of eq) {
           query = query.eq(col, val);
         }
       }
 
-      if (options?.order) {
-        query = query.order(options.order.column, {
-          ascending: options.order.ascending ?? false,
+      if (order) {
+        query = query.order(order.column, {
+          ascending: order.ascending ?? false,
         });
       }
 
-      if (options?.limit) {
-        query = query.limit(options.limit);
+      if (limit) {
+        query = query.limit(limit);
       }
 
       const { data: rows, error: err } = await query;
       if (err) throw err;
       setData((rows as T[]) || []);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
       setError(msg);
       setData([]);
     } finally {
       setLoading(false);
     }
-  }, [table, JSON.stringify(options)]);
+  }, [table]);
 
   useEffect(() => {
     fetch();
-  }, [fetch]);
+  }, [fetch, optionsKey]);
 
   return { data, loading, error, refetch: fetch };
 }
@@ -105,7 +114,7 @@ export interface HealthVitals {
   blood_glucose: number;
   height: number;
   weight: number;
-  bmi: number;
+  bmi: number | null;
   bmi_category: string;
   waist_circumference: number;
   perfusion_index: number;

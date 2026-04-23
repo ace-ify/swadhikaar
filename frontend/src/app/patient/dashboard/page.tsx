@@ -109,10 +109,9 @@ export default function PatientDashboardPage() {
     primaryPatient?.id || "00000000-0000-0000-0000-000000000001";
 
   const { data: vitalsData, loading: vitalsLoading } = useVitals(primaryPatientId);
-  const { data: riskData, loading: riskLoading } = useRiskAssessments(primaryPatientId);
-  const { data: callData, loading: callsLoading } = useCallLogs(primaryPatientId);
-  const { data: consentData, loading: consentsLoading, refetch: refetchConsents } =
-    useConsents(primaryPatientId);
+  const { data: riskData } = useRiskAssessments(primaryPatientId);
+  const { data: callData } = useCallLogs(primaryPatientId);
+  const { data: consentData, refetch: refetchConsents } = useConsents(primaryPatientId);
 
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [sosTriggered, setSosTriggered] = useState(false);
@@ -127,7 +126,8 @@ export default function PatientDashboardPage() {
     const acc = useAccessibility();
     lang = acc.language;
     fontSize = acc.fontSize;
-  } catch (e) {}
+  } catch {
+  }
 
   const t = TRANSLATIONS[lang];
 
@@ -149,9 +149,7 @@ export default function PatientDashboardPage() {
     ? String(latestVitals.blood_glucose)
     : "—";
 
-  const bmiDisplay = latestVitals
-    ? latestVitals.bmi.toFixed(1)
-    : "—";
+  const bmiDisplay = latestVitals?.bmi?.toFixed(1) ?? "—";
 
   const bmiCategory = latestVitals?.bmi_category ?? "—";
 
