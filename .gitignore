@@ -77,3 +77,17 @@ Thumbs.db
 *.pid
 *.seed
 *.stackdump
+.venv
+
+EOS-inspiration
+
+# Reference teardown of a third-party codebase — keep local, never publish
+EOS-TEARDOWN.md
+
+# -----------------------------
+# Non-code assets (keep local)
+# -----------------------------
+.playwright-mcp/
+pitchdeckuilive/
+*.pdf
+tmp.md

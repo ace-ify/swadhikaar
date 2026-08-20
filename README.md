@@ -147,6 +147,14 @@ supabase functions deploy start-voice-call --no-verify-jwt
 supabase functions deploy export-abdm --no-verify-jwt
 supabase functions deploy triage-assess --no-verify-jwt
 supabase functions deploy risk-predict --no-verify-jwt
+supabase functions deploy incident-complete --no-verify-jwt
+```
+
+`incident-complete` authenticates with a shared secret instead of a JWT, so set it
+before deploying:
+
+```bash
+supabase secrets set ACUTE_INGRESS_SECRET=<random-32-bytes>
 ```
 
 ### 4) Run voice worker
@@ -168,6 +176,36 @@ npm run dev
 - `export-abdm`: ABDM export reference generation
 - `triage-assess`: triage severity evaluation
 - `risk-predict`: risk scoring endpoint
+- `incident-complete`: acute → continuity seam. A completed emergency incident upserts a
+  patient by ABHA ID (phone fallback), writes a FHIR `Encounter` (+ `Condition` when
+  coded), and enrols the patient in the `Post-Discharge Recovery` protocol by scheduling
+  Day 1/3/7/14/30 voice calls. Idempotent per incident — replaying a delivery resolves the
+  same patient and adds no duplicate Encounter or call. Requires header `x-acute-secret`.
+
+## Local development
+
+```bash
+npx supabase start                       # Postgres + API + Studio in Docker
+npx supabase functions serve incident-complete \
+  --env-file supabase/functions/.env.local --no-verify-jwt
+```
+
+`supabase/functions/.env.local` holds `ACUTE_INGRESS_SECRET` and is gitignored.
+
+Two checks, both runnable:
+
+```bash
+node supabase/functions/_shared/acute-seam.test.ts     # pure logic: schedule math, validation
+docker exec -i supabase_db_swadhikaar psql -U postgres -d postgres \
+  -v ON_ERROR_STOP=1 -f - < supabase/verify-seam.sql   # schema contract
+```
+
+The SQL check exists because both real defects found in this seam lived in index
+definitions, not in code, and no unit test could see them: a partial unique index cannot
+arbitrate `ON CONFLICT`, and `fhir_resources` had no uniqueness at all. It also asserts
+the API-role grants added in `003_api_role_grants.sql` are present — without those every
+table returns `permission denied`, because current Supabase versions no longer grant DML
+on `public` by default and RLS policies cannot substitute for a missing `GRANT`.
 
 ## Voice Pipeline
 
