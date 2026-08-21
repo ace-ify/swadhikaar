@@ -1,15 +1,5 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

@@ -3,6 +3,7 @@
 import csv
 import os
 import random
+import sys
 import uuid
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -26,23 +27,12 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 # ---------------------------------------------------------------------------
 # CSV path (relative to this file)
 # ---------------------------------------------------------------------------
-_DATASET_DIR = os.path.join(
+CSV_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "..",
     "dataset",
+    "PS-3-Use-case-database-1.csv",
 )
-CSV_PATH = os.path.join(_DATASET_DIR, "health-camp-dataset.csv")
-if not os.path.exists(CSV_PATH):
-    csv_candidates = [
-        f
-        for f in os.listdir(_DATASET_DIR)
-        if f.lower().endswith(".csv") and "newborn" not in f.lower()
-    ]
-    if not csv_candidates:
-        raise FileNotFoundError(
-            "No suitable health camp CSV found in dataset directory"
-        )
-    CSV_PATH = os.path.join(_DATASET_DIR, sorted(csv_candidates)[0])
 
 # ---------------------------------------------------------------------------
 # Synthetic name pools
@@ -426,5 +416,54 @@ def seed():
     print("=" * 60)
 
 
+def seed_escalations(limit: int = 3) -> None:
+    """Demo fixture: a few voice calls with escalations hung off seeded patients."""
+    res = supabase.table("patients").select("id").limit(limit).execute()
+    if not res.data:
+        print("No patients found — run the patient seed first.")
+        return
+
+    print("Inserting voice calls and escalations...")
+    for i, p_id in enumerate(p["id"] for p in res.data):
+        call_id = str(uuid.uuid4())
+        started = datetime.now(timezone.utc) - timedelta(minutes=i * 30 + 10)
+        supabase.table("voice_calls").insert(
+            {
+                "id": call_id,
+                "patient_id": p_id,
+                "call_type": "follow_up",
+                "use_case": "follow_up",
+                "status": "completed",
+                "language": "hindi",
+                "transcript": (
+                    "Mera blood pressure badha hua lag raha hai aur chakkar aa raha hai."
+                ),
+                "severity": "HIGH" if i == 0 else "MODERATE",
+                "duration_seconds": 120,
+                "started_at": started.isoformat(),
+                "ended_at": (started + timedelta(minutes=2)).isoformat(),
+            }
+        ).execute()
+
+        if i < 2:
+            supabase.table("escalations").insert(
+                {
+                    "id": str(uuid.uuid4()),
+                    "patient_id": p_id,
+                    "call_id": call_id,
+                    "severity_level": "3" if i == 0 else "2",
+                    "severity": "CRITICAL" if i == 0 else "HIGH",
+                    "reason": (
+                        "High blood pressure symptoms reported during voice AI checkin."
+                    ),
+                    "status": "open",
+                }
+            ).execute()
+    print("Done.")
+
+
 if __name__ == "__main__":
-    seed()
+    if "--escalations" in sys.argv:
+        seed_escalations()
+    else:
+        seed()

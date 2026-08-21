@@ -207,13 +207,16 @@ export default function AdminDashboardPage() {
           <Card className="bg-slate-900 border-slate-800 shadow-md relative overflow-hidden group">
             <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full blur-2xl group-hover:bg-white/10 transition-colors"></div>
             <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-              <CardTitle className="text-sm font-semibold text-slate-400">Gemini Native Latency</CardTitle>
+              <CardTitle className="text-sm font-semibold text-slate-400">Voice Pipeline</CardTitle>
               <Zap className="h-5 w-5 text-slate-300" />
             </CardHeader>
             <CardContent className="relative z-10">
-              <div className="text-4xl font-black text-white tracking-tight">&lt;1<span className="text-xl font-bold ml-1">sec</span></div>
+              <div className="text-2xl font-black text-white tracking-tight">
+                STT <span className="text-slate-500">→</span> LLM{" "}
+                <span className="text-slate-500">→</span> TTS
+              </div>
               <p className="text-[11px] text-slate-400 font-medium mt-2 leading-snug">
-                Native audio: no STT/TTS pipeline overhead.
+                Deepgram · Groq Llama 3.3 with Gemini failover · Murf Indic TTS
               </p>
             </CardContent>
           </Card>

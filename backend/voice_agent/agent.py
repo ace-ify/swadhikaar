@@ -30,7 +30,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Callable, Optional
 
 from pydantic import Field
 
@@ -62,6 +62,11 @@ try:
 except Exception:  # pragma: no cover
     sarvam_plugin = None
 
+try:
+    from livekit.plugins import murf as murf_plugin
+except Exception:  # pragma: no cover
+    murf_plugin = None
+
 if sarvam_plugin is not None:
 
     class ReliableSarvamTTS(sarvam_plugin.TTS):
@@ -83,6 +88,8 @@ class FailoverLLM(llm.LLM):
         self._fallback = fallback
         self._logger = logger
 
+    # Both feed llm.LLM.metrics_metadata, which labels every turn metric —
+    # without these overrides the base class reports "unknown".
     @property
     def model(self) -> str:
         return f"{self._primary.model} -> {self._fallback.model}"
@@ -110,11 +117,7 @@ class FailoverLLM(llm.LLM):
 
 
 # Local imports
-from prompts.system_prompts import (
-    build_system_prompt,
-    build_extraction_prompt,
-    DEFAULT_CONTEXT,
-)
+from prompts.system_prompts import build_system_prompt, DEFAULT_CONTEXT
 
 load_dotenv()
 
@@ -173,23 +176,7 @@ GREETINGS: dict[str, str] = {
         "Aapke bachche ka teekakaran ka samay aa raha hai. "
         "Hum aapko yaad dilana chahte hain."
     ),
-    # Backward compat aliases
-    "screening_followup": (
-        "Namaste {name} ji! Swadhikaar ki taraf se call hai. "
-        "Aapka screening mein kuch readings high aayi theen — kya aap abhi theek hain?"
-    ),
-    "chronic_check": (
-        "Namaste {name} ji! Swadhikaar se monthly check-in call hai. "
-        "Aapki dawaiyan regular chal rahi hain?"
-    ),
-    "recovery": (
-        "Namaste {name} ji! Aapke discharge ke baad hum check kar rahe hain. "
-        "Aapki recovery kaisi chal rahi hai?"
-    ),
 }
-
-# JSON block regex — to extract structured output from LLM response
-_JSON_BLOCK_RE = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 
 # CRITICAL trigger keywords — for real-time escalation detection (patient speech)
 _CRITICAL_KEYWORDS_HI = [
@@ -381,10 +368,14 @@ class TranscriptAccumulator:
     from both patient speech (symptoms) and agent speech (clinical advice).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, on_severity: Callable[[str], None] | None = None) -> None:
         self.turns: list[dict[str, str]] = []
         self._escalation_triggered = False
         self._high_triggered = False
+        # Fired once, the moment a severity keyword first appears — the safety
+        # net for when the LLM never calls the escalate_patient tool.
+        self._on_severity = on_severity
+        self._notified = False
 
     def add(self, role: str, text: str) -> None:
         self.turns.append(
@@ -420,6 +411,13 @@ class TranscriptAccumulator:
                     logger.info("Agent issued HIGH-level advice: %s", text[:120])
                     self._high_triggered = True
 
+        if self._on_severity and not self._notified:
+            if self._escalation_triggered or self._high_triggered:
+                self._notified = True
+                self._on_severity(
+                    "CRITICAL" if self._escalation_triggered else "HIGH"
+                )
+
     @property
     def is_critical(self) -> bool:
         return self._escalation_triggered
@@ -427,22 +425,6 @@ class TranscriptAccumulator:
     @property
     def is_high(self) -> bool:
         return self._high_triggered
-
-    def extract_json_block(self) -> dict[str, Any]:
-        """
-        Scan all assistant turns (last → first) for the structured JSON block
-        the LLM is instructed to emit at the end of the call.
-        """
-        for turn in reversed(self.turns):
-            if turn["role"] != "assistant":
-                continue
-            match = _JSON_BLOCK_RE.search(turn["text"])
-            if match:
-                try:
-                    return json.loads(match.group(1))
-                except json.JSONDecodeError:
-                    pass
-        return {}
 
     def to_plain_text(self) -> str:
         lines = []
@@ -462,10 +444,9 @@ async def _persist_call_data(
     call_type: str,
     language: str,
     transcript: TranscriptAccumulator,
-    room_name: str,
     realtime_actions: set[str] | None = None,
 ) -> None:
-    """Write transcript + extracted data to Supabase `voice_calls` table.
+    """Write transcript + detected severity to Supabase `voice_calls` table.
 
     Args:
         realtime_actions: Set of actions already taken by tools during the call
@@ -479,23 +460,16 @@ async def _persist_call_data(
         logger.info("Skipping Supabase persist (no client).")
         return
 
-    extracted = transcript.extract_json_block()
-    severity = extracted.get("overall_severity", "")
-    needs_escalation = extracted.get("needs_escalation", False)
-
-    # Fallback: if LLM didn't produce extraction JSON, determine severity from
-    # transcript-level keyword and agent-response detection
-    if not severity or severity == "UNKNOWN":
-        if transcript.is_critical:
-            severity = "CRITICAL"
-            needs_escalation = True
-        elif transcript.is_high:
-            severity = "HIGH"
-            needs_escalation = True
-        elif transcript.turns:
-            severity = "LOW"
-        else:
-            severity = "UNKNOWN"
+    # Severity comes from keyword + agent-advice detection over the transcript.
+    needs_escalation = transcript.is_critical or transcript.is_high
+    if transcript.is_critical:
+        severity = "CRITICAL"
+    elif transcript.is_high:
+        severity = "HIGH"
+    elif transcript.turns:
+        severity = "LOW"
+    else:
+        severity = "UNKNOWN"
 
     # Skip persistence for placeholder/non-UUID patient identifiers
     uuid_like = re.compile(
@@ -509,10 +483,9 @@ async def _persist_call_data(
         "patient_id": patient_id,
         "call_type": call_type,
         "use_case": call_type,
-        "status": "completed" if extracted.get("call_completed") else "ended",
+        "status": "completed" if transcript.turns else "ended",
         "language": language,
         "transcript": transcript.to_plain_text(),
-        "extracted_data": extracted,
         "severity": severity,
         "duration_seconds": max(1, len(transcript.turns) * 5),  # rough estimate
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -536,9 +509,7 @@ async def _persist_call_data(
                 if severity == "HIGH"
                 else "1",
                 "severity": severity,
-                "reason": extracted.get(
-                    "escalation_reason", "Critical symptoms detected during call"
-                ),
+                "reason": "Critical symptoms detected during call",
                 "status": "open",
             }
             supabase.table("escalations").insert(triage_record).execute()
@@ -685,23 +656,15 @@ class SwadhikaarAgent(VoiceAgent):
         # Build system prompt (conversation-only, no extraction schema)
         system_prompt = build_system_prompt(call_type, patient_context)
         await self.update_instructions(system_prompt)
-        self._system_prompt = (
-            system_prompt  # cached for extraction injection at call end
-        )
 
         # Store context for later use
         self._patient_id = patient_id
         self._patient_name = patient_name
         self._call_type = call_type
         self._language = language
-        self._transcript = TranscriptAccumulator()
-
-        # ── Start parallel escalation monitor ───────────────────────────
-        # Background task that watches transcript for critical/high keywords
-        # and creates escalations IMMEDIATELY — independent of LLM tool calls.
-        # Acts as a safety net: if Gemini doesn't call escalate_patient tool,
-        # this catches it within 1 second of the keyword appearing.
-        self._monitor_task = asyncio.create_task(self._escalation_monitor_loop())
+        self._transcript = TranscriptAccumulator(
+            on_severity=self._on_severity_detected
+        )
 
         # Trigger the agent to speak first using generate_reply().
         # We wrap this in a delayed task because Gemini Realtime API is in preview
@@ -731,108 +694,65 @@ class SwadhikaarAgent(VoiceAgent):
         )
 
     # -----------------------------------------------------------------------
-    # Parallel escalation monitor — runs as background asyncio task
+    # Escalation safety net — fired at keyword-detection time, not polled
     # -----------------------------------------------------------------------
 
-    async def _escalation_monitor_loop(self) -> None:
-        """Background task that polls TranscriptAccumulator every 1s for
-        critical/high keyword detections and creates DB escalations
-        immediately — independent of the LLM conversation flow.
+    _MONITOR_ESCALATION = {
+        "CRITICAL": ("3", 90, "Critical symptoms detected by keyword monitor during call"),
+        "HIGH": ("2", 75, "High-severity symptoms detected by keyword monitor during call"),
+    }
 
-        This is the 'parallel agent' safety net: if the LLM doesn't call
-        the escalate_patient tool (e.g., model failure, hallucination, or
-        the patient switches languages mid-sentence), this catches it.
+    def _on_severity_detected(self, severity: str) -> None:
+        """Sync hook from TranscriptAccumulator.add() — schedules the insert.
+
+        This is the safety net for when the LLM never calls escalate_patient
+        (model failure, hallucination, or a mid-sentence language switch).
         """
-        _monitor_critical_fired = False
-        _monitor_high_fired = False
+        if getattr(self, "_closing", False):
+            return
+        # Skip if the escalate_patient tool already handled it
+        if "escalation" in self._realtime_actions:
+            return
+        # Vaccination calls: the parent's phrasing shouldn't auto-escalate
+        if getattr(self, "_call_type", "") == "newborn_vaccination":
+            return
+        patient_id = getattr(self, "_patient_id", "")
+        if not patient_id or patient_id == "unknown":
+            return
+        asyncio.create_task(self._insert_monitor_escalation(severity, patient_id))
 
-        while True:
-            await asyncio.sleep(1.0)  # Check every second
-
-            if not hasattr(self, "_transcript"):
-                continue
-
-            # Skip if tool already handled it
-            if "escalation" in self._realtime_actions:
-                continue
-
-            # Skip vaccination calls — parent's risk shouldn't auto-escalate
-            if getattr(self, "_call_type", "") == "newborn_vaccination":
-                continue
-
-            # Skip placeholder identifiers
-            patient_id = getattr(self, "_patient_id", "")
-            if not patient_id or patient_id == "unknown":
-                continue
-
-            # CRITICAL detection
-            if self._transcript.is_critical and not _monitor_critical_fired:
-                _monitor_critical_fired = True
-                logger.warning(
-                    "MONITOR: CRITICAL keyword detected for patient %s — creating escalation",
-                    patient_id[:8],
-                )
-                try:
-                    sb = _get_supabase_client()
-                    if sb:
-                        sb.table("escalations").insert(
-                            {
-                                "patient_id": patient_id,
-                                "severity_level": "3",
-                                "severity": "CRITICAL",
-                                "reason": "Critical symptoms detected by background monitor during call",
-                                "status": "open",
-                            }
-                        ).execute()
-                        # Also update risk level immediately
-                        sb.table("patients").update(
-                            {
-                                "risk_level": "High",
-                                "overall_risk_score": 90,
-                            }
-                        ).eq("id", patient_id).execute()
-                        self._realtime_actions.add("escalation")
-                        self._realtime_actions.add("risk_update")
-                        logger.warning(
-                            "MONITOR: Escalation + risk update created for %s",
-                            patient_id[:8],
-                        )
-                except Exception as exc:
-                    logger.error("MONITOR: Escalation insert failed: %s", exc)
-
-            # HIGH detection
-            elif self._transcript.is_high and not _monitor_high_fired:
-                _monitor_high_fired = True
-                logger.info(
-                    "MONITOR: HIGH keyword detected for patient %s — creating escalation",
-                    patient_id[:8],
-                )
-                try:
-                    sb = _get_supabase_client()
-                    if sb:
-                        sb.table("escalations").insert(
-                            {
-                                "patient_id": patient_id,
-                                "severity_level": "2",
-                                "severity": "HIGH",
-                                "reason": "High-severity symptoms detected by background monitor during call",
-                                "status": "open",
-                            }
-                        ).execute()
-                        sb.table("patients").update(
-                            {
-                                "risk_level": "High",
-                                "overall_risk_score": 75,
-                            }
-                        ).eq("id", patient_id).execute()
-                        self._realtime_actions.add("escalation")
-                        self._realtime_actions.add("risk_update")
-                        logger.info(
-                            "MONITOR: HIGH escalation + risk update created for %s",
-                            patient_id[:8],
-                        )
-                except Exception as exc:
-                    logger.error("MONITOR: HIGH escalation insert failed: %s", exc)
+    async def _insert_monitor_escalation(self, severity: str, patient_id: str) -> None:
+        level, score, reason = self._MONITOR_ESCALATION[severity]
+        logger.warning(
+            "MONITOR: %s keyword detected for patient %s - creating escalation",
+            severity,
+            patient_id[:8],
+        )
+        try:
+            sb = _get_supabase_client()
+            if sb is None:
+                return
+            sb.table("escalations").insert(
+                {
+                    "patient_id": patient_id,
+                    "severity_level": level,
+                    "severity": severity,
+                    "reason": reason,
+                    "status": "open",
+                }
+            ).execute()
+            sb.table("patients").update(
+                {"risk_level": "High", "overall_risk_score": score}
+            ).eq("id", patient_id).execute()
+            self._realtime_actions.add("escalation")
+            self._realtime_actions.add("risk_update")
+            logger.warning(
+                "MONITOR: %s escalation + risk update created for %s",
+                severity,
+                patient_id[:8],
+            )
+        except Exception as exc:
+            logger.error("MONITOR: %s escalation insert failed: %s", severity, exc)
 
     # -----------------------------------------------------------------------
     # Real-time function tools — Gemini calls these mid-conversation
@@ -1127,14 +1047,8 @@ class SwadhikaarAgent(VoiceAgent):
             logger.info("User said: %s", text[:120])
 
     async def on_exit(self) -> None:
-        """Called when the agent leaves. Cancel monitor and persist call data."""
-        # Cancel the background escalation monitor
-        if hasattr(self, "_monitor_task") and not self._monitor_task.done():
-            self._monitor_task.cancel()
-            try:
-                await self._monitor_task
-            except asyncio.CancelledError:
-                pass
+        """Called when the agent leaves. Persist call data."""
+        self._closing = True
 
         room_io = self.session.room_io
         room_name = room_io.room.name if room_io and room_io.room else "unknown"
@@ -1168,7 +1082,6 @@ class SwadhikaarAgent(VoiceAgent):
                 call_type=self._call_type,
                 language=self._language,
                 transcript=self._transcript,
-                room_name=room_name,
                 realtime_actions=self._realtime_actions,
             )
 
@@ -1240,51 +1153,93 @@ async def entrypoint(ctx: JobContext) -> None:
             "GROQ_API_KEY missing, falling back to Gemini text LLM in FAST pipeline"
         )
         llm_model = gemini_fallback_llm
-    tts_provider = os.getenv("FAST_TTS_PROVIDER", "deepgram").strip().lower()
-    if tts_provider == "sarvam":
-        if sarvam_plugin is None:
-            logger.warning(
-                "Sarvam plugin unavailable, falling back to Cartesia/Deepgram"
-            )
-            tts_provider = "cartesia"
-        else:
-            try:
-                logger.info("FAST PIPELINE TTS: Sarvam (Indian voice)")
-                tts_cls = ReliableSarvamTTS or sarvam_plugin.TTS
-                tts = tts_cls(
-                    model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v2"),
-                    speaker=os.getenv("SARVAM_VOICE", "anushka"),
-                    target_language_code=os.getenv("SARVAM_LANGUAGE", bcp47_code),
-                    pace=float(os.getenv("SARVAM_PACE", "0.88")),
-                    pitch=float(os.getenv("SARVAM_PITCH", "-0.08")),
-                    temperature=float(os.getenv("SARVAM_TTS_TEMPERATURE", "0.42")),
-                    enable_preprocessing=True,
-                )
-            except Exception as exc:
-                logger.warning("Sarvam TTS init failed (%s), falling back", exc)
-                tts_provider = "cartesia"
+    # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a
+    # runtime failover chain. lk_tts.FallbackAdapter would need every provider's
+    # API key present at once; here only one is configured.
+    def _murf_tts():
+        # Only pass what is explicitly configured. Murf validates `style` against
+        # its own library and the docs disagree with their own example
+        # ("Conversation" vs "Conversational"), so an unset value must mean "use
+        # the plugin default", not a guessed string.
+        #
+        # MURF_LOCALE is opt-in only: Murf infers locale from the voice id
+        # (`{locale}-{name}`), and passing a conflicting one is an error.
+        #
+        # ponytail: one fixed voice. Add a language -> voice map here when a
+        # second language actually ships; guessing Murf voice ids for the other
+        # 11 locales would be inventing API surface.
+        kwargs: dict[str, object] = {
+            "voice": os.getenv("MURF_VOICE", "en-IN-anisha"),
+            "model": os.getenv("MURF_MODEL", "FALCON"),
+        }
+        for env, key, cast in (
+            ("MURF_STYLE", "style", str),
+            ("MURF_LOCALE", "locale", str),
+            ("MURF_SPEED", "speed", int),
+            ("MURF_PITCH", "pitch", int),
+        ):
+            raw = os.getenv(env)
+            if raw:
+                kwargs[key] = cast(raw)
+        # Auth is env-only: the plugin reads MURF_API_KEY itself.
+        return murf_plugin.TTS(**kwargs)  # type: ignore[arg-type]
 
-    if tts_provider == "cartesia":
-        if cartesia_plugin is None:
-            logger.warning("Cartesia plugin unavailable, falling back to Deepgram")
-            tts_provider = "deepgram"
-        else:
-            logger.info("FAST PIPELINE TTS: Cartesia")
-            tts = cartesia_plugin.TTS(
-                model=os.getenv("CARTESIA_TTS_MODEL", "sonic-2"),
-                voice=os.getenv(
-                    "CARTESIA_TTS_VOICE", "f786b574-daa5-4673-aa0c-cbe3e8534c02"
-                ),
-                language=os.getenv("CARTESIA_LANGUAGE", bcp47_code),
-                speed=float(os.getenv("CARTESIA_SPEED", "0.92")),
-            )
+    def _sarvam_tts():
+        return (ReliableSarvamTTS or sarvam_plugin.TTS)(
+            model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v2"),
+            speaker=os.getenv("SARVAM_VOICE", "anushka"),
+            target_language_code=os.getenv("SARVAM_LANGUAGE", bcp47_code),
+            pace=float(os.getenv("SARVAM_PACE", "0.88")),
+            pitch=float(os.getenv("SARVAM_PITCH", "-0.08")),
+            temperature=float(os.getenv("SARVAM_TTS_TEMPERATURE", "0.42")),
+            enable_preprocessing=True,
+        )
 
-    if tts_provider == "deepgram":
-        logger.info("FAST PIPELINE TTS: Deepgram")
-        tts = deepgram_plugin.TTS(
+    def _cartesia_tts():
+        return cartesia_plugin.TTS(
+            model=os.getenv("CARTESIA_TTS_MODEL", "sonic-2"),
+            voice=os.getenv(
+                "CARTESIA_TTS_VOICE", "f786b574-daa5-4673-aa0c-cbe3e8534c02"
+            ),
+            language=os.getenv("CARTESIA_LANGUAGE", bcp47_code),
+            speed=float(os.getenv("CARTESIA_SPEED", "0.92")),
+        )
+
+    def _deepgram_tts():
+        return deepgram_plugin.TTS(
             model=os.getenv("DEEPGRAM_TTS_MODEL", "aura-asteria-en"),
             sample_rate=24000,
         )
+
+    tts_chain = [
+        ("murf", murf_plugin, _murf_tts),
+        ("sarvam", sarvam_plugin, _sarvam_tts),
+        ("cartesia", cartesia_plugin, _cartesia_tts),
+        ("deepgram", deepgram_plugin, _deepgram_tts),
+    ]
+    preferred = os.getenv("FAST_TTS_PROVIDER", "murf").strip().lower()
+    names = [name for name, _, _ in tts_chain]
+    if preferred not in names:
+        logger.warning("Unknown FAST_TTS_PROVIDER=%r, starting from murf", preferred)
+    start_at = names.index(preferred) if preferred in names else 0
+
+    tts = None
+    for name, plugin, build in tts_chain[start_at:]:
+        if plugin is None:
+            logger.warning("%s TTS plugin unavailable, trying next", name)
+            continue
+        try:
+            tts = build()
+            logger.info("FAST PIPELINE TTS: %s", name)
+            break
+        except Exception as exc:
+            logger.warning("%s TTS init failed (%s), trying next", name, exc)
+    if tts is None:
+        raise RuntimeError(
+            f"No TTS provider available starting from {preferred!r} "
+            f"(tried {', '.join(names[start_at:])})"
+        )
+
     vad = silero_plugin.VAD.load(
         min_silence_duration=0.3,  # detect end of speech faster
     )

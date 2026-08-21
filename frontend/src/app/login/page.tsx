@@ -11,31 +11,8 @@ const ROLE_HOME: Record<UserRole, string> = {
   patient: "/patient/dashboard",
   doctor: "/doctor/dashboard",
   admin: "/admin/dashboard",
+  asha: "/asha/dashboard",
 };
-
-const TEST_ACCOUNTS: { role: UserRole; label: string; email: string; password: string; color: string }[] = [
-  {
-    role: "patient",
-    label: "Patient",
-    email: "patient@swadhikaar.in",
-    password: "patient123",
-    color: "border-slate-200 bg-slate-50/50 hover:border-slate-400",
-  },
-  {
-    role: "doctor",
-    label: "Care Coordinator",
-    email: "coordinator@swadhikaar.in",
-    password: "coordinator123",
-    color: "border-slate-200 bg-slate-50/50 hover:border-slate-400",
-  },
-  {
-    role: "admin",
-    label: "Admin",
-    email: "admin@swadhikaar.in",
-    password: "admin123",
-    color: "border-slate-200 bg-slate-50/50 hover:border-slate-400",
-  },
-];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -53,22 +30,13 @@ export default function LoginPage() {
     setLoading(false);
     if (result.error) {
       setError(result.error);
-    } else {
-      // Role comes from user_metadata via auth context onAuthStateChange
-      // Use email hint to redirect immediately
-      const inferredRole: UserRole = email.includes("coordinator")
-        ? "doctor"
-        : email.includes("admin")
-        ? "admin"
-        : "patient";
-      router.push(ROLE_HOME[inferredRole]);
+      return;
     }
-  }
-
-  function prefillCredentials(account: (typeof TEST_ACCOUNTS)[number]) {
-    setEmail(account.email);
-    setPassword(account.password);
-    setError("");
+    // signIn resolves the role from user_roles, the same table RLS consults.
+    // This used to guess from substrings in the email address, which sent every
+    // address without "admin" or "coordinator" in it to the patient portal
+    // regardless of its actual role.
+    router.push(ROLE_HOME[result.role ?? "patient"]);
   }
 
   return (
@@ -122,38 +90,6 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
-
-        {/* Quick Login — Test Accounts */}
-        <div className="mt-8">
-          <div className="relative mb-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-slate-400 font-medium uppercase tracking-wider">Test Accounts</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            {TEST_ACCOUNTS.map((acc) => (
-              <button
-                key={acc.role}
-                onClick={() => prefillCredentials(acc)}
-                className={`w-full flex items-center justify-between p-3 border rounded-lg text-left transition-all ${acc.color}`}
-              >
-                <div>
-                  <span className="text-sm font-semibold text-slate-900">{acc.label}</span>
-                  <span className="text-xs text-slate-500 ml-2">{acc.email}</span>
-                </div>
-                <span className="text-xs font-mono text-slate-400">{acc.password}</span>
-              </button>
-            ))}
-          </div>
-
-          <p className="text-[10px] text-slate-400 text-center mt-4 uppercase tracking-wider">
-            Click a test account to prefill credentials, then hit Sign In
-          </p>
-        </div>
 
         <p className="text-xs text-slate-400 text-center mt-6">
           Secure access for Swadhikaar care operations

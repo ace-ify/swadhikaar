@@ -1,4 +1,4 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 
 type RiskRequest = {
   systolic_bp?: number;
@@ -22,16 +22,6 @@ type RiskRequest = {
   diet_quality?: string;
   family_history?: string;
 };
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 function clamp(v: number) {
   return Math.max(0, Math.min(100, v));

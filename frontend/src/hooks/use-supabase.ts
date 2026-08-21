@@ -254,13 +254,6 @@ export function usePatients(filters?: { risk_level?: string; camp_type?: string 
   });
 }
 
-export function usePatientDetail(patientId: string) {
-  return useSupabaseQuery<Patient>("patients", {
-    eq: [["id", patientId]],
-    limit: 1,
-  });
-}
-
 export function useVitals(patientId?: string) {
   const eq: [string, unknown][] | undefined = patientId
     ? [["patient_id", patientId]]
@@ -523,36 +516,6 @@ export async function updateFHIRReviewStatus(
     })
     .eq("id", resourceId);
   return { error: error?.message || null };
-}
-
-export async function createFHIRResource(entry: {
-  patient_id: string;
-  call_id?: string | null;
-  resource_type: string;
-  profile?: string;
-  fhir_json: Record<string, unknown>;
-  snomed_codes?: string[];
-  loinc_codes?: string[];
-  review_status?: string;
-  reviewed_by?: string | null;
-}) {
-  const { data, error } = await getSupabase()
-    .from("fhir_resources")
-    .insert({
-      patient_id: entry.patient_id,
-      call_id: entry.call_id ?? null,
-      resource_type: entry.resource_type,
-      profile: entry.profile ?? null,
-      fhir_json: entry.fhir_json,
-      snomed_codes: entry.snomed_codes ?? [],
-      loinc_codes: entry.loinc_codes ?? [],
-      review_status: entry.review_status ?? "pending",
-      reviewed_by: entry.reviewed_by ?? null,
-    })
-    .select("*")
-    .single();
-
-  return { data: data as FHIRResource | null, error: error?.message || null };
 }
 
 export async function revokeConsent(consentId: string) {

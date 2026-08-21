@@ -24,10 +24,10 @@ import { usePatients, type Patient, createAuditLog } from "@/hooks/use-supabase"
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
-// Fallback hardcoded data
+// Display shape
 // ---------------------------------------------------------------------------
 
-interface FallbackPatient {
+interface DisplayPatient {
   id: string;
   name: string;
   abha: string;
@@ -37,7 +37,6 @@ interface FallbackPatient {
   riskScore: number;
   consent: string;
   doctor: string;
-  age: number;
 }
 
 const RISK_LEVELS = ["All", "High", "Moderate", "Low"];
@@ -46,36 +45,35 @@ const RISK_LEVELS = ["All", "High", "Moderate", "Low"];
 // Normalisation: map a Supabase Patient to the display shape
 // ---------------------------------------------------------------------------
 
-function toDisplayPatient(p: Patient): FallbackPatient {
-  // Capitalise first letter of risk_level for consistent display
-  const risk =
-    p.risk_level.charAt(0).toUpperCase() + p.risk_level.slice(1).toLowerCase();
+function toDisplayPatient(p: Patient): DisplayPatient {
+  const cap = (s: string | null | undefined) =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : "—";
 
-  // Derive a readable camp type from the camp_type field
+  // camp_type is nullable — patients who arrived via an acute incident were never
+  // at a health camp (see migration acute_care_seam).
   const campTypeMap: Record<string, string> = {
     elderly: "Elderly",
     slum: "Slum",
     deaddiction: "Deaddiction",
     general: "General",
   };
-  const campType = campTypeMap[p.camp_type?.toLowerCase()] ?? p.camp_type ?? "General";
-
-  // Capitalise consent_status
-  const consent =
-    p.consent_status.charAt(0).toUpperCase() +
-    p.consent_status.slice(1).toLowerCase();
+  const campType = p.camp_type
+    ? campTypeMap[p.camp_type.toLowerCase()] ?? p.camp_type
+    : "—";
 
   return {
     id: p.id,
     name: p.name,
-    abha: p.abha_id,
-    camp: p.health_camp,
+    abha: p.abha_id ?? "—",
+    camp: p.health_camp ?? "—",
     campType,
-    risk,
-    riskScore: Math.round(p.overall_risk_score * 10) / 10,
-    consent,
+    risk: cap(p.risk_level),
+    riskScore:
+      p.overall_risk_score == null
+        ? 0
+        : Math.round(p.overall_risk_score * 10) / 10,
+    consent: cap(p.consent_status),
     doctor: p.assigned_doctor_id ?? "Unassigned",
-    age: 0, // age not in Patient type; omit gracefully
   };
 }
 
@@ -109,7 +107,7 @@ export default function AdminPatientsPage() {
   const [bulkAction, setBulkAction] = useState("");
 
   // Use real Supabase data — no fallbacks
-  const allPatients: FallbackPatient[] = useMemo(
+  const allPatients: DisplayPatient[] = useMemo(
     () => supabasePatients.map(toDisplayPatient),
     [supabasePatients]
   );
@@ -152,7 +150,7 @@ export default function AdminPatientsPage() {
     }
   }
 
-  function exportPatientsCSV(rows: FallbackPatient[]) {
+  function exportPatientsCSV(rows: DisplayPatient[]) {
     const headers = [
       "id",
       "name",
@@ -396,9 +394,6 @@ export default function AdminPatientsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium text-sm">{p.name}</div>
-                      {p.age > 0 && (
-                        <div className="text-xs text-slate-400">{p.age}y</div>
-                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-slate-500">
                       {p.abha}

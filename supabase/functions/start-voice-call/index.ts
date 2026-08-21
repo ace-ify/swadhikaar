@@ -1,5 +1,5 @@
 import { SignJWT } from "npm:jose@5";
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 
 type StartCallRequest = {
@@ -28,16 +28,6 @@ type StartCallRequest = {
   vaccine_due_date?: string;
   birth_hospital?: string;
 };
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 function env(name: string): string {
   return Deno.env.get(name) ?? "";

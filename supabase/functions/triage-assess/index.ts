@@ -1,4 +1,4 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 
 type TriageRequest = {
   symptoms?: string[];
@@ -51,16 +51,6 @@ const MODERATE_KEYWORDS = new Set([
   "anxiety",
   "chakkar",
 ]);
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
-}
 
 function matchKeywords(symptoms: string[], transcript: string, set: Set<string>) {
   const out = new Set<string>();

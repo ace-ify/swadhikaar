@@ -24,6 +24,8 @@ import {
   Syringe,
   Activity,
   IndianRupee,
+  Sprout,
+  Ambulance,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +71,8 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Finance", href: "/admin/finance", icon: IndianRupee },
     { label: "Consent", href: "/admin/consent", icon: ShieldCheck },
     { label: "FHIR Reports", href: "/admin/reports", icon: FileBarChart },
+    { label: "Occupational Health", href: "/admin/cross-domain", icon: Sprout },
+    { label: "Acute Seam", href: "/admin/seam-trigger", icon: Ambulance },
   ],
 };
 

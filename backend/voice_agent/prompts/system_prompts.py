@@ -4,7 +4,6 @@ Care pathway prompts for the Swadhikaar care platform.
 
 Prompt design principles:
   - Hindi-first, with natural English medical term mixing (how patients actually speak)
-  - Structured JSON extraction embedded in the conversation flow
   - Explicit escalation rules so the LLM can flag critical cases
   - Each prompt is a complete instruction set — no chaining needed
 
@@ -23,73 +22,6 @@ Placeholders (filled via str.format_map at runtime):
   {medications}     — Comma-separated list of current medications
   {discharge_date}  — Date of discharge (for recovery pathway)
   {doctor_name}     — Treating physician name (for recovery/chronic)
-"""
-
-# ---------------------------------------------------------------------------
-# Common extraction format — injected ONLY at call end (not during conversation)
-# ---------------------------------------------------------------------------
-_EXTRACTION_SCHEMA = """
-─── STRUCTURED DATA EXTRACTION ───────────────────────────────────────────────
-Output ONLY the following JSON block (nothing else after it):
-
-```json
-{
-  "call_summary": "<2-3 sentence summary in English>",
-  "language_detected": "<hindi|english|bhojpuri|maithili|mixed>",
-  "symptoms_reported": [
-    {"symptom": "<symptom>", "duration": "<duration>", "severity": "<mild|moderate|severe>"}
-  ],
-  "medications_reported": [
-    {"name": "<med name>", "adherent": true/false, "missed_doses": "<count or unknown>"}
-  ],
-  "vitals_self_reported": {
-    "bp_systolic": null,
-    "bp_diastolic": null,
-    "blood_glucose": null,
-    "weight": null
-  },
-  "overall_severity": "LOW | MODERATE | HIGH | CRITICAL",
-  "needs_escalation": true/false,
-  "escalation_reason": "<reason or null>",
-  "follow_up_recommended": true/false,
-  "follow_up_days": 7,
-  "opd_referral": true/false,
-  "patient_mood": "<calm|anxious|confused|unresponsive>",
-  "call_completed": true/false,
-  "notes": "<any free-text observations>"
-}
-```
-──────────────────────────────────────────────────────────────────────────────
-"""
-
-# ---------------------------------------------------------------------------
-# Vaccination-specific extraction schema — injected at call end
-# ---------------------------------------------------------------------------
-_VACCINATION_EXTRACTION_SCHEMA = """
-─── STRUCTURED DATA EXTRACTION (VACCINATION) ────────────────────────────────
-Output ONLY the following JSON block (nothing else after it):
-
-```json
-{
-  "call_summary": "<2-3 sentence summary in English>",
-  "language_detected": "<hindi|english|bhojpuri|maithili|mixed>",
-  "baby_name": "<baby name>",
-  "vaccine_discussed": "<vaccine name>",
-  "previous_vaccines_confirmed": true/false,
-  "parent_aware_of_schedule": true/false,
-  "concerns_raised": ["<list of concerns or empty>"],
-  "baby_health_issues": "<any reported issues or null>",
-  "will_visit_for_vaccination": true/false,
-  "needs_escalation": false,
-  "escalation_reason": null,
-  "follow_up_recommended": true,
-  "follow_up_days": 3,
-  "patient_mood": "<calm|anxious|confused|resistant>",
-  "call_completed": true/false,
-  "notes": "<free-text observations>"
-}
-```
-──────────────────────────────────────────────────────────────────────────────
 """
 
 # ---------------------------------------------------------------------------
@@ -151,50 +83,15 @@ FLOW:
 {language_instructions}
 {escalation_rules}
 {tool_instructions}
-{extraction_schema}
 """.replace("{language_instructions}", _LANGUAGE_INSTRUCTIONS)
     .replace("{escalation_rules}", _ESCALATION_RULES)
     .replace("{tool_instructions}", _TOOL_INSTRUCTIONS)
-    .replace("{extraction_schema}", "")
 )
 
 
 # ===========================================================================
 # Prompt 2 — OPD → IPD (Care Coordinator Outreach Call)
 # ===========================================================================
-_IPD_EXTRACTION_SCHEMA = """
---- STRUCTURED DATA EXTRACTION (OPD→IPD) ---
-After the call, output ONLY the following JSON block:
-
-```json
-{{
-  "call_summary": "<2-3 sentence summary in English>",
-  "language_detected": "<hindi|english|bhojpuri|maithili|mixed>",
-  "health_camp_referenced": "{health_camp}",
-  "screening_data_explained": true/false,
-  "risk_explained_to_patient": true/false,
-  "ipd_recommended": true/false,
-  "patient_consent_for_ipd": true/false,
-  "consent_verbatim": "<exact words patient used to accept/decline, or null>",
-  "objections_raised": ["<list of objections or empty>"],
-  "symptoms_reported": [
-    {{"symptom": "<symptom>", "duration": "<duration>", "severity": "<mild|moderate|severe>"}}
-  ],
-  "medications_reported": [
-    {{"name": "<med name>", "adherent": true/false, "missed_doses": "<count or unknown>"}}
-  ],
-  "overall_severity": "LOW | MODERATE | HIGH | CRITICAL",
-  "needs_escalation": true/false,
-  "escalation_reason": "<reason or null>",
-  "follow_up_recommended": true/false,
-  "follow_up_days": 3,
-  "patient_mood": "<calm|anxious|confused|resistant>",
-  "call_completed": true/false,
-  "notes": "<free-text observations>"
-}}
-```
-"""
-
 OPD_TO_IPD = (
     """
 You are a care coordinator from Swadhikaar, calling on Dr. {doctor_name}'s behalf.
@@ -253,11 +150,9 @@ FLOW:
 {language_instructions}
 {escalation_rules}
 {tool_instructions}
-{extraction_schema}
 """.replace("{language_instructions}", _LANGUAGE_INSTRUCTIONS)
     .replace("{escalation_rules}", _ESCALATION_RULES)
     .replace("{tool_instructions}", _TOOL_INSTRUCTIONS)
-    .replace("{extraction_schema}", "")
 )
 
 
@@ -289,11 +184,9 @@ FLOW:
 {language_instructions}
 {escalation_rules}
 {tool_instructions}
-{extraction_schema}
 """.replace("{language_instructions}", _LANGUAGE_INSTRUCTIONS)
     .replace("{escalation_rules}", _ESCALATION_RULES)
     .replace("{tool_instructions}", _TOOL_INSTRUCTIONS)
-    .replace("{extraction_schema}", "")
 )
 
 
@@ -322,11 +215,9 @@ FLOW:
 {language_instructions}
 {escalation_rules}
 {tool_instructions}
-{extraction_schema}
 """.replace("{language_instructions}", _LANGUAGE_INSTRUCTIONS)
     .replace("{escalation_rules}", _ESCALATION_RULES)
     .replace("{tool_instructions}", _TOOL_INSTRUCTIONS)
-    .replace("{extraction_schema}", "")
 )
 
 
@@ -388,11 +279,9 @@ FLOW:
 {language_instructions}
 {escalation_rules}
 {tool_instructions}
-{extraction_schema}
 """.replace("{language_instructions}", _LANGUAGE_INSTRUCTIONS)
     .replace("{escalation_rules}", _ESCALATION_RULES)
     .replace("{tool_instructions}", _TOOL_INSTRUCTIONS)
-    .replace("{extraction_schema}", "")
 )
 
 
@@ -407,11 +296,6 @@ PROMPTS: dict[str, str] = {
     "follow_up": FOLLOW_UP,
     "newborn_vaccination": NEWBORN_VACCINATION,
     "elderly_checkin": ELDERLY_CHECKIN,
-    # Aliases for backward compat with earlier metadata keys
-    "follow_up_alias": FOLLOW_UP,
-    "screening_followup": SCREENING_TO_OPD,
-    "chronic_check": CHRONIC_MANAGEMENT,
-    "recovery": RECOVERY_PROTOCOL,
 }
 
 # Default context values used when metadata is incomplete
@@ -470,14 +354,3 @@ def build_system_prompt(call_type: str, patient_context: dict) -> str:
         result = result.replace("{" + key + "}", str(value))
     return result
 
-
-def build_extraction_prompt(call_type: str) -> str:
-    """
-    Return the extraction schema to inject at call end.
-    OPD→IPD has a custom schema; everything else uses the generic one.
-    """
-    if call_type == "opd_to_ipd":
-        return _IPD_EXTRACTION_SCHEMA
-    if call_type == "newborn_vaccination":
-        return _VACCINATION_EXTRACTION_SCHEMA
-    return _EXTRACTION_SCHEMA
