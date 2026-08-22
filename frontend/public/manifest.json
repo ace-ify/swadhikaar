@@ -1,25 +1,57 @@
 {
-  "name": "Swadhikaar",
+  "id": "/",
+  "name": "Swadhikaar — ग्रामीण स्वास्थ्य",
   "short_name": "Swadhikaar",
   "description": "ग्रामीण स्वास्थ्य सहायक · Rural health assistant",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "theme_color": "#10B981",
   "background_color": "#FAFAFA",
   "lang": "hi",
+  "dir": "ltr",
+  "categories": ["health", "medical", "productivity"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "नई जांच / New screening",
+      "short_name": "नई जांच",
+      "url": "/asha/screening/new",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "मरीज़ / Patients",
+      "short_name": "मरीज़",
+      "url": "/asha/patients",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
