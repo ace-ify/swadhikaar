@@ -100,7 +100,7 @@ export default function Home() {
           {/* Subhead */}
           <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed font-normal">
             Launch multilingual voice follow-ups in days, not months. We handle
-            the Bhashini STT/TTS pipeline, FHIR/ABDM compliance, and multi-layer
+            the Indic speech pipeline, FHIR/ABDM compliance, and multi-layer
             triage escalation.
           </p>
 
@@ -402,8 +402,8 @@ export default function Home() {
                   1. Multilingual Voice Calls
                 </h3>
                 <p className="text-sm text-slate-500 mb-6">
-                  Automated follow-up calls in Hindi, Bhojpuri, and Maithili via
-                  Bhashini API. Handles code-switching naturally.
+                  Automated follow-up calls in Hindi, Bhojpuri, and Maithili over
+                  a real telephony trunk. Handles code-switching naturally.
                 </p>
 
                 {/* Mock: Language selector */}
@@ -664,7 +664,7 @@ export default function Home() {
               <ul className="space-y-3 mb-8">
                 {[
                   "Up to 500 voice calls/month",
-                  "Bhashini STT/TTS integration",
+                  "Indic STT/TTS pipeline",
                   "Basic FHIR extraction",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-600">

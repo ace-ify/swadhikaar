@@ -21,6 +21,7 @@ import {
 } from "@/components/asha/risk";
 import { clearDraft, loadDraft, scoreScreening } from "@/hooks/use-asha";
 import { enqueue } from "@/lib/offline/outbox";
+import { escalationFor } from "@/components/asha/risk";
 
 const FOLLOW_UP_DAYS: Record<string, number> = { High: 1, Moderate: 7, Low: 90 };
 
@@ -266,6 +267,14 @@ export default function ScreeningResultPage({
         >
           ✓ सुरक्षित / Saved. नेटवर्क मिलने पर अपने आप भेज दी जाएगी — it will sync
           automatically when you are back online.
+          {escalationFor(risk) && (
+            <span className="mt-2 block font-bold">
+              डॉक्टर को सूचना भेज दी गई है।
+              <span className="block text-[13px] font-semibold">
+                A doctor has been alerted.
+              </span>
+            </span>
+          )}
         </p>
       )}
 

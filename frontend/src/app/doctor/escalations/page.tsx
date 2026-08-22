@@ -288,7 +288,8 @@ export default function DoctorEscalationsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Escalation Queue</h1>
         <p className="text-sm text-slate-500">
-          Patients flagged by Voice AI during automated calls. Review the concern, take action, or escalate to a doctor.
+          Patients flagged by an ASHA field screening or by Voice AI during an
+          automated call. Review the concern, take action, or escalate further.
         </p>
       </div>
 

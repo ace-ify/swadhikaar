@@ -362,7 +362,47 @@ export function draftToWrites(
     },
   });
 
+  // Whenever the app tells the ASHA to refer, the doctor's queue has to hear
+  // about it. Without this the referral dies on the phone: the field worker is
+  // told "send them to a doctor" and nothing reaches the other end.
+  // Severity levels match what the voice agent writes, so one queue, one scale.
+  const esc = escalationFor(risk);
+  if (esc) {
+    writes.push({
+      table: "escalations",
+      op: "insert",
+      payload: { patient_id: draft.patientId, ...esc, status: "open" },
+    });
+  }
+
   return writes;
+}
+
+/**
+ * The escalation an ASHA screening raises, or null when it raises none.
+ * Mirrors what the result screen promises the worker — if the UI says "refer",
+ * a doctor gets a row. Nothing is escalated that the ASHA wasn't also told about.
+ */
+export function escalationFor(
+  risk: RiskResult
+): { severity: string; severity_level: string; reason: string } | null {
+  if (risk.refer) {
+    return {
+      severity: "CRITICAL",
+      severity_level: "3",
+      reason: `ASHA screening red flag: ${risk.refer_reasons
+        .map((r) => r.en)
+        .join("; ")}`,
+    };
+  }
+  if (risk.overall_risk_category === "High") {
+    return {
+      severity: "HIGH",
+      severity_level: "2",
+      reason: `ASHA screening scored High risk (${risk.overall_risk_score}) — heart ${risk.heart_risk_level}, diabetes ${risk.diabetic_risk_level}, BP ${risk.hypertension_risk_level}`,
+    };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

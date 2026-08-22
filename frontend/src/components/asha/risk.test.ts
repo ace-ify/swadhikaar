@@ -8,6 +8,7 @@ const spec = "./risk.ts";
 const {
   computeRisk,
   draftToWrites,
+  escalationFor,
   bmiOf,
   bmiCategory,
   SYMPTOM_DEFAULTS,
@@ -194,4 +195,98 @@ test("dangerous measured vitals outrank a mild symptom", () => {
   assert.equal(r.hypertension_risk_level, "High");
   assert.equal(r.overall_risk_category, "High");
   assert.equal(r.vitals_complete, true);
+});
+
+// --- the referral must reach a doctor, not die on the phone ----------------
+
+const draftWith = (symptoms: object, vitals: object = {}) => ({
+  draftId: "d3",
+  patientId: "33333333-3333-4333-8333-333333333333",
+  isNewPatient: false,
+  name: "Divya Yadav",
+  phone: "",
+  age: "",
+  gender: "",
+  occupation: "",
+  crop_type: "",
+  village: "Rampur",
+  district: "Muzaffarpur",
+  symptoms: { ...SYMPTOM_DEFAULTS, ...symptoms },
+  vitals,
+  createdAt: new Date().toISOString(),
+});
+
+test("a red flag enqueues an escalation for the doctor queue", () => {
+  const draft = draftWith({ chest_discomfort: "severe" });
+  const risk = computeRisk(draft.symptoms, draft.vitals);
+  const writes = draftToWrites(draft, risk);
+
+  const esc = writes.find((w: { table: string }) => w.table === "escalations");
+  assert.ok(esc, "severe chest pain must reach the doctor queue");
+  assert.equal(esc.op, "insert");
+  assert.equal(esc.payload.patient_id, draft.patientId);
+  assert.equal(esc.payload.severity, "CRITICAL");
+  assert.equal(esc.payload.severity_level, "3");
+  assert.equal(esc.payload.status, "open");
+  // The reason must name the finding — a doctor triaging a queue needs the why.
+  assert.match(String(esc.payload.reason), /Severe chest pain/);
+});
+
+test("a High band with no red flag still escalates, at HIGH", () => {
+  const draft = draftWith({ chest_discomfort: "mild" }, {
+    systolic_bp: 186,
+    diastolic_bp: 114,
+    heart_rate: 92,
+    oxygen_saturation: 97,
+    blood_glucose: 150,
+    height: 160,
+    weight: 80,
+  });
+  const risk = computeRisk(draft.symptoms, draft.vitals);
+  assert.equal(risk.refer, false);
+  assert.equal(risk.overall_risk_category, "High");
+
+  const esc = draftToWrites(draft, risk).find(
+    (w: { table: string }) => w.table === "escalations"
+  );
+  assert.ok(esc, "a High-risk screening must reach the doctor queue");
+  assert.equal(esc.payload.severity, "HIGH");
+  assert.equal(esc.payload.severity_level, "2");
+});
+
+test("a healthy screening escalates nothing", () => {
+  const draft = draftWith({});
+  const writes = draftToWrites(draft, computeRisk(draft.symptoms, draft.vitals));
+  assert.equal(
+    writes.filter((w: { table: string }) => w.table === "escalations").length,
+    0
+  );
+  // ...and the other four writes are untouched by this change.
+  assert.deepEqual(
+    writes.map((w: { table: string }) => w.table),
+    ["patients", "symptoms", "health_vitals", "risk_assessments"]
+  );
+});
+
+test("escalationFor never fires without the ASHA also being told", () => {
+  // Every escalating case must have refer=true or band=High — the two things the
+  // result screen actually renders. Otherwise the doctor knows and the field
+  // worker does not.
+  for (const symptoms of [
+    {},
+    { chest_discomfort: "mild" },
+    { chest_discomfort: "moderate" },
+    { chest_discomfort: "severe" },
+    { breathlessness: "at_rest" },
+    { dizziness_blackouts: "often" },
+    { fatigue_weakness: "severe", diet_quality: "poor" },
+  ]) {
+    const r = computeRisk({ ...SYMPTOM_DEFAULTS, ...symptoms }, {});
+    if (escalationFor(r)) {
+      assert.ok(
+        r.refer || r.overall_risk_category === "High",
+        `escalated silently for ${JSON.stringify(symptoms)}`
+      );
+    }
+  }
 });
