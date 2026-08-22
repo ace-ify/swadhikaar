@@ -2,7 +2,14 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, HeartPulse, Droplet, Weight, Activity } from "lucide-react";
+import {
+  CalendarCheck,
+  HeartPulse,
+  Droplet,
+  Weight,
+  Activity,
+  TriangleAlert,
+} from "lucide-react";
 import { Bi, BigButton, RiskBanner, Section } from "@/components/asha/ui";
 import {
   bmiCategory,
@@ -107,6 +114,61 @@ export default function ScreeningResultPage({
       </div>
 
       <RiskBanner level={risk.overall_risk_category} score={risk.overall_risk_score} />
+
+      {/* A red flag is reported alongside the band, never folded into it, so a
+          severe finding cannot hide behind a reassuring score. */}
+      {risk.refer && (
+        <div
+          role="alert"
+          className="rounded-xl border-2 border-red-500 bg-red-50 p-4"
+        >
+          <div className="flex items-start gap-3">
+            <TriangleAlert aria-hidden className="mt-0.5 size-6 shrink-0 text-red-700" />
+            <div>
+              <Bi
+                hi="तुरंत डॉक्टर को दिखाएं"
+                en="Refer to a doctor now"
+                hiClass="text-[18px] font-bold leading-tight text-red-900"
+                enClass="text-[13px] font-semibold text-red-800"
+              />
+              <ul className="mt-2 space-y-1">
+                {risk.refer_reasons.map((r) => (
+                  <li key={r.en} className="text-[15px] text-red-900">
+                    <span lang="hi">{r.hi}</span>
+                    <span className="block text-[12px] text-red-700">{r.en}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* "We measured nothing" and "everything is normal" must never look the same. */}
+      {!risk.vitals_complete && (
+        <div className="rounded-xl border border-amber-400 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-amber-700" />
+            <div>
+              <Bi
+                hi="जांच अधूरी है"
+                en="Screening incomplete"
+                hiClass="text-[16px] font-bold leading-tight text-amber-900"
+                enClass="text-[12px] font-semibold text-amber-800"
+              />
+              <p className="mt-1 text-[14px] text-amber-900">
+                <span lang="hi">
+                  {risk.unmeasured.length} माप दर्ज नहीं हुए — यह स्कोर उनके बिना निकाला गया है।
+                </span>
+                <span className="mt-0.5 block text-[12px] text-amber-700">
+                  {risk.unmeasured.length} measurements missing — this score was
+                  computed without them.
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Section hi="माप का सारांश" en="Vitals summary">
         <ul className="grid grid-cols-2 gap-3">

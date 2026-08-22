@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, ClipboardList, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConnectivitySlot } from "@/components/asha/ui";
+import { startOfflineRuntime } from "@/lib/offline/register";
 
 // Mobile-portrait-first shell (target 390x844). Deliberately NOT the desktop
 // sidebar shell used by admin/doctor/patient — a field worker holds a phone.
@@ -16,6 +18,14 @@ const NAV = [
 
 export default function AshaLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Registers the service worker and drains the outbox on `online` /
+  // `visibilitychange`. Without this the queue only moves when someone taps
+  // "Send now" by hand, which is how 12 screenings sat unsynced after a
+  // reconnect. Guarded internally, so mounting twice is harmless.
+  useEffect(() => {
+    startOfflineRuntime();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-[#0F172A]">

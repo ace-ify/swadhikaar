@@ -120,3 +120,78 @@ test("existing patient produces an update, not a duplicate insert", () => {
   assert.equal(writes[0].op, "update");
   assert.equal(writes[0].payload.id, draft.patientId);
 });
+
+// --- the two defects that shipped in v1 ------------------------------------
+
+test("symptom severity changes the score (v1 scored mild and severe alike)", () => {
+  const at = (chest: string) =>
+    computeRisk({ ...SYMPTOM_DEFAULTS, chest_discomfort: chest }, {})
+      .overall_risk_score;
+
+  const none = at("none");
+  const mild = at("mild");
+  const moderate = at("moderate");
+  const severe = at("severe");
+
+  assert.ok(mild > none, `mild ${mild} must exceed none ${none}`);
+  assert.ok(moderate > mild, `moderate ${moderate} must exceed mild ${mild}`);
+  assert.ok(severe > moderate, `severe ${severe} must exceed moderate ${moderate}`);
+});
+
+test("severe chest pain raises refer even when the band stays Low", () => {
+  const r = computeRisk({ ...SYMPTOM_DEFAULTS, chest_discomfort: "severe" }, {});
+  assert.equal(r.refer, true);
+  assert.deepEqual(
+    r.refer_reasons.map((x: { en: string }) => x.en),
+    ["Severe chest pain"]
+  );
+  // The flag must NOT rewrite the band — that is the whole design.
+  assert.equal(r.overall_risk_category, "Low");
+});
+
+test("breathlessness at rest and frequent blackouts also refer", () => {
+  assert.equal(
+    computeRisk({ ...SYMPTOM_DEFAULTS, breathlessness: "at_rest" }, {}).refer,
+    true
+  );
+  assert.equal(
+    computeRisk({ ...SYMPTOM_DEFAULTS, dizziness_blackouts: "often" }, {}).refer,
+    true
+  );
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, {}).refer, false);
+});
+
+test("unmeasured vitals are not scored as healthy (v1 defaulted them to normal)", () => {
+  const blank = computeRisk(SYMPTOM_DEFAULTS, {});
+  assert.equal(blank.vitals_complete, false);
+  assert.ok(blank.unmeasured.includes("systolic_bp"));
+  assert.ok(blank.unmeasured.includes("blood_glucose"));
+  assert.ok(blank.unmeasured.includes("bmi"));
+
+  const full = computeRisk(SYMPTOM_DEFAULTS, {
+    systolic_bp: 118,
+    diastolic_bp: 76,
+    heart_rate: 72,
+    oxygen_saturation: 98,
+    blood_glucose: 95,
+    height: 165,
+    weight: 60,
+  });
+  assert.equal(full.vitals_complete, true);
+  assert.deepEqual(full.unmeasured, []);
+});
+
+test("dangerous measured vitals outrank a mild symptom", () => {
+  const r = computeRisk({ ...SYMPTOM_DEFAULTS, chest_discomfort: "mild" }, {
+    systolic_bp: 186,
+    diastolic_bp: 114,
+    heart_rate: 92,
+    oxygen_saturation: 97,
+    blood_glucose: 150,
+    height: 160,
+    weight: 80,
+  });
+  assert.equal(r.hypertension_risk_level, "High");
+  assert.equal(r.overall_risk_category, "High");
+  assert.equal(r.vitals_complete, true);
+});

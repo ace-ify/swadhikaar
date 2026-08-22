@@ -165,6 +165,13 @@ export async function scoreScreening(
         hypertension_risk_level: data.hypertension_risk_level,
         overall_risk_score: data.overall_risk_score,
         overall_risk_category: data.overall_risk_category,
+        // Fall back to the locally computed values if an older function version
+        // is still deployed and omits these — never silently claim "no red flag"
+        // or "vitals complete" just because the server did not say so.
+        refer: data.refer ?? local.refer,
+        refer_reasons: data.refer_reasons ?? local.refer_reasons,
+        vitals_complete: data.vitals_complete ?? local.vitals_complete,
+        unmeasured: data.unmeasured ?? local.unmeasured,
         model: data.model ?? "edge",
       },
       source: "edge",

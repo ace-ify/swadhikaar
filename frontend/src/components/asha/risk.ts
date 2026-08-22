@@ -26,6 +26,8 @@ export type VitalAnswers = {
   weight?: number; // kg
 };
 
+export type ReferReason = { hi: string; en: string };
+
 export type RiskResult = {
   heart_risk_score: number;
   heart_risk_level: RiskLevel;
@@ -35,6 +37,12 @@ export type RiskResult = {
   hypertension_risk_level: RiskLevel;
   overall_risk_score: number;
   overall_risk_category: RiskLevel;
+  /** Findings an ASHA refers on regardless of the band. Never folded into the score. */
+  refer: boolean;
+  refer_reasons: ReferReason[];
+  /** False when any vital was left unmeasured, so the UI can say so. */
+  vitals_complete: boolean;
+  unmeasured: string[];
   model: string;
 };
 
@@ -54,14 +62,75 @@ export const SYMPTOM_DEFAULTS: SymptomAnswers = {
 };
 
 const clamp = (v: number) => Math.max(0, Math.min(100, v));
-const pts = (cond: boolean, p: number) => (cond ? p : 0);
 const round2 = (v: number) => Number(v.toFixed(2));
+
+/** A vital counts only if it is a finite number. Absent means unmeasured, not normal. */
+const measured = (v: number | null | undefined): number | null =>
+  typeof v === "number" && Number.isFinite(v) ? v : null;
+
+/** Scores only when the vital was actually taken, so a missing reading adds nothing. */
+const when = (v: number | null, test: (n: number) => boolean, points: number) =>
+  v !== null && test(v) ? points : 0;
 
 export function level(score: number): RiskLevel {
   if (score >= 50) return "High";
   if (score >= 30) return "Moderate";
   return "Low";
 }
+
+// Graded weights, keyed by the exact chip values the screening form emits.
+// An unrecognised value scores 0 rather than being guessed at.
+const SYMPTOM_WEIGHTS: Record<keyof SymptomAnswers, Record<string, number>> = {
+  chest_discomfort: { none: 0, mild: 6, moderate: 12, severe: 20 },
+  breathlessness: { none: 0, on_exertion: 8, at_rest: 18 },
+  palpitations: { none: 0, occasional: 4, frequent: 9 },
+  fatigue_weakness: { none: 0, mild: 3, severe: 8 },
+  dizziness_blackouts: { never: 0, rarely: 5, often: 14 },
+  sleep_duration: { "6-8": 0, gt8: 2, lt5: 5 },
+  stress_anxiety: { calm: 0, stressed: 4, very_stressed: 8 },
+  physical_inactivity: { active: 0, somewhat_active: 3, inactive: 6 },
+  diet_quality: { balanced: 0, mixed: 3, poor: 6 },
+  family_history: { none: 0, diabetes: 8, heart: 10, hypertension: 8 },
+};
+
+// Findings an ASHA is trained to refer on. A flag, not a forced band: once a rule
+// silently rewrites the score the score stops meaning anything, so this names its
+// own cause instead.
+const RED_FLAGS: {
+  field: keyof SymptomAnswers;
+  value: string;
+  hi: string;
+  en: string;
+}[] = [
+  {
+    field: "chest_discomfort",
+    value: "severe",
+    hi: "सीने में तेज़ दर्द",
+    en: "Severe chest pain",
+  },
+  {
+    field: "breathlessness",
+    value: "at_rest",
+    hi: "आराम में भी सांस फूलना",
+    en: "Breathlessness at rest",
+  },
+  {
+    field: "dizziness_blackouts",
+    value: "often",
+    hi: "बार-बार चक्कर या बेहोशी",
+    en: "Frequent dizziness or blackouts",
+  },
+];
+
+const symptomPoints = (
+  s: SymptomAnswers,
+  fields: (keyof SymptomAnswers)[]
+): number =>
+  fields.reduce(
+    (total, f) =>
+      total + (SYMPTOM_WEIGHTS[f][(s[f] ?? "").trim().toLowerCase()] ?? 0),
+    0
+  );
 
 export function bmiOf(heightCm?: number, weightKg?: number): number | null {
   if (!heightCm || !weightKg || heightCm <= 0) return null;
@@ -78,66 +147,90 @@ export function bmiCategory(bmi: number | null): string {
 }
 
 /**
- * ponytail: this mirrors the deployed `risk-predict` edge function's
- * heuristic 1:1 so an offline screening and an online one give the same
- * numbers. Upgrade path: when risk-predict swaps its heuristic for a trained
- * model, this becomes fallback-only and the UI should label it as such.
- * Note: age is collected in the form but not scored — the deployed model has
- * no age term, and inventing one here would desync local from server.
+ * Offline mirror of the deployed `risk-predict` edge function (edge-heuristic-v2).
+ * The two MUST stay in step — an offline screening and an online one have to give
+ * the same numbers, or the same patient gets two different verdicts depending on
+ * signal strength. risk.test.ts pins the shared cases.
+ *
+ * ponytail: age is collected in the form but not scored, because the deployed
+ * model has no age term. Adding one here alone would desync local from server.
  */
 export function computeRisk(
   symptoms: SymptomAnswers,
   vitals: VitalAnswers
 ): RiskResult {
-  const sbp = vitals.systolic_bp ?? 120;
-  const dbp = vitals.diastolic_bp ?? 80;
-  const hr = vitals.heart_rate ?? 78;
-  const rr = vitals.respiratory_rate ?? 16;
-  const spo2 = vitals.oxygen_saturation ?? 97;
-  const glucose = vitals.blood_glucose ?? 100;
-  const bmi = bmiOf(vitals.height, vitals.weight) ?? 23;
+  const sbp = measured(vitals.systolic_bp);
+  const dbp = measured(vitals.diastolic_bp);
+  const hr = measured(vitals.heart_rate);
+  const rr = measured(vitals.respiratory_rate);
+  const spo2 = measured(vitals.oxygen_saturation);
+  const glucose = measured(vitals.blood_glucose);
+  const bmi = measured(bmiOf(vitals.height, vitals.weight));
 
-  const symptomRisk =
-    pts(symptoms.chest_discomfort !== "none", 12) +
-    pts(symptoms.breathlessness !== "none", 10) +
-    pts(symptoms.palpitations !== "none", 8) +
-    pts(symptoms.dizziness_blackouts !== "never", 10) +
-    pts(symptoms.stress_anxiety !== "calm", 4) +
-    pts(symptoms.physical_inactivity !== "active", 6) +
-    pts(symptoms.diet_quality !== "balanced", 6) +
-    pts(symptoms.family_history !== "none", 8);
+  const unmeasured = Object.entries({
+    systolic_bp: sbp,
+    diastolic_bp: dbp,
+    heart_rate: hr,
+    oxygen_saturation: spo2,
+    blood_glucose: glucose,
+    bmi,
+  })
+    .filter(([, v]) => v === null)
+    .map(([k]) => k);
+
+  const cardiac = symptomPoints(symptoms, [
+    "chest_discomfort",
+    "breathlessness",
+    "palpitations",
+    "dizziness_blackouts",
+    "fatigue_weakness",
+  ]);
+  const lifestyle = symptomPoints(symptoms, [
+    "stress_anxiety",
+    "physical_inactivity",
+    "diet_quality",
+    "sleep_duration",
+  ]);
+  const family = symptomPoints(symptoms, ["family_history"]);
 
   const heart = clamp(
     10 +
-      pts(sbp >= 140, 10) +
-      pts(dbp >= 90, 8) +
-      pts(hr >= 100 || hr <= 50, 8) +
-      pts(spo2 < 94, 10) +
-      pts(bmi >= 30, 8) +
-      symptomRisk * 0.55
+      when(sbp, (n) => n >= 140, 10) +
+      when(dbp, (n) => n >= 90, 8) +
+      when(hr, (n) => n >= 100 || n <= 50, 8) +
+      when(spo2, (n) => n < 94, 10) +
+      when(bmi, (n) => n >= 30, 8) +
+      cardiac * 0.9 +
+      lifestyle * 0.3 +
+      family * 0.5
   );
 
   const diabetic = clamp(
     8 +
-      pts(glucose >= 200, 30) +
-      pts(glucose >= 140 && glucose < 200, 14) +
-      pts(bmi >= 30, 10) +
-      pts(symptoms.physical_inactivity !== "active", 8) +
-      pts(symptoms.diet_quality !== "balanced", 8) +
-      pts(symptoms.family_history !== "none", 12)
+      when(glucose, (n) => n >= 200, 30) +
+      when(glucose, (n) => n >= 140 && n < 200, 14) +
+      when(bmi, (n) => n >= 30, 10) +
+      lifestyle * 0.8 +
+      family * 0.9
   );
 
   const hypertension = clamp(
     6 +
-      pts(sbp >= 180 || dbp >= 110, 35) +
-      pts((sbp >= 140 && sbp < 180) || (dbp >= 90 && dbp < 110), 18) +
-      pts(rr > 22, 5) +
-      pts(bmi >= 30, 8) +
-      pts(symptoms.stress_anxiety !== "calm", 8) +
-      pts(symptoms.family_history !== "none", 10)
+      when(sbp, (n) => n >= 180, 35) +
+      when(dbp, (n) => n >= 110, 35) +
+      when(sbp, (n) => n >= 140 && n < 180, 18) +
+      when(dbp, (n) => n >= 90 && n < 110, 18) +
+      when(rr, (n) => n > 22, 5) +
+      when(bmi, (n) => n >= 30, 8) +
+      symptomPoints(symptoms, ["stress_anxiety"]) +
+      family * 0.8
   );
 
   const overall = clamp(heart * 0.35 + diabetic * 0.35 + hypertension * 0.3);
+
+  const flags = RED_FLAGS.filter(
+    (f) => (symptoms[f.field] ?? "").trim().toLowerCase() === f.value
+  );
 
   return {
     heart_risk_score: round2(heart),
@@ -148,7 +241,11 @@ export function computeRisk(
     hypertension_risk_level: level(hypertension),
     overall_risk_score: round2(overall),
     overall_risk_category: level(overall),
-    model: "local-heuristic-v1",
+    refer: flags.length > 0,
+    refer_reasons: flags.map(({ hi, en }) => ({ hi, en })),
+    vitals_complete: unmeasured.length === 0,
+    unmeasured,
+    model: "local-heuristic-v2",
   };
 }
 
@@ -278,6 +375,16 @@ export function recommendedActions(
   vitals: VitalAnswers
 ): Action[] {
   const out: Action[] = [];
+
+  // Red flags come first and are not conditional on the band — that is the whole
+  // point of the flag.
+  if (risk.refer) {
+    out.push({
+      hi: "तुरंत डॉक्टर के पास भेजें",
+      en: "Refer to a doctor now",
+    });
+  }
+
   if (risk.overall_risk_category === "High") {
     out.push({
       hi: "आज ही डॉक्टर के पास भेजें",
@@ -292,12 +399,22 @@ export function recommendedActions(
       hi: "7 दिन में दोबारा जांच करें",
       en: "Re-screen within 7 days",
     });
-  } else {
+  } else if (!risk.refer) {
     out.push({
       hi: "3 महीने में दोबारा जांच करें",
       en: "Re-screen in 3 months",
     });
   }
+
+  // An incomplete screening must ask for the missing measurement rather than let
+  // a reassuring band stand on values nobody took.
+  if (!risk.vitals_complete) {
+    out.push({
+      hi: "बाकी माप लें — जांच अधूरी है",
+      en: "Take the remaining measurements — screening incomplete",
+    });
+  }
+
   if ((vitals.systolic_bp ?? 0) >= 140 || (vitals.diastolic_bp ?? 0) >= 90) {
     out.push({
       hi: "नमक कम करने की सलाह दें",
