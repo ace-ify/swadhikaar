@@ -31,7 +31,7 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from typing import Annotated, Any, Callable, Optional
+from typing import Annotated, Any, Callable, Literal, Optional
 
 from pydantic import Field
 
@@ -44,7 +44,6 @@ from livekit.agents import (
     WorkerOptions,
     cli,
     llm,
-    tts as lk_tts,
 )
 from livekit.agents.voice import Agent as VoiceAgent
 from livekit.plugins import google as google_plugin
@@ -66,17 +65,6 @@ try:
     from livekit.plugins import murf as murf_plugin
 except Exception:  # pragma: no cover
     murf_plugin = None
-
-if sarvam_plugin is not None:
-
-    class ReliableSarvamTTS(sarvam_plugin.TTS):
-        """Force non-streaming mode to avoid WAV decode failures in current stack."""
-
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._capabilities = lk_tts.TTSCapabilities(streaming=False)
-else:
-    ReliableSarvamTTS = None
 
 
 # Local imports
@@ -773,7 +761,17 @@ class SwadhikaarAgent(VoiceAgent):
             return "Escalation noted but database unavailable."
 
         severity_upper = severity.upper()
+        # Deliberately NOT a Literal, unlike the sibling tools above. On a clinical
+        # escalation path, coercing an unrecognised severity UP to HIGH is a fail-safe:
+        # a pydantic rejection would drop the escalation entirely, and over-escalating
+        # a patient is recoverable where losing the alert is not. Do not "fix" this
+        # into a Literal to match the others.
         if severity_upper not in ("CRITICAL", "HIGH"):
+            logger.warning(
+                "Unrecognised severity %r from the model — escalating as HIGH rather "
+                "than dropping the alert",
+                severity,
+            )
             severity_upper = "HIGH"
 
         try:
@@ -801,8 +799,15 @@ class SwadhikaarAgent(VoiceAgent):
     @llm.function_tool
     async def update_risk_level(
         self,
+        # Literal, not str: the framework turns this into a JSON-schema enum on the
+        # tool definition the model sees, and pydantic rejects anything else. The
+        # previous `str` + `score_map.get(level, 50)` silently wrote score=50 for any
+        # unrecognised value — a model answering "Critical" produced
+        # risk_level="Critical" with a mid-band score, recording a critical patient
+        # as moderate.
         new_level: Annotated[
-            str, Field(description="New risk level: High, Moderate, or Low")
+            Literal["High", "Moderate", "Low"],
+            Field(description="New risk level"),
         ],
         reason: Annotated[
             str, Field(description="Why the risk level changed based on conversation")
@@ -818,9 +823,9 @@ class SwadhikaarAgent(VoiceAgent):
         if not sb:
             return "Risk noted but database unavailable."
 
-        level = new_level.capitalize()
-        score_map = {"High": 80, "Moderate": 50, "Low": 20}
-        score = score_map.get(level, 50)
+        # No fallback score: the Literal above guarantees a key exists.
+        level = new_level
+        score = {"High": 80, "Moderate": 50, "Low": 20}[level]
 
         try:
             sb.table("patients").update(
@@ -844,11 +849,19 @@ class SwadhikaarAgent(VoiceAgent):
     @llm.function_tool
     async def update_journey_status(
         self,
+        # Literal puts the valid statuses in the tool schema the model receives, so it
+        # rarely emits a bad one and pydantic rejects it if it does. The hand-written
+        # `valid = {...}` set below this only caught it AFTER the model had answered.
         new_status: Annotated[
-            str,
-            Field(
-                description="New status: opd_referred, opd_visited, ipd_admitted, recovery, chronic_management, follow_up_active"
-            ),
+            Literal[
+                "opd_referred",
+                "opd_visited",
+                "ipd_admitted",
+                "recovery",
+                "chronic_management",
+                "follow_up_active",
+            ],
+            Field(description="The care transition the patient just confirmed"),
         ],
         reason: Annotated[
             str,
@@ -863,17 +876,6 @@ class SwadhikaarAgent(VoiceAgent):
         sb = _get_supabase_client()
         if not sb:
             return "Journey noted but database unavailable."
-
-        valid = {
-            "opd_referred",
-            "opd_visited",
-            "ipd_admitted",
-            "recovery",
-            "chronic_management",
-            "follow_up_active",
-        }
-        if new_status not in valid:
-            return f"Invalid status. Use one of: {', '.join(sorted(valid))}"
 
         try:
             sb.table("patients").update(
@@ -895,17 +897,26 @@ class SwadhikaarAgent(VoiceAgent):
     @llm.function_tool
     async def record_vitals(
         self,
+        # Bounds are enforced by pydantic, not hoped for. These write straight into
+        # health_vitals, which risk-predict scores — an LLM mis-hearing "one sixty" as
+        # 1600 would put a fabricated reading into a clinical record. Ranges are
+        # survivable-human, not normal: the point is to reject transcription noise,
+        # not to reject a genuinely sick patient.
         systolic_bp: Annotated[
-            Optional[int], Field(description="Systolic blood pressure if reported")
+            Optional[int], Field(default=None, ge=50, le=300,
+                                 description="Systolic blood pressure if reported")
         ] = None,
         diastolic_bp: Annotated[
-            Optional[int], Field(description="Diastolic blood pressure if reported")
+            Optional[int], Field(default=None, ge=30, le=200,
+                                 description="Diastolic blood pressure if reported")
         ] = None,
         blood_glucose: Annotated[
-            Optional[int], Field(description="Blood glucose in mg/dL if reported")
+            Optional[int], Field(default=None, ge=20, le=800,
+                                 description="Blood glucose in mg/dL if reported")
         ] = None,
         heart_rate: Annotated[
-            Optional[int], Field(description="Heart rate bpm if reported")
+            Optional[int], Field(default=None, ge=25, le=250,
+                                 description="Heart rate bpm if reported")
         ] = None,
     ) -> str:
         """Record self-reported vitals when patient shares home readings during the call.
@@ -1170,11 +1181,11 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         llm_model = gemini_llm
     # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a runtime
-    # failover chain, and deliberately not lk_tts.FallbackAdapter. That adapter takes
+    # failover chain, and deliberately not tts.FallbackAdapter. That adapter takes
     # a list of *already-constructed* instances, but only MURF_API_KEY and
     # DEEPGRAM_API_KEY are set here (sarvam and cartesia have no keys), and Deepgram's
     # configured voice is aura-asteria-en — English. Falling a Hindi call over to an
-    # English voice is worse than failing loudly. Switch to lk_tts.FallbackAdapter the
+    # English voice is worse than failing loudly. Switch to livekit.agents.tts.FallbackAdapter the
     # moment a second *Indic* provider is funded; the list is already in the right
     # order for it.
     def _murf_tts():
@@ -1206,7 +1217,13 @@ async def entrypoint(ctx: JobContext) -> None:
         return murf_plugin.TTS(**kwargs)  # type: ignore[arg-type]
 
     def _sarvam_tts():
-        return (ReliableSarvamTTS or sarvam_plugin.TTS)(
+        # Plain plugin. A ReliableSarvamTTS subclass used to force streaming=False to
+        # dodge WAV decode failures; the plugin now defaults to mp3 and has a working
+        # WS streaming path, and the subclass was both obsolete and lying — it rebuilt
+        # TTSCapabilities, dropping aligned_transcript, and advertised non-streaming
+        # while still carrying a working stream(). If WAV ever matters again,
+        # output_audio_codec is a constructor argument, not a subclass.
+        return sarvam_plugin.TTS(
             model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v2"),
             speaker=os.getenv("SARVAM_VOICE", "anushka"),
             target_language_code=os.getenv("SARVAM_LANGUAGE", bcp47_code),
