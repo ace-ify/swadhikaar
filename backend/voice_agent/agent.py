@@ -1156,15 +1156,24 @@ async def entrypoint(ctx: JobContext) -> None:
         groq_llm = openai_plugin.LLM(
             base_url="https://api.groq.com/openai/v1",
             api_key=groq_api_key,
-            # groq/compound-mini, not a gpt-oss or qwen model. Measured against this
-            # account 2026-08-23 with a Hindi chest-pain prompt:
-            #   groq/compound-mini   1069ms  clean Hindi, clinically apt
-            #   openai/gpt-oss-120b   731ms  content EMPTY (answer lands in
-            #   openai/gpt-oss-20b    579ms  `reasoning`, so TTS speaks nothing)
-            #   qwen/qwen3.6-27b      396ms  leaks "<think>" into content, which TTS
-            #                                would read aloud to the patient
-            # Faster is worthless if the patient hears silence or internal monologue.
-            model=os.getenv("GROQ_MODEL", "groq/compound-mini"),
+            # MUST support tool calling — this agent has five function tools
+            # (escalate_patient, update_risk_level, update_journey_status,
+            # record_vitals, confirm_vaccination_visit) and Groq rejects the whole
+            # request with 400 "`tool calling` is not supported with this model"
+            # otherwise. That is not a degraded call, it is a silent one: no LLM turn
+            # means no TTS, and the patient hears nothing.
+            #
+            # Measured against this account 2026-08-23, Hindi prompt + a tool schema:
+            #   openai/gpt-oss-120b   ~600ms  tools OK, speaks Hindi   <- chosen
+            #   openai/gpt-oss-20b    ~520ms  tools OK, smaller
+            #   qwen/qwen3.6-27b      ~480ms  tools OK but leaks "<think>" into
+            #                                 content, which TTS reads aloud
+            #   groq/compound-mini      —     400: NO TOOL CALLING
+            #   groq/compound           —     400: NO TOOL CALLING
+            #   llama-3.3-70b-*         —     404: retired by Groq
+            # gpt-oss returns empty content when it calls a tool instead of speaking;
+            # that is correct, not the empty-content failure seen without tools.
+            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
             temperature=0.5,
         )
         # llm.FallbackAdapter, not a hand-rolled wrapper. The one this replaced only
