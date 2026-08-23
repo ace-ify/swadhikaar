@@ -336,6 +336,25 @@ _AGENT_HIGH_INDICATORS = [
 
 _supabase_client = None  # Module-level cached client
 
+# Checked in order. SUPABASE_KEY is listed last because .env.example ships it as
+# the literal placeholder "your-service-role-key", and for the whole project so far
+# it stayed that way — so every call persisted nothing and logged one 401 line
+# nobody read. A placeholder must never look like a configured key.
+_SUPABASE_KEY_VARS = (
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_KEY",
+)
+
+
+def _supabase_key() -> tuple[str, str]:
+    """Return (var_name, key), skipping unset and placeholder values."""
+    for name in _SUPABASE_KEY_VARS:
+        v = os.getenv(name, "").strip()
+        if v and not v.startswith("your-"):
+            return name, v
+    return "", ""
+
 
 def _get_supabase_client():
     """Return a cached Supabase client. Creates one on first call."""
@@ -343,14 +362,22 @@ def _get_supabase_client():
     if _supabase_client is not None:
         return _supabase_client
     url = os.getenv("SUPABASE_URL", "")
-    key = os.getenv("SUPABASE_KEY", "")
+    var, key = _supabase_key()
     if not url or not key:
-        logger.warning("SUPABASE_URL/KEY not set — transcript will not be persisted.")
+        # Loud, because the failure is otherwise invisible: calls connect, the
+        # patient is spoken to, and the transcript, severity and escalation are
+        # all dropped on the floor.
+        logger.error(
+            "NO SUPABASE CREDENTIALS — transcripts, escalations and journey "
+            "updates will be LOST. Set one of %s in backend/.env.",
+            ", ".join(_SUPABASE_KEY_VARS),
+        )
         return None
     try:
         from supabase import create_client
 
         _supabase_client = create_client(url, key)
+        logger.info("Supabase client ready (via %s)", var)
         return _supabase_client
     except Exception as exc:
         logger.error("Failed to create Supabase client: %s", exc)
