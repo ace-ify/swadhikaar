@@ -25,7 +25,8 @@ registerHooks({
 process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:9";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-key";
 
-const { enqueue, pending, pendingCount, syncNow } = await import("./outbox.ts");
+const { enqueue, pending, pendingCount, syncNow, deadOps, discardDead } =
+  await import("./outbox.ts");
 
 test("enqueue then pending returns the op", async () => {
   const id = await enqueue({
@@ -65,4 +66,62 @@ test("a failed sync keeps the op and increments attempts", async () => {
   await syncNow();
   const again = (await pending()).find((o) => o.id === id);
   assert.equal(again?.attempts, 1, "backoff should skip an immediate retry");
+});
+
+// --- an op the server will never accept must not retry forever -------------
+// A connection failure is transient, so it must NOT be treated as permanent —
+// that is the case an offline ASHA is in all day.
+
+test("a transient failure is never marked dead", async () => {
+  await discardDead();
+  const id = await enqueue({
+    table: "patients",
+    op: "insert",
+    payload: { name: "सीता" },
+  });
+  const r = await syncNow();
+  assert.equal(r.dead, 0, "a dead endpoint is transient, not permanent");
+  const op = (await pending()).find((o) => o.id === id);
+  assert.ok(op, "a transient failure must keep the op pending");
+  assert.equal(op.dead, undefined);
+});
+
+test("an op is abandoned after MAX_ATTEMPTS and leaves the pending count", async () => {
+  await discardDead();
+  const id = await enqueue({
+    table: "patients",
+    op: "insert",
+    payload: { name: "गीता" },
+  });
+
+  // Drive it to the attempt ceiling, clearing the backoff gate each round so the
+  // test does not sleep. 8 is MAX_ATTEMPTS in outbox.ts.
+  const { openDB } = await import("idb");
+  for (let i = 0; i < 8; i++) {
+    const db = await openDB("swadhikaar-offline", 1);
+    const rec = await db.get("outbox", id);
+    if (!rec || rec.dead) break;
+    await db.put("outbox", { ...rec, nextAttemptAt: 0 });
+    await syncNow();
+  }
+
+  const stillPending = (await pending()).find((o) => o.id === id);
+  assert.equal(stillPending, undefined, "abandoned op must leave pending()");
+
+  const dead = await deadOps();
+  const found = dead.find((o) => o.id === id);
+  assert.ok(found, "abandoned op must be retrievable as dead, not silently dropped");
+  assert.equal(found.dead, true);
+  assert.ok(found.attempts >= 8);
+  assert.ok(found.lastError, "the reason it was abandoned must survive");
+
+  // The whole point: the chip stops counting it, so "0 pending" is honest and the
+  // loss is visible somewhere else instead of hiding as perpetual progress.
+  const counted = await pendingCount();
+  const all = await pending();
+  assert.equal(counted, all.length);
+  assert.ok(!all.some((o) => o.dead));
+
+  assert.ok((await discardDead()) >= 1);
+  assert.equal((await deadOps()).length, 0);
 });

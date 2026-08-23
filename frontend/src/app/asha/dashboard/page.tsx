@@ -5,17 +5,32 @@ import { useEffect, useState } from "react";
 import { ChevronRight, TriangleAlert } from "lucide-react";
 import { Bi, BigButton, RiskPill, normaliseRisk } from "@/components/asha/ui";
 import { useAshaProfile, useVillagePatients } from "@/hooks/use-asha";
-import { pendingCount, syncNow, onPendingChange } from "@/lib/offline/outbox";
+import {
+  pendingCount,
+  syncNow,
+  onPendingChange,
+  deadOps,
+  discardDead,
+  type OutboxOp,
+} from "@/lib/offline/outbox";
 
 export default function AshaDashboard() {
   const { name, village, district, loading: pLoading } = useAshaProfile();
   const { data: patients, loading, error, refetch } = useVillagePatients();
   const [queued, setQueued] = useState(0);
+  const [stuck, setStuck] = useState<OutboxOp[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     pendingCount().then(setQueued);
-    return onPendingChange(setQueued);
+    // Re-checked on every queue change: an op can only become dead during a sync,
+    // and a sync always fires onPendingChange.
+    const off = onPendingChange((n) => {
+      setQueued(n);
+      void deadOps().then(setStuck);
+    });
+    void deadOps().then(setStuck);
+    return off;
   }, []);
 
   const highRisk = patients.filter((p) => normaliseRisk(p.risk_level) === "High");
@@ -60,6 +75,38 @@ export default function AshaDashboard() {
           />
         </div>
       </div>
+
+      {/* A screening the server will never accept must be visible, not counted as
+          "waiting to sync" forever. This is the only place the loss surfaces. */}
+      {stuck.length > 0 && (
+        <div role="alert" className="rounded-2xl border-2 border-red-500 bg-red-50 p-4">
+          <Bi
+            hi={`${stuck.length} जांच भेजी नहीं जा सकी`}
+            en={`${stuck.length} screening(s) could not be sent`}
+            hiClass="text-[16px] font-bold leading-snug text-red-900"
+            enClass="text-[13px] font-semibold text-red-800"
+          />
+          <p className="mt-2 text-[14px] text-red-900">
+            <span lang="hi">
+              इन्हें दोबारा भरना पड़ेगा। सुपरवाइज़र को बताएं।
+            </span>
+            <span className="mt-0.5 block text-[12px] text-red-700">
+              These need re-entering — tell your supervisor. Reason:{" "}
+              {stuck[0].lastError?.slice(0, 90)}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              await discardDead();
+              setStuck(await deadOps());
+            }}
+            className="mt-3 min-h-[48px] w-full rounded-xl border-2 border-red-400 px-4 font-semibold text-red-900"
+          >
+            समझ गया, हटाएं / Understood, clear
+          </button>
+        </div>
+      )}
 
       {queued > 0 && (
         <div className="rounded-2xl border border-slate-300 bg-white p-4">

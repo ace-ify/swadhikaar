@@ -1,4 +1,10 @@
-import { SignJWT } from "npm:jose@5";
+// Official SDK, not hand-signed JWTs + hand-rolled Twirp. This replaced ~110 lines
+// (createLivekitJwt + twirpRequest + an admin token) with three constructor calls:
+// RoomServiceClient and SipClient authenticate themselves, so no admin token is
+// minted here at all. Version pinned, and @livekit/protocol matches the range the
+// SDK itself declares (^1.46.3) — a lower pin fails at runtime on RoomAgentDispatch.
+import { AccessToken, RoomServiceClient, SipClient } from "npm:livekit-server-sdk@2.15.4";
+import { RoomAgentDispatch } from "npm:@livekit/protocol@1.46.3";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { getAdminClient } from "../_shared/supabase-admin.ts";
 
@@ -33,77 +39,14 @@ function env(name: string): string {
   return Deno.env.get(name) ?? "";
 }
 
-async function createLivekitJwt(opts: {
-  apiKey: string;
-  apiSecret: string;
-  identity: string;
-  name?: string;
-  room?: string;
-  roomJoin?: boolean;
-  roomCreate?: boolean;
-  roomAdmin?: boolean;
-  sipAdmin?: boolean;
-  sipCall?: boolean;
-  ttlSeconds?: number;
-}) {
-  const now = Math.floor(Date.now() / 1000);
-  const ttl = opts.ttlSeconds ?? 3600;
-
-  const videoGrant: Record<string, unknown> = {};
-  if (opts.roomJoin) videoGrant.roomJoin = true;
-  if (opts.roomCreate) videoGrant.roomCreate = true;
-  if (opts.roomAdmin) videoGrant.roomAdmin = true;
-  if (opts.room) videoGrant.room = opts.room;
-
-  const payload: Record<string, unknown> = {
-    iss: opts.apiKey,
-    sub: opts.identity,
-    nbf: now,
-    exp: now + ttl,
-    video: videoGrant,
-  };
-
-  if (opts.sipAdmin || opts.sipCall) {
-    payload.sip = {
-      ...(opts.sipAdmin ? { admin: true } : {}),
-      ...(opts.sipCall ? { call: true } : {}),
-    };
-  }
-
-  if (opts.name) {
-    payload.name = opts.name;
-  }
-
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .sign(new TextEncoder().encode(opts.apiSecret));
-}
-
-async function twirpRequest(
-  livekitUrl: string,
-  authToken: string,
-  service: string,
-  method: string,
-  body: Record<string, unknown>
-) {
-  const base = livekitUrl.replace("wss://", "https://").replace("ws://", "http://").replace(/\/$/, "");
-  const url = `${base}/twirp/${service}/${method}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${authToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`${service}.${method} failed (${res.status}): ${txt}`);
-  }
-
-  return await res.json();
+/**
+ * RoomServiceClient and SipClient want an https:// host; LIVEKIT_URL is a wss:// URL.
+ */
+function httpHost(livekitUrl: string): string {
+  return livekitUrl
+    .replace("wss://", "https://")
+    .replace("ws://", "http://")
+    .replace(/\/$/, "");
 }
 
 async function buildPatientContext(patientId: string) {
@@ -262,48 +205,34 @@ Deno.serve(async (req) => {
     const context = await buildPatientContext(body.patient_id);
     const metadata = JSON.stringify({ ...body, ...context, language, call_type: callType });
 
-    const adminToken = await createLivekitJwt({
-      apiKey: livekitApiKey,
-      apiSecret: livekitApiSecret,
-      identity: "supabase-edge",
-      name: "Supabase Edge",
-      room: roomName,
-      roomCreate: true,
-      roomAdmin: true,
-      sipAdmin: true,
-      sipCall: true,
-      ttlSeconds: 300,
-    });
+    const host = httpHost(livekitUrl);
+    const roomService = new RoomServiceClient(host, livekitApiKey, livekitApiSecret);
 
-    await twirpRequest(
-      livekitUrl,
-      adminToken,
-      "livekit.RoomService",
-      "CreateRoom",
-      {
-        name: roomName,
-        metadata,
-        agents: [{ agent_name: "", metadata }],
-      }
-    );
+    // agentName "" is verified to match a worker registered without one (see
+    // backend/check_dispatch.py). Room metadata is what agent.py reads in on_enter.
+    await roomService.createRoom({
+      name: roomName,
+      metadata,
+      agents: [new RoomAgentDispatch({ agentName: "", metadata })],
+    });
 
     if (body.phone_number) {
       if (!sipTrunkId) {
         return jsonResponse({ error: "SIP_TRUNK_ID not configured for outbound calling" }, 400);
       }
 
-      await twirpRequest(
-        livekitUrl,
-        adminToken,
-        "livekit.SIP",
-        "CreateSIPParticipant",
+      const sipClient = new SipClient(host, livekitApiKey, livekitApiSecret);
+      await sipClient.createSipParticipant(
+        sipTrunkId,
+        body.phone_number,
+        roomName,
         {
-          sip_trunk_id: sipTrunkId,
-          sip_call_to: body.phone_number,
-          room_name: roomName,
-          participant_identity: `phone-${body.patient_id}`,
-          participant_name: patientName,
-          wait_until_answered: true,
+          participantIdentity: `phone-${body.patient_id}`,
+          participantName: patientName,
+          // Hold the request open until the callee picks up, so a "dialing" response
+          // means a real answered call. The reconciler in 005_call_scheduler depends
+          // on this: an ambiguous timeout is treated as terminal, never auto-redialed.
+          waitUntilAnswered: true,
         }
       );
 
@@ -315,20 +244,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const participantToken = await createLivekitJwt({
-      apiKey: livekitApiKey,
-      apiSecret: livekitApiSecret,
+    // Browser path: a join-only token scoped to this one room. No admin, no SIP
+    // grant — this one is handed to a client.
+    const participantToken = await new AccessToken(livekitApiKey, livekitApiSecret, {
       identity: `patient-${body.patient_id}`,
       name: patientName,
-      room: roomName,
-      roomJoin: true,
-      ttlSeconds: 3600,
+      ttl: 3600,
     });
+    participantToken.addGrant({ roomJoin: true, room: roomName });
 
     return jsonResponse({
       call_id: roomName,
       status: "connecting",
-      livekit_token: participantToken,
+      livekit_token: await participantToken.toJwt(),
       livekit_url: livekitUrl,
     });
   } catch (error) {

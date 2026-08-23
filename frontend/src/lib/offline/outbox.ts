@@ -8,14 +8,25 @@ export type OutboxOp = {
   createdAt: string; // ISO
   attempts?: number;
   lastError?: string;
+  /** Set once the op is abandoned. It stays in the store so the UI can show it. */
+  dead?: boolean;
 };
 
 /** Stored shape: OutboxOp plus the backoff gate. Extra field is invisible to consumers. */
-type StoredOp = OutboxOp & { nextAttemptAt?: number };
+type StoredOp = OutboxOp & { nextAttemptAt?: number; deadAt?: number };
 
 const DB_NAME = "swadhikaar-offline";
 const STORE = "outbox";
 const MAX_BACKOFF_MS = 5 * 60_000;
+// Mirrors serwist's BackgroundSyncQueue `maxRetentionTime` default (7 days). Without
+// a cap, an op the server will NEVER accept — RLS denial, schema violation, duplicate
+// key — retried every 5 minutes forever while the ASHA saw "1 pending" indefinitely.
+// A screening that is never going to land must say so, not impersonate progress.
+const MAX_RETENTION_MS = 7 * 24 * 60 * 60_000;
+// A 4xx other than 429/408 will fail identically on every future attempt. Give it a
+// few tries in case the cause was transient (a race with a just-created parent row),
+// then stop rather than retry for a week.
+const MAX_ATTEMPTS = 8;
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
 
@@ -68,12 +79,12 @@ export async function enqueue(
 }
 
 export async function pending(): Promise<OutboxOp[]> {
-  return allOps();
+  return (await allOps()).filter((o) => !o.dead);
 }
 
+/** Counts only ops still trying. A dead op is not "pending" — it is lost. */
 export async function pendingCount(): Promise<number> {
-  const db = await getDb();
-  return db.count(STORE);
+  return (await pending()).length;
 }
 
 export function onPendingChange(cb: (count: number) => void): () => void {
@@ -85,11 +96,29 @@ export function onPendingChange(cb: (count: number) => void): () => void {
 
 let syncing = false;
 
-export async function syncNow(): Promise<{ synced: number; failed: number }> {
-  if (syncing) return { synced: 0, failed: 0 };
+/** True for errors that will fail identically on every future attempt. */
+function isPermanent(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("violates row-level security") ||
+    m.includes("duplicate key") ||
+    m.includes("violates check constraint") ||
+    m.includes("violates foreign key") ||
+    m.includes("column") && m.includes("does not exist") ||
+    m.includes("invalid input syntax")
+  );
+}
+
+export async function syncNow(): Promise<{
+  synced: number;
+  failed: number;
+  dead: number;
+}> {
+  if (syncing) return { synced: 0, failed: 0, dead: 0 };
   syncing = true;
   let synced = 0;
   let failed = 0;
+  let dead = 0;
   try {
     const { createClient } = await import("@/lib/supabase");
     const supabase = createClient();
@@ -97,6 +126,7 @@ export async function syncNow(): Promise<{ synced: number; failed: number }> {
     const now = Date.now();
 
     for (const op of await allOps()) {
+      if (op.dead) continue; // abandoned; kept only so the UI can report it
       if (op.nextAttemptAt && op.nextAttemptAt > now) continue; // backing off
       try {
         let error;
@@ -113,21 +143,52 @@ export async function syncNow(): Promise<{ synced: number; failed: number }> {
         synced++;
       } catch (e) {
         const attempts = (op.attempts ?? 0) + 1;
+        const message = e instanceof Error ? e.message : String(e);
+        const age = Date.now() - new Date(op.createdAt).getTime();
+        // Stop retrying when the server will clearly never take it, when we have
+        // tried enough times, or when it has sat here for a week. Silence is the
+        // failure mode being fixed: an op retried forever looks like progress.
+        const giveUp =
+          isPermanent(message) ||
+          attempts >= MAX_ATTEMPTS ||
+          age >= MAX_RETENTION_MS;
         const next: StoredOp = {
           ...op,
           attempts,
-          lastError: e instanceof Error ? e.message : String(e),
-          // 2s, 4s, 8s ... capped at 5min
-          nextAttemptAt:
-            Date.now() + Math.min(2 ** attempts * 1000, MAX_BACKOFF_MS),
+          lastError: message,
+          ...(giveUp
+            ? { dead: true, deadAt: Date.now() }
+            : {
+                // 2s, 4s, 8s ... capped at 5min, with jitter so a village of phones
+                // coming back online together does not stampede the API in lockstep.
+                nextAttemptAt:
+                  Date.now() +
+                  Math.min(2 ** attempts * 1000, MAX_BACKOFF_MS) *
+                    (0.75 + Math.random() * 0.5),
+              }),
         };
         await db.put(STORE, next);
-        failed++;
+        if (giveUp) dead++;
+        else failed++;
       }
     }
   } finally {
     syncing = false;
     await notify();
   }
-  return { synced, failed };
+  return { synced, failed, dead };
+}
+
+/** Ops that will never sync. Surface these — they are lost screenings otherwise. */
+export async function deadOps(): Promise<OutboxOp[]> {
+  return (await allOps()).filter((o) => o.dead);
+}
+
+/** Clears the dead-letter list after someone has dealt with it. */
+export async function discardDead(): Promise<number> {
+  const db = await getDb();
+  const dead = await deadOps();
+  for (const o of dead) await db.delete(STORE, o.id);
+  await notify();
+  return dead.length;
 }
