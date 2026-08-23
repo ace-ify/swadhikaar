@@ -201,7 +201,8 @@ export default function ScreeningResultPage({
             </div>
           ))}
         </dl>
-        <p className="mt-3 text-[13px] text-slate-400">
+        {/* Provenance of the score. slate-500 not 400: this is read outdoors. */}
+        <p className="mt-3 text-[13px] text-slate-500">
           {source === "edge"
             ? "स्कोर सर्वर से / Scored on the server"
             : "स्कोर इस फ़ोन पर / Scored on this phone (offline)"}

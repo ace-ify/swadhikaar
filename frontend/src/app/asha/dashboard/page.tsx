@@ -32,7 +32,7 @@ export default function AshaDashboard() {
         <p className="mt-1 text-[15px] text-slate-600">
           <span lang="hi">गाँव</span>{" "}
           <span className="font-semibold">{village || "—"}</span>
-          {district && <span className="text-slate-400"> · {district}</span>}
+          {district && <span className="text-slate-500"> · {district}</span>}
         </p>
       </div>
 

@@ -40,7 +40,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -91,10 +91,12 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-xs text-slate-400 text-center mt-6">
+        {/* slate-400 on white is 2.63:1 at 12px — below the 4.5:1 WCAG AA floor.
+            slate-600 clears it, and this app is read outdoors in sunlight. */}
+        <p className="text-xs text-slate-600 text-center mt-6">
           Secure access for Swadhikaar care operations
         </p>
       </div>
-    </div>
+    </main>
   );
 }
