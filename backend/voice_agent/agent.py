@@ -70,7 +70,12 @@ except Exception:  # pragma: no cover
 # Local imports
 from prompts.system_prompts import build_system_prompt, DEFAULT_CONTEXT
 
-load_dotenv()
+# Explicit path, not bare load_dotenv(). The implicit form walks up from the calling
+# frame's directory, so it silently finds nothing when agent.py is imported from a
+# script elsewhere in the tree — and "no credentials" here means every transcript,
+# escalation and journey update is dropped. backend/.env (not .env.local: dotenv does
+# not look for that name).
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 logger = logging.getLogger("swadhikaar.agent")
 
