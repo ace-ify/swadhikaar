@@ -305,7 +305,10 @@ export function draftToWrites(
         intake_source: "asha_screening",
         consent_status: "verbal_obtained",
         journey_status: "screened",
-        risk_level: risk.overall_risk_category.toLowerCase(),
+        // Canonical case. A DB trigger normalises this anyway, but writing
+        // 'high' here once made every desktop high-risk count (doctor/patients,
+        // admin/dashboard, admin/operations) silently skip the patient.
+        risk_level: risk.overall_risk_category,
         overall_risk_score: risk.overall_risk_score,
       },
     });
@@ -315,7 +318,7 @@ export function draftToWrites(
       op: "update",
       payload: {
         id: draft.patientId,
-        risk_level: risk.overall_risk_category.toLowerCase(),
+        risk_level: risk.overall_risk_category,
         overall_risk_score: risk.overall_risk_score,
         journey_status: "screened",
         updated_at: now,

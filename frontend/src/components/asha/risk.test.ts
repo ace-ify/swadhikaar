@@ -268,6 +268,30 @@ test("a healthy screening escalates nothing", () => {
   );
 });
 
+test("risk_level is written in the case every desktop reader compares against", () => {
+  // Writing 'high' here made the patient vanish from every high-risk count in
+  // doctor/patients, admin/dashboard, admin/operations and admin/coordination,
+  // all of which test `risk_level === "High"`.
+  const draft = draftWith({ chest_discomfort: "mild" }, {
+    systolic_bp: 186,
+    diastolic_bp: 114,
+    heart_rate: 92,
+    oxygen_saturation: 97,
+    blood_glucose: 150,
+    height: 160,
+    weight: 80,
+  });
+  const risk = computeRisk(draft.symptoms, draft.vitals);
+  assert.equal(risk.overall_risk_category, "High");
+
+  const update = draftToWrites(draft, risk)[0];
+  assert.equal(update.payload.risk_level, "High");
+
+  const insert = draftToWrites({ ...draft, isNewPatient: true }, risk)[0];
+  assert.equal(insert.op, "insert");
+  assert.equal(insert.payload.risk_level, "High");
+});
+
 test("escalationFor never fires without the ASHA also being told", () => {
   // Every escalating case must have refer=true or band=High — the two things the
   // result screen actually renders. Otherwise the doctor knows and the field
