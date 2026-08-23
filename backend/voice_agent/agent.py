@@ -368,6 +368,12 @@ class TranscriptAccumulator:
         self._notified = False
 
     def add(self, role: str, text: str) -> None:
+        # Defence in depth for the bug above: only spoken turns belong in a
+        # transcript. A system prompt scanned as speech reads as a patient in
+        # cardiac arrest, because the prompt enumerates the red-flag keywords.
+        if role not in ("user", "assistant"):
+            logger.warning("Ignoring %r turn — only speech belongs in a transcript", role)
+            return
         self.turns.append(
             {
                 "role": role,
@@ -1047,15 +1053,21 @@ class SwadhikaarAgent(VoiceAgent):
         if hasattr(self, "_transcript"):
             try:
                 for item in self.chat_ctx.items:
-                    if not hasattr(item, "role"):
+                    role = getattr(item, "role", None)
+                    # ONLY real assistant turns. `else "assistant"` filed the system
+                    # prompt as agent speech, and that prompt lists every escalation
+                    # keyword ("chest pain", "breathlessness", "108 call karein") — so
+                    # the keyword monitor fired on the agent's own instructions and
+                    # every single call produced a false CRITICAL escalation. Three
+                    # were in production. A triage queue full of fake criticals is
+                    # worse than no queue: it trains the doctor to ignore it.
+                    if role != "assistant":
                         continue
                     text = getattr(item, "text_content", None) or ""
                     if not text:
                         continue
-                    role = "user" if item.role == "user" else "assistant"
-                    # Avoid duplicating user turns already added by on_user_turn_completed
-                    if role == "assistant":
-                        self._transcript.add(role, text)
+                    # User turns are already captured by on_user_turn_completed.
+                    self._transcript.add("assistant", text)
             except Exception as exc:
                 logger.warning("Failed to read chat context: %s", exc)
 
