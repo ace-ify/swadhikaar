@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from typing import Annotated, Any, Callable, Optional
 
@@ -37,7 +38,6 @@ from pydantic import Field
 from dotenv import load_dotenv
 
 from livekit.agents import (
-    APIStatusError,
     AgentSession,
     AutoSubscribe,
     JobContext,
@@ -77,43 +77,6 @@ if sarvam_plugin is not None:
             self._capabilities = lk_tts.TTSCapabilities(streaming=False)
 else:
     ReliableSarvamTTS = None
-
-
-class FailoverLLM(llm.LLM):
-    """Primary->fallback LLM wrapper with 429 failover support."""
-
-    def __init__(self, primary: llm.LLM, fallback: llm.LLM, logger: logging.Logger):
-        super().__init__()
-        self._primary = primary
-        self._fallback = fallback
-        self._logger = logger
-
-    # Both feed llm.LLM.metrics_metadata, which labels every turn metric —
-    # without these overrides the base class reports "unknown".
-    @property
-    def model(self) -> str:
-        return f"{self._primary.model} -> {self._fallback.model}"
-
-    @property
-    def provider(self) -> str:
-        return f"{self._primary.provider} -> {self._fallback.provider}"
-
-    def chat(self, **kwargs):
-        try:
-            return self._primary.chat(**kwargs)
-        except APIStatusError as e:
-            status = getattr(e, "status_code", None)
-            message = str(e).lower()
-            if status == 429 or "rate limit" in message or "rate_limit" in message:
-                self._logger.warning(
-                    "Primary LLM rate-limited (429). Switching this turn to fallback LLM."
-                )
-                return self._fallback.chat(**kwargs)
-            raise
-
-    async def aclose(self) -> None:
-        await self._primary.aclose()
-        await self._fallback.aclose()
 
 
 # Local imports
@@ -1162,27 +1125,46 @@ async def entrypoint(ctx: JobContext) -> None:
         endpointing_ms=300,  # end-of-speech detection: 300ms
     )
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
-    gemini_fallback_llm = google_plugin.LLM(
+    gemini_llm = google_plugin.LLM(
         model=os.getenv("GOOGLE_LLM_MODEL", "gemini-3-flash-preview"),
         temperature=0.5,
     )
     if groq_api_key:
-        logger.info("FAST PIPELINE LLM: Groq primary")
         groq_llm = openai_plugin.LLM(
             base_url="https://api.groq.com/openai/v1",
             api_key=groq_api_key,
-            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            # groq/compound-mini, not a gpt-oss or qwen model. Measured against this
+            # account 2026-08-23 with a Hindi chest-pain prompt:
+            #   groq/compound-mini   1069ms  clean Hindi, clinically apt
+            #   openai/gpt-oss-120b   731ms  content EMPTY (answer lands in
+            #   openai/gpt-oss-20b    579ms  `reasoning`, so TTS speaks nothing)
+            #   qwen/qwen3.6-27b      396ms  leaks "<think>" into content, which TTS
+            #                                would read aloud to the patient
+            # Faster is worthless if the patient hears silence or internal monologue.
+            model=os.getenv("GROQ_MODEL", "groq/compound-mini"),
             temperature=0.5,
         )
-        llm_model = FailoverLLM(groq_llm, gemini_fallback_llm, logger)
+        # llm.FallbackAdapter, not a hand-rolled wrapper. The one this replaced only
+        # failed over on 429; Groq retired llama-3.3-70b-versatile and the 404 was
+        # re-raised, so a patient on a live call heard silence for the entire call
+        # while Gemini sat idle and healthy. The library adapter catches APIError,
+        # timeouts and bare exceptions, tracks each LLM's status, and recovers back
+        # to the primary when it returns — none of which the wrapper did.
+        llm_model = llm.FallbackAdapter([groq_llm, gemini_llm])
+        logger.info("FAST PIPELINE LLM: Groq primary -> Gemini fallback")
     else:
         logger.warning(
             "GROQ_API_KEY missing, falling back to Gemini text LLM in FAST pipeline"
         )
-        llm_model = gemini_fallback_llm
-    # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a
-    # runtime failover chain. lk_tts.FallbackAdapter would need every provider's
-    # API key present at once; here only one is configured.
+        llm_model = gemini_llm
+    # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a runtime
+    # failover chain, and deliberately not lk_tts.FallbackAdapter. That adapter takes
+    # a list of *already-constructed* instances, but only MURF_API_KEY and
+    # DEEPGRAM_API_KEY are set here (sarvam and cartesia have no keys), and Deepgram's
+    # configured voice is aura-asteria-en — English. Falling a Hindi call over to an
+    # English voice is worse than failing loudly. Switch to lk_tts.FallbackAdapter the
+    # moment a second *Indic* provider is funded; the list is already in the right
+    # order for it.
     def _murf_tts():
         # Only pass what is explicitly configured. Murf validates `style` against
         # its own library and the docs disagree with their own example
@@ -1297,6 +1279,16 @@ async def entrypoint(ctx: JobContext) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Windows consoles default to cp1252, which cannot encode Devanagari. Without
+    # this, every "User said: <hindi>" line raises UnicodeEncodeError inside the
+    # logger and the transcript is lost from the log — on a Hindi-first product that
+    # is most of the interesting output.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
