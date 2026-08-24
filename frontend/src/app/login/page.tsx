@@ -14,6 +14,33 @@ const ROLE_HOME: Record<UserRole, string> = {
   asha: "/asha/dashboard",
 };
 
+/**
+ * Supabase error strings are for developers. An ASHA holding a phone in a village
+ * needs to know whether to retype the password or call someone — "Legacy API keys
+ * are disabled" (a real error seen after a key rotation, caused by a stale cached
+ * bundle) tells her neither, and looks like the app is broken.
+ */
+function humanError(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes("invalid login credentials")) {
+    return "Email or password is wrong. Please check and try again.";
+  }
+  if (m.includes("email not confirmed")) {
+    return "This account is not confirmed yet. Ask your administrator to confirm it.";
+  }
+  if (m.includes("legacy api key") || m.includes("api key") || m.includes("apikey")) {
+    return "This page is out of date. Close the tab and open it again — if it keeps happening, reload with Ctrl+Shift+R.";
+  }
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("load failed")) {
+    return "No internet connection. Check your network and try again.";
+  }
+  if (m.includes("rate limit") || m.includes("too many")) {
+    return "Too many attempts. Please wait a minute and try again.";
+  }
+  // Unrecognised: show it rather than swallow it, but say what it is.
+  return `Could not sign in: ${raw}`;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuth();
@@ -29,7 +56,7 @@ export default function LoginPage() {
     const result = await signIn(email, password);
     setLoading(false);
     if (result.error) {
-      setError(result.error);
+      setError(humanError(result.error));
       return;
     }
     // signIn resolves the role from user_roles, the same table RLS consults.
