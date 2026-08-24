@@ -920,6 +920,36 @@ grant all on all sequences in schema public to authenticated, service_role;
 alter default privileges in schema public revoke all on tables from anon;
 alter default privileges in schema public revoke all on sequences from anon;
 
+-- Same trap, functions edition: Postgres grants EXECUTE to PUBLIC on every new
+-- function, so each auth helper added after the original revoke became callable by
+-- `anon` via /rest/v1/rpc/<name>. Impact was limited (auth.uid() is NULL for anon,
+-- so visible_patient_ids() returns nothing) but an unauthenticated caller has no
+-- business probing the authorisation layer.
+--
+-- `authenticated` deliberately KEEPS execute: RLS policy expressions call these as
+-- the querying user, so revoking it breaks every policy. Verified by impersonating
+-- a doctor after the revoke — 59 patients visible, role still resolves.
+do $$
+declare fn text;
+begin
+  foreach fn in array array[
+    'public.is_admin()',
+    'public.current_app_role()',
+    'public.visible_patient_ids()',
+    'public.asha_villages()',
+    'public.escalation_visible(uuid)',
+    'public.in_triage_pool(uuid)',
+    'public.canonical_risk_level(text)',
+    'public.heat_risk_cohort(text)'
+  ]
+  loop
+    execute format('revoke all on function %s from anon, public', fn);
+  end loop;
+exception when others then null; end $$;
+
+alter default privileges in schema public revoke execute on functions from public;
+alter default privileges in schema public revoke execute on functions from anon;
+
 -- -----------------------------------------------------------------------------
 -- 11. Cron jobs (2)
 -- -----------------------------------------------------------------------------
