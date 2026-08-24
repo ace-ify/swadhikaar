@@ -49,7 +49,8 @@ type AdvisoryResult = {
   district?: string;
   triggered?: boolean;
   dry_run?: boolean;
-  weather?: { source: string; max_temp_c: number; note?: string };
+  forced?: boolean;
+  weather?: { source: string; max_temp_c: number; resolved_place?: string; note?: string };
   threshold_celsius?: number;
   cohort_size?: number;
   calls_queued?: number;
@@ -66,6 +67,7 @@ export default function CrossDomainPage() {
   const [loading, setLoading] = useState(true);
   const [district, setDistrict] = useState("Muzaffarpur");
   const [busy, setBusy] = useState<"dry" | "live" | null>(null);
+  const [drill, setDrill] = useState(false);
   const [advisory, setAdvisory] = useState<AdvisoryResult | null>(null);
 
   const load = useCallback(async () => {
@@ -103,7 +105,10 @@ export default function CrossDomainPage() {
     setAdvisory(null);
     try {
       const { data, error } = await supabase.functions.invoke("heat-advisory", {
-        body: { district: district.trim(), dry_run: dryRun, force: true },
+        // force was hardcoded true here, which meant the real temperature was
+        // fetched, displayed, and then ignored — the threshold never decided
+        // anything. It is now an explicit operator toggle, off by default.
+        body: { district: district.trim(), dry_run: dryRun, force: drill },
       });
       if (error) throw new Error(error.message);
       const res = data as AdvisoryResult;
@@ -197,6 +202,26 @@ export default function CrossDomainPage() {
             </Button>
           </div>
 
+          {/* Bihar in late August is monsoon, ~33°C — a real reading will sit below
+              the 40°C IMD heatwave threshold most of the year. Real systems run
+              drills for exactly this reason, so the override is a labelled switch
+              rather than something hardcoded on. */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={drill}
+              onChange={(e) => setDrill(e.target.checked)}
+              className="size-4 accent-slate-900"
+            />
+            <span>
+              Drill — ignore the temperature threshold
+              <span className="text-muted-foreground">
+                {" "}
+                (exercises the cohort and call pipeline out of season)
+              </span>
+            </span>
+          </label>
+
           {advisory ? (
             advisory.error ? (
               <div className="space-y-1">
@@ -210,6 +235,7 @@ export default function CrossDomainPage() {
                     {advisory.triggered ? "Triggered" : "Below threshold"}
                   </Badge>
                   {advisory.dry_run ? <Badge variant="outline">Dry run</Badge> : null}
+                  {advisory.forced ? <Badge variant="destructive">Drill</Badge> : null}
                   {advisory.weather ? (
                     <Badge
                       variant={
@@ -220,11 +246,24 @@ export default function CrossDomainPage() {
                     >
                       {advisory.weather.max_temp_c}°C ·{" "}
                       {advisory.weather.source === "openweather"
-                        ? "OpenWeather"
+                        ? `OpenWeather${
+                            advisory.weather.resolved_place
+                              ? ` · ${advisory.weather.resolved_place}`
+                              : ""
+                          }`
                         : "simulated reading"}
                     </Badge>
                   ) : null}
+                  {advisory.threshold_celsius !== undefined ? (
+                    <span className="text-muted-foreground text-xs">
+                      threshold {advisory.threshold_celsius}°C
+                    </span>
+                  ) : null}
                 </div>
+
+                {advisory.message ? (
+                  <p className="text-muted-foreground">{advisory.message}</p>
+                ) : null}
 
                 {advisory.weather?.note ? (
                   <p className="text-muted-foreground">{advisory.weather.note}</p>

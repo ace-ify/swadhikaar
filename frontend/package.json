@@ -6,7 +6,7 @@
     "dev": "next dev --webpack",
     "build": "next build && serwist build",
     "start": "next start",
-    "test": "node --test src/lib/offline/*.test.mjs",
+    "test": "node --test src/lib/offline/*.test.mjs src/components/asha/*.test.ts",
     "lint": "eslint"
   },
   "dependencies": {

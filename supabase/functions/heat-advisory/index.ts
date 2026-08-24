@@ -32,38 +32,69 @@ function json(payload: unknown, status = 200) {
 type Reading = {
   source: "openweather" | "simulated";
   max_temp_c: number;
+  resolved_place?: string;
   note?: string;
 };
 
+function simulated(note: string): Reading {
+  return { source: "simulated", max_temp_c: 43.2, note };
+}
+
+// The district arrives as free text from an operator's keyboard, so a hardcoded
+// district->coordinates table would break on the first district nobody thought of.
+// Geocode with the same key instead: one extra call, every district in India, and
+// nothing to maintain. Returning the resolved place name also lets the UI prove it
+// hit a real gazetteer rather than a lookup we wrote ourselves.
+async function geocode(district: string, key: string) {
+  const url = `https://api.openweathermap.org/geo/1.0/direct` +
+    `?q=${encodeURIComponent(district)},IN&limit=1&appid=${key}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const hits = await res.json();
+  const hit = Array.isArray(hits) ? hits[0] : null;
+  if (!hit || typeof hit.lat !== "number" || typeof hit.lon !== "number") return null;
+  return {
+    lat: hit.lat as number,
+    lon: hit.lon as number,
+    place: [hit.name, hit.state].filter(Boolean).join(", "),
+  };
+}
+
 // OpenWeather free tier. IMD has no clean public API, so IMD is the production
 // path and this is what the prototype uses — labelled, never dressed up as IMD.
-async function readWeather(lat?: number, lon?: number): Promise<Reading> {
+async function readWeather(district: string, lat?: number, lon?: number): Promise<Reading> {
   const key = Deno.env.get("OPENWEATHER_API_KEY");
-  if (!key || lat === undefined || lon === undefined) {
-    return {
-      source: "simulated",
-      max_temp_c: 43.2,
-      note: "OPENWEATHER_API_KEY or coordinates absent - simulated reading, clearly labelled",
-    };
+  if (!key) {
+    return simulated("OPENWEATHER_API_KEY not set - simulated reading, clearly labelled");
   }
-  const url =
-    `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${key}`;
+
+  let place: string | undefined;
+  if (lat === undefined || lon === undefined) {
+    const geo = await geocode(district, key);
+    // A key that is valid but not yet activated 401s here too. Say which district
+    // failed — "simulated" with no reason is the kind of note nobody investigates.
+    if (!geo) return simulated(`could not geocode "${district}" - simulated reading`);
+    lat = geo.lat;
+    lon = geo.lon;
+    place = geo.place;
+  }
+
+  const url = `https://api.openweathermap.org/data/2.5/forecast` +
+    `?lat=${lat}&lon=${lon}&units=metric&appid=${key}`;
   const res = await fetch(url);
-  if (!res.ok) {
-    return {
-      source: "simulated",
-      max_temp_c: 43.2,
-      note: `openweather ${res.status} - fell back to simulated reading`,
-    };
-  }
+  if (!res.ok) return simulated(`openweather ${res.status} - fell back to simulated reading`);
+
   const data = await res.json();
   const temps: number[] = (data.list ?? [])
     .slice(0, 16) // ~48h of 3-hourly slots
     .map((s: { main?: { temp_max?: number } }) => s.main?.temp_max)
     .filter((t: unknown): t is number => typeof t === "number");
+  if (!temps.length) return simulated("openweather returned no temperatures");
+
   return {
     source: "openweather",
-    max_temp_c: temps.length ? Math.max(...temps) : 0,
+    max_temp_c: Math.max(...temps),
+    resolved_place: place ?? `${lat}, ${lon}`,
   };
 }
 
@@ -99,8 +130,9 @@ Deno.serve(async (req) => {
     const hour = Number(cfg.call_hour_utc ?? 3);
     const minute = Number(cfg.call_minute_utc ?? 30);
 
-    const reading = await readWeather(body.lat, body.lon);
-    const triggered = body.force === true || reading.max_temp_c >= threshold;
+    const reading = await readWeather(district, body.lat, body.lon);
+    const forced = body.force === true;
+    const triggered = forced || reading.max_temp_c >= threshold;
 
     if (!triggered) {
       return json({
@@ -109,7 +141,7 @@ Deno.serve(async (req) => {
         triggered: false,
         weather: reading,
         threshold_celsius: threshold,
-        message: "below threshold - no advisory issued",
+        message: `${reading.max_temp_c}°C is below the ${threshold}°C threshold - no advisory issued`,
       });
     }
 
@@ -136,6 +168,7 @@ Deno.serve(async (req) => {
         district,
         triggered: true,
         dry_run: true,
+        forced,
         weather: reading,
         threshold_celsius: threshold,
         cohort_size: people.length,
@@ -189,7 +222,7 @@ Deno.serve(async (req) => {
         calls_queued: (queued as unknown[]).length,
         max_temp_c: reading.max_temp_c,
         weather_source: reading.source,
-        forced: body.force === true,
+        forced,
       },
     });
     if (auditErr) console.error(`audit_log insert failed: ${auditErr.message}`);
@@ -198,6 +231,7 @@ Deno.serve(async (req) => {
       ok: true,
       district,
       triggered: true,
+      forced,
       weather: reading,
       threshold_celsius: threshold,
       cohort_size: people.length,
