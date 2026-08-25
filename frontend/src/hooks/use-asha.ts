@@ -165,6 +165,13 @@ export async function scoreScreening(
         hypertension_risk_level: data.hypertension_risk_level,
         overall_risk_score: data.overall_risk_score,
         overall_risk_category: data.overall_risk_category,
+        // Older deployed versions omit these; fall back to the local computation
+        // rather than defaulting to "not floored", which would hide a danger sign.
+        computed_risk_category:
+          data.computed_risk_category ?? local.computed_risk_category,
+        category_floored_by_danger_sign:
+          data.category_floored_by_danger_sign ??
+          local.category_floored_by_danger_sign,
         // Fall back to the locally computed values if an older function version
         // is still deployed and omits these — never silently claim "no red flag"
         // or "vitals complete" just because the server did not say so.

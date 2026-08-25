@@ -139,15 +139,22 @@ test("symptom severity changes the score (v1 scored mild and severe alike)", () 
   assert.ok(severe > moderate, `severe ${severe} must exceed moderate ${moderate}`);
 });
 
-test("severe chest pain raises refer even when the band stays Low", () => {
+test("severe chest pain refers, and the band is floored so it cannot read Low", () => {
   const r = computeRisk({ ...SYMPTOM_DEFAULTS, chest_discomfort: "severe" }, {});
   assert.equal(r.refer, true);
   assert.deepEqual(
     r.refer_reasons.map((x: { en: string }) => x.en),
     ["Severe chest pain"]
   );
-  // The flag must NOT rewrite the band — that is the whole design.
-  assert.equal(r.overall_risk_category, "Low");
+  // CONTRACT CHANGED in v3. This used to assert the band stayed "Low", on the
+  // reasoning that a rule rewriting the score makes the score meaningless. That
+  // reasoning still holds for the SCORE, which is untouched — but a card reading
+  // "Low risk" next to "refer immediately" is how a referable patient gets sent
+  // home. So the human-facing band is floored and the arithmetic is preserved
+  // separately in computed_risk_category.
+  assert.equal(r.overall_risk_category, "High");
+  assert.equal(r.computed_risk_category, "Low");
+  assert.equal(r.category_floored_by_danger_sign, true);
 });
 
 test("breathlessness at rest and frequent blackouts also refer", () => {
@@ -233,18 +240,24 @@ test("a red flag enqueues an escalation for the doctor queue", () => {
 });
 
 test("a High band with no red flag still escalates, at HIGH", () => {
+  // Vitals chosen to sit just INSIDE every danger-sign threshold: 179/119 rather
+  // than the 186/114 this test used before v3. 186 systolic is a hypertensive
+  // crisis by ACC/AHA, so it now refers — the old fixture was asserting that a
+  // patient at 186/114 needed no referral, which was the defect, not the contract.
   const draft = draftWith({ chest_discomfort: "mild" }, {
-    systolic_bp: 186,
-    diastolic_bp: 114,
+    systolic_bp: 179,
+    diastolic_bp: 119,
     heart_rate: 92,
     oxygen_saturation: 97,
-    blood_glucose: 150,
+    blood_glucose: 290,
     height: 160,
     weight: 80,
   });
   const risk = computeRisk(draft.symptoms, draft.vitals);
   assert.equal(risk.refer, false);
   assert.equal(risk.overall_risk_category, "High");
+  // High on the arithmetic alone, so nothing was floored.
+  assert.equal(risk.category_floored_by_danger_sign, false);
 
   const esc = draftToWrites(draft, risk).find(
     (w: { table: string }) => w.table === "escalations"
@@ -313,4 +326,94 @@ test("escalationFor never fires without the ASHA also being told", () => {
       );
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Vital-sign danger signs (v3)
+//
+// Before v3, RED_FLAGS covered only three SYMPTOM fields, so no measurement could
+// raise a referral. Measured against the deployed function on 2026-08-25:
+//   BP 200/130 -> "Moderate", refer=false
+//   SpO2 88%   -> "Low",      refer=false
+//   glucose 420 -> "Low",     refer=false
+// A screening card reading "Low risk" for a hypoxic patient is how someone gets
+// sent home, so these are the assertions that must never regress.
+// ---------------------------------------------------------------------------
+
+const DANGER_CASES: [string, Record<string, number>, string][] = [
+  ["hypertensive crisis", { systolic_bp: 200, diastolic_bp: 130 }, "Blood pressure at crisis level (180/120 or above)"],
+  ["diastolic alone", { diastolic_bp: 125 }, "Blood pressure at crisis level (180/120 or above)"],
+  ["hypoxia", { oxygen_saturation: 88 }, "Oxygen saturation below 90%"],
+  ["hyperglycaemia", { blood_glucose: 420 }, "Blood glucose 300 mg/dL or above"],
+  ["hypoglycaemia", { blood_glucose: 48 }, "Blood glucose 54 mg/dL or below"],
+  ["tachycardia", { heart_rate: 145 }, "Heart rate outside 40-130 beats per minute"],
+  ["bradycardia", { heart_rate: 38 }, "Heart rate outside 40-130 beats per minute"],
+  ["respiratory distress", { respiratory_rate: 34 }, "Respiratory rate 30 or above"],
+];
+
+for (const [label, vitals, expectedReason] of DANGER_CASES) {
+  test(`danger sign refers and floors the band: ${label}`, () => {
+    const r = computeRisk(SYMPTOM_DEFAULTS, vitals);
+    assert.equal(r.refer, true, `${label} must refer`);
+    assert.equal(r.overall_risk_category, "High", `${label} must not read Low or Moderate`);
+    assert.ok(
+      r.refer_reasons.some((x: { en: string }) => x.en === expectedReason),
+      `${label} must name its cause: ${expectedReason}`
+    );
+  });
+}
+
+test("flooring is reported, not silent — the score itself is untouched", () => {
+  const r = computeRisk(SYMPTOM_DEFAULTS, { oxygen_saturation: 88 });
+  assert.equal(r.category_floored_by_danger_sign, true);
+  // The arithmetic still says what it computed; only the human-facing band moved.
+  assert.equal(r.computed_risk_category, "Low");
+  assert.ok(r.overall_risk_score < 50, "score must not be inflated to match the band");
+});
+
+test("normal vitals do not refer and are not floored", () => {
+  const r = computeRisk(SYMPTOM_DEFAULTS, {
+    systolic_bp: 118, diastolic_bp: 76, heart_rate: 72,
+    respiratory_rate: 16, oxygen_saturation: 98, blood_glucose: 95,
+  });
+  assert.equal(r.refer, false);
+  assert.equal(r.category_floored_by_danger_sign, false);
+  assert.equal(r.overall_risk_category, r.computed_risk_category);
+});
+
+test("an unmeasured vital never raises a danger sign", () => {
+  // The v1 defect inverted: absent must not read as dangerous any more than it
+  // read as healthy.
+  const r = computeRisk(SYMPTOM_DEFAULTS, {});
+  assert.equal(r.refer, false);
+  assert.equal(r.overall_risk_category, "Low");
+  assert.equal(r.vitals_complete, false);
+});
+
+test("borderline values sit on the safe side of each threshold", () => {
+  // Exactly at the published cutoff must fire; one step inside must not.
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { systolic_bp: 180 }).refer, true);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { systolic_bp: 179 }).refer, false);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { oxygen_saturation: 89 }).refer, true);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { oxygen_saturation: 90 }).refer, false);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { blood_glucose: 300 }).refer, true);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { blood_glucose: 299 }).refer, false);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { heart_rate: 130 }).refer, true);
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, { heart_rate: 129 }).refer, false);
+});
+
+test("symptom and vital flags accumulate rather than replacing each other", () => {
+  const r = computeRisk(
+    { ...SYMPTOM_DEFAULTS, chest_discomfort: "severe" },
+    { oxygen_saturation: 85 }
+  );
+  const reasons = r.refer_reasons.map((x: { en: string }) => x.en);
+  assert.ok(reasons.includes("Severe chest pain"));
+  assert.ok(reasons.includes("Oxygen saturation below 90%"));
+});
+
+test("local model version matches the deployed one", () => {
+  // scoreScreening falls back to this offline. If the versions drift, the same
+  // patient gets two verdicts depending on signal strength.
+  assert.equal(computeRisk(SYMPTOM_DEFAULTS, {}).model, "local-heuristic-v3");
 });

@@ -37,6 +37,18 @@ export type RiskResult = {
   hypertension_risk_level: RiskLevel;
   overall_risk_score: number;
   overall_risk_category: RiskLevel;
+  /**
+   * The band the score alone produced, before any danger-sign flooring. Kept so the
+   * score stays interpretable: `overall_risk_category` is what a human should act
+   * on, `computed_risk_category` is what the arithmetic said.
+   */
+  computed_risk_category: RiskLevel;
+  /**
+   * True when a danger sign lifted the band to High. Makes the override auditable
+   * rather than silent — a rule that quietly rewrites a score makes the score
+   * meaningless, but a band that says "Low" for 88% oxygen saturation is worse.
+   */
+  category_floored_by_danger_sign: boolean;
   /** Findings an ASHA refers on regardless of the band. Never folded into the score. */
   refer: boolean;
   refer_reasons: ReferReason[];
@@ -119,6 +131,70 @@ const RED_FLAGS: {
     value: "often",
     hi: "बार-बार चक्कर या बेहोशी",
     en: "Frequent dizziness or blackouts",
+  },
+];
+
+// VITAL-SIGN DANGER SIGNS — must stay equivalent to
+// supabase/functions/risk-predict/index.ts. Before these existed, no measurement
+// could raise a referral: 200/130 scored "Moderate" and 88% oxygen saturation
+// scored "Low", because overall_risk_score is a weighted mean of three domains and
+// one catastrophic domain gets diluted by the other two sitting at their baselines.
+//
+// Published thresholds, cited so a reviewer can argue with each:
+//   BP >=180/>=120  hypertensive crisis (ACC/AHA 2017)
+//   SpO2 <90%       hypoxia (WHO emergency triage)
+//   glucose >=300   hyperglycaemic emergency risk
+//   glucose <=54    ADA level-2 hypoglycaemia
+//   HR >=130/<=40   tachy/bradyarrhythmia
+//   RR >=30         severe respiratory distress (WHO)
+//
+// NOT CLINICIAN-REVIEWED — first item in docs/CLINICAL_REVIEW.md.
+type MeasuredVitals = {
+  sbp: number | null;
+  dbp: number | null;
+  hr: number | null;
+  rr: number | null;
+  spo2: number | null;
+  glucose: number | null;
+};
+
+const VITAL_DANGER_SIGNS: {
+  test: (m: MeasuredVitals) => boolean;
+  hi: string;
+  en: string;
+}[] = [
+  {
+    // Null-safe: an unmeasured vital must never raise a danger sign, the same rule
+    // that stopped v1 scoring absent readings as healthy.
+    test: (m) =>
+      (m.sbp !== null && m.sbp >= 180) || (m.dbp !== null && m.dbp >= 120),
+    hi: "रक्तचाप बहुत अधिक (180/120 या ऊपर)",
+    en: "Blood pressure at crisis level (180/120 or above)",
+  },
+  {
+    test: (m) => m.spo2 !== null && m.spo2 < 90,
+    hi: "ऑक्सीजन 90% से कम",
+    en: "Oxygen saturation below 90%",
+  },
+  {
+    test: (m) => m.glucose !== null && m.glucose >= 300,
+    hi: "रक्त शर्करा 300 से अधिक",
+    en: "Blood glucose 300 mg/dL or above",
+  },
+  {
+    test: (m) => m.glucose !== null && m.glucose <= 54,
+    hi: "रक्त शर्करा खतरनाक रूप से कम",
+    en: "Blood glucose 54 mg/dL or below",
+  },
+  {
+    test: (m) => m.hr !== null && (m.hr >= 130 || m.hr <= 40),
+    hi: "नाड़ी की गति असामान्य",
+    en: "Heart rate outside 40-130 beats per minute",
+  },
+  {
+    test: (m) => m.rr !== null && m.rr >= 30,
+    hi: "सांस बहुत तेज़",
+    en: "Respiratory rate 30 or above",
   },
 ];
 
@@ -231,6 +307,15 @@ export function computeRisk(
   const flags = RED_FLAGS.filter(
     (f) => (symptoms[f.field] ?? "").trim().toLowerCase() === f.value
   );
+  const vitalFlags = VITAL_DANGER_SIGNS.filter((d) =>
+    d.test({ sbp, dbp, hr, rr, spo2, glucose })
+  );
+  const allFlags = [...flags, ...vitalFlags];
+
+  // Must match the edge function exactly. An ASHA on a bad signal gets this result
+  // instead of the server's, so a divergence here means the same patient is
+  // referred or not depending on whether there were bars.
+  const computedCategory = level(overall);
 
   return {
     heart_risk_score: round2(heart),
@@ -240,12 +325,15 @@ export function computeRisk(
     hypertension_risk_score: round2(hypertension),
     hypertension_risk_level: level(hypertension),
     overall_risk_score: round2(overall),
-    overall_risk_category: level(overall),
-    refer: flags.length > 0,
-    refer_reasons: flags.map(({ hi, en }) => ({ hi, en })),
+    overall_risk_category: allFlags.length > 0 ? "High" : computedCategory,
+    computed_risk_category: computedCategory,
+    category_floored_by_danger_sign:
+      allFlags.length > 0 && computedCategory !== "High",
+    refer: allFlags.length > 0,
+    refer_reasons: allFlags.map(({ hi, en }) => ({ hi, en })),
     vitals_complete: unmeasured.length === 0,
     unmeasured,
-    model: "local-heuristic-v2",
+    model: "local-heuristic-v3",
   };
 }
 

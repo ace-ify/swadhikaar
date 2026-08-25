@@ -116,6 +116,21 @@ export default function ScreeningResultPage({
 
       <RiskBanner level={risk.overall_risk_category} score={risk.overall_risk_score} />
 
+      {/* Without this the banner reads "High" beside a score of 11.6 — which looks
+          like a bug and invites someone to trust the low number. The band was
+          raised by a measured danger sign; the score is the arithmetic that did
+          not see it. Say so rather than hiding either half. */}
+      {risk.category_floored_by_danger_sign && (
+        <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
+          <Bi
+            hi={`खतरे के लक्षण के कारण जोखिम "उच्च" किया गया — गणना का स्कोर ${risk.overall_risk_score} (${risk.computed_risk_category}) था।`}
+            en={`Raised to High by a danger sign below. The computed score was ${risk.overall_risk_score} (${risk.computed_risk_category}), which does not account for it.`}
+            hiClass="text-[15px] font-semibold text-slate-900"
+            enClass="text-[12px] text-slate-600"
+          />
+        </div>
+      )}
+
       {/* A red flag is reported alongside the band, never folded into it, so a
           severe finding cannot hide behind a reassuring score. */}
       {risk.refer && (
