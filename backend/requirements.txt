@@ -3,7 +3,6 @@ livekit-plugins-google
 livekit-plugins-deepgram
 livekit-plugins-openai
 livekit-plugins-silero
-livekit-plugins-cartesia
 livekit-plugins-sarvam
 livekit-plugins-murf
 livekit>=1.1.2,<2

@@ -52,11 +52,6 @@ from livekit.plugins import openai as openai_plugin
 from livekit.plugins import silero as silero_plugin
 
 try:
-    from livekit.plugins import cartesia as cartesia_plugin
-except Exception:  # pragma: no cover
-    cartesia_plugin = None
-
-try:
     from livekit.plugins import sarvam as sarvam_plugin
 except Exception:  # pragma: no cover
     sarvam_plugin = None
@@ -83,7 +78,7 @@ logger = logging.getLogger("swadhikaar.agent")
 # Constants
 # ---------------------------------------------------------------------------
 
-# Languages → BCP-47 codes for Google STT/TTS
+# Languages → BCP-47 codes, shared by STT and every TTS provider.
 LANGUAGE_CODES: dict[str, str] = {
     "hindi": "hi-IN",
     "english": "en-IN",
@@ -95,17 +90,81 @@ LANGUAGE_CODES: dict[str, str] = {
     "kannada": "kn-IN",
     "malayalam": "ml-IN",
     "punjabi": "pa-IN",
-    # Assam. Google Cloud STT recognises as-IN but Cloud TTS has no Assamese
-    # voice, so mapping to as-IN would recognise the caller and then fail to
-    # answer. bn-IN is the closest available: Bengali and Assamese are both
-    # Eastern Indo-Aryan and share very nearly the same script. This is an
-    # approximation, not Assamese support — do not describe it as Assamese in
-    # anything user-facing until a real voice exists.
+    # Assam. NO provider we can reach has an Assamese voice — checked live on
+    # 2026-08-25, not inferred from docs: Murf's /v1/speech/voices returned 162
+    # voices and zero as-*, Sarvam's bulbul v2/v3 ships 11 languages without it,
+    # and Google Cloud TTS has no as-IN in its voice list. bn-IN is the closest
+    # reachable voice: Bengali and Assamese are both Eastern Indo-Aryan and share
+    # very nearly the same script. This is an approximation, NOT Assamese support
+    # — do not call it Assamese in anything user-facing. Real Assamese needs
+    # Bhashini or AI4Bharat IndicTTS, which is a new provider, not a config flag.
     "assamese": "bn-IN",
+    # Urdu — 45 patients in this database. Spoken Hindustani is common to Hindi
+    # and Urdu, so a hi-IN voice is right for the audio even though the scripts
+    # differ; no provider above has a ur-IN voice either. This used to resolve
+    # through the .get() default, i.e. correctly but by accident.
+    "urdu": "hi-IN",
     # Dialects — fall back to Hindi for STT accuracy
     "bhojpuri": "hi-IN",
     "maithili": "hi-IN",
 }
+
+# WHICH VOICE ACTUALLY EXISTS
+# Verified against GET https://api.murf.ai/v1/speech/voices on 2026-08-25. Only
+# these four Indic locales have a native Murf voice; te/mr/gu/kn/ml/pa have none.
+#
+# This map is also the "can Murf speak it" predicate, so there is no second list to
+# keep in sync. The previous default voice, "en-IN-anisha", is not among Murf's 162
+# voices — the API answers "400 Invalid voice_id". And the plugin does not validate
+# the voice in its constructor, so nothing failed at startup: the selector picked
+# Murf, reported a healthy pipeline, and then every synthesis 400'd. The patient
+# heard SILENCE for the whole call, in all four languages this database speaks.
+# A voice id invented in a default argument is invisible until someone lists the
+# real ones.
+MURF_VOICES: dict[str, str] = {
+    "hi-IN": "hi-IN-shweta",   # F, styles: Calm/Conversational/Promo/Sad
+    "en-IN": "en-IN-priya",    # F, styles: Conversational/Narration/Promo
+    "bn-IN": "bn-IN-anwesha",  # F, and the one Indic voice that is multi-locale
+    "ta-IN": "ta-IN-iniya",    # F, styles: Conversational
+}
+
+# Sarvam bulbul v2/v3: 11 languages (10 Indic + English), verified from the model
+# reference on 2026-08-25. Assamese is absent; od-IN is Odia and is Sarvam-only.
+SARVAM_LANGS = frozenset({
+    "hi-IN", "bn-IN", "en-IN", "ta-IN", "te-IN",
+    "gu-IN", "kn-IN", "ml-IN", "mr-IN", "pa-IN", "od-IN",
+})
+
+
+def tts_candidates(chain, preferred, bcp47_code):
+    """Viable TTS providers for one call, best first.
+
+    `chain` is [(name, plugin_or_None, builder, langs_or_None)]. Drops providers
+    that are not installed and providers with no voice for `bcp47_code`, and moves
+    `preferred` to the front. Pure — builders are returned, never called — so the
+    ordering and the language gate can be checked without a network or a key.
+    """
+    if preferred not in {name for name, _, _, _ in chain}:
+        logger.warning("Unknown FAST_TTS_PROVIDER=%r, using murf", preferred)
+        preferred = "murf"
+    # sorted() is stable, so a False/True key lifts one entry without disturbing
+    # the order of the rest. The previous code sliced the list at the preferred
+    # index, so FAST_TTS_PROVIDER=sarvam could never fall back to murf — it could
+    # only fall forward into the English-voice providers.
+    out = []
+    for name, plugin, build, langs in sorted(chain, key=lambda e: e[0] != preferred):
+        if plugin is None:
+            logger.warning("%s TTS plugin not installed, skipping", name)
+            continue
+        # The "no Assamese voice in Murf, so use Sarvam" rule, generalised: a
+        # provider that cannot speak this call's language is skipped rather than
+        # used with whatever voice it does have. langs=None means we have no
+        # verified list, so try it and let the provider reject what it cannot say.
+        if langs is not None and bcp47_code not in langs:
+            logger.info("%s has no %s voice, skipping", name, bcp47_code)
+            continue
+        out.append((name, build))
+    return out
 
 # Call type → friendly greeting text (Hindi)
 GREETINGS: dict[str, str] = {
@@ -1202,27 +1261,28 @@ async def entrypoint(ctx: JobContext) -> None:
         )
         llm_model = gemini_llm
     # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a runtime
-    # failover chain, and deliberately not tts.FallbackAdapter. That adapter takes
-    # a list of *already-constructed* instances, but only MURF_API_KEY and
-    # DEEPGRAM_API_KEY are set here (sarvam and cartesia have no keys), and Deepgram's
-    # configured voice is aura-asteria-en — English. Falling a Hindi call over to an
-    # English voice is worse than failing loudly. Switch to livekit.agents.tts.FallbackAdapter the
-    # moment a second *Indic* provider is funded; the list is already in the right
-    # order for it.
+    # failover chain, and deliberately not tts.FallbackAdapter. That adapter takes a
+    # list of *already-constructed* instances, so every provider would have to hold
+    # credentials at startup; only MURF_API_KEY is set here. Switch to
+    # livekit.agents.tts.FallbackAdapter once a second Indic provider is funded; the
+    # list is already in the right order for it.
+    #
+    # Providers are murf / sarvam / google, chosen with FAST_TTS_PROVIDER. Cartesia
+    # and Deepgram TTS were removed: neither has a key, and Deepgram's configured
+    # voice was aura-asteria-en, so leaving it in the chain meant one failed Indic
+    # lookup away from reading a Bhojpuri advisory in English.
     def _murf_tts():
         # Only pass what is explicitly configured. Murf validates `style` against
-        # its own library and the docs disagree with their own example
-        # ("Conversation" vs "Conversational"), so an unset value must mean "use
-        # the plugin default", not a guessed string.
+        # its own library, so an unset value must mean "use the plugin default",
+        # not a guess. ("Conversation" and "Conversational" both work — verified —
+        # despite the docs using them interchangeably.)
         #
         # MURF_LOCALE is opt-in only: Murf infers locale from the voice id
         # (`{locale}-{name}`), and passing a conflicting one is an error.
-        #
-        # ponytail: one fixed voice. Add a language -> voice map here when a
-        # second language actually ships; guessing Murf voice ids for the other
-        # 11 locales would be inventing API surface.
         kwargs: dict[str, object] = {
-            "voice": os.getenv("MURF_VOICE", "en-IN-anisha"),
+            # MURF_VOICE overrides for one-off experiments; the map is the default
+            # so the voice follows the patient's language instead of being fixed.
+            "voice": os.getenv("MURF_VOICE") or MURF_VOICES[bcp47_code],
             "model": os.getenv("MURF_MODEL", "FALCON"),
         }
         for env, key, cast in (
@@ -1247,56 +1307,50 @@ async def entrypoint(ctx: JobContext) -> None:
         return sarvam_plugin.TTS(
             model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v2"),
             speaker=os.getenv("SARVAM_VOICE", "anushka"),
-            target_language_code=os.getenv("SARVAM_LANGUAGE", bcp47_code),
+            # No SARVAM_LANGUAGE override: a pinned value here would speak Hindi to
+            # a Bengali caller, which is the failure this whole gate exists to stop.
+            target_language_code=bcp47_code,
             pace=float(os.getenv("SARVAM_PACE", "0.88")),
             pitch=float(os.getenv("SARVAM_PITCH", "-0.08")),
             temperature=float(os.getenv("SARVAM_TTS_TEMPERATURE", "0.42")),
             enable_preprocessing=True,
         )
 
-    def _cartesia_tts():
-        return cartesia_plugin.TTS(
-            model=os.getenv("CARTESIA_TTS_MODEL", "sonic-2"),
-            voice=os.getenv(
-                "CARTESIA_TTS_VOICE", "f786b574-daa5-4673-aa0c-cbe3e8534c02"
-            ),
-            language=os.getenv("CARTESIA_LANGUAGE", bcp47_code),
-            speed=float(os.getenv("CARTESIA_SPEED", "0.92")),
-        )
+    def _google_tts():
+        # Cloud TTS rejects API keys outright — "API keys are not supported by this
+        # API", a verified 401 on 2026-08-25. GOOGLE_API_KEY here is a Gemini key and
+        # authenticates the LLM only. Cloud TTS needs a service account via
+        # GOOGLE_APPLICATION_CREDENTIALS, which is deliberately not in this repo.
+        # Set that and google becomes selectable; until then it fails init and the
+        # loop moves on.
+        return google_plugin.TTS(language=bcp47_code)
 
-    def _deepgram_tts():
-        return deepgram_plugin.TTS(
-            model=os.getenv("DEEPGRAM_TTS_MODEL", "aura-asteria-en"),
-            sample_rate=24000,
-        )
-
+    # (name, plugin, builder, languages it can speak). None = no list we verified
+    # ourselves, so try it and let the provider reject what it cannot say.
     tts_chain = [
-        ("murf", murf_plugin, _murf_tts),
-        ("sarvam", sarvam_plugin, _sarvam_tts),
-        ("cartesia", cartesia_plugin, _cartesia_tts),
-        ("deepgram", deepgram_plugin, _deepgram_tts),
+        ("murf", murf_plugin, _murf_tts, frozenset(MURF_VOICES)),
+        ("sarvam", sarvam_plugin, _sarvam_tts, SARVAM_LANGS),
+        ("google", google_plugin, _google_tts, None),
     ]
-    preferred = os.getenv("FAST_TTS_PROVIDER", "murf").strip().lower()
-    names = [name for name, _, _ in tts_chain]
-    if preferred not in names:
-        logger.warning("Unknown FAST_TTS_PROVIDER=%r, starting from murf", preferred)
-    start_at = names.index(preferred) if preferred in names else 0
+    candidates = tts_candidates(
+        tts_chain, os.getenv("FAST_TTS_PROVIDER", "murf").strip().lower(), bcp47_code
+    )
 
     tts = None
-    for name, plugin, build in tts_chain[start_at:]:
-        if plugin is None:
-            logger.warning("%s TTS plugin unavailable, trying next", name)
-            continue
+    for name, build in candidates:
         try:
             tts = build()
-            logger.info("FAST PIPELINE TTS: %s", name)
+            logger.info("FAST PIPELINE TTS: %s speaking %s", name, bcp47_code)
             break
         except Exception as exc:
             logger.warning("%s TTS init failed (%s), trying next", name, exc)
     if tts is None:
+        # Refusing the call is correct. The alternative — falling back to a provider
+        # that has no voice for this language — logs as success and delivers either
+        # silence or the wrong language to someone waiting on health advice.
         raise RuntimeError(
-            f"No TTS provider available starting from {preferred!r} "
-            f"(tried {', '.join(names[start_at:])})"
+            f"No TTS provider can speak {bcp47_code} "
+            f"(tried {', '.join(n for n, _ in candidates) or 'nothing'})"
         )
 
     vad = silero_plugin.VAD.load(
