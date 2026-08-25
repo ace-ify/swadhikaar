@@ -18,7 +18,13 @@ import {
   LayerGroup,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Patient, Facility, Escalation } from "@/hooks/use-supabase";
+import {
+  rankReceivingFacilities,
+  type Patient,
+  type Facility,
+  type Escalation,
+  type RankedFacility,
+} from "@/hooks/use-supabase";
 
 // Bihar + Assam. Zoom 6 shows both Patna and Guwahati, which is the whole point:
 // the acute layer is in Bihar and the flood advisory fires in Assam.
@@ -69,6 +75,25 @@ function Legend({ counts }: { counts: Record<string, number> }) {
 
 export default function OperationsMap({ patients, facilities, escalations }: Props) {
   const [showSimulatedCapacity, setShowSimulatedCapacity] = useState(false);
+  // Clicking a patient asks rank_receiving_facilities() where that person would be
+  // sent. Ranking lives in Postgres beside the data, so this is one RPC rather than
+  // 537 rows and a distance loop in the browser.
+  const [selected, setSelected] = useState<Patient | null>(null);
+  const [ranked, setRanked] = useState<RankedFacility[] | null>(null);
+  const [rankError, setRankError] = useState<string | null>(null);
+
+  async function selectPatient(p: Patient) {
+    setSelected(p);
+    setRanked(null);
+    setRankError(null);
+    const { data, error } = await rankReceivingFacilities(
+      p.lat as number,
+      p.lon as number,
+      5
+    );
+    if (error) setRankError(error);
+    else setRanked(data);
+  }
 
   const plotted = useMemo(
     () => patients.filter((p) => p.lat != null && p.lon != null),
@@ -137,7 +162,8 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
                 <CircleMarker
                   key={p.id}
                   center={[p.lat as number, p.lon as number]}
-                  radius={5}
+                  radius={selected?.id === p.id ? 8 : 5}
+                  eventHandlers={{ click: () => selectPatient(p) }}
                   pathOptions={{
                     // Simulated records get a dark outline so they read as
                     // different at a glance; the fill still carries risk level.
@@ -169,6 +195,9 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
                           SIMULATED record
                         </div>
                       ) : null}
+                      <div className="mt-1 text-[10px] font-medium text-blue-700">
+                        click for nearest receiving facilities
+                      </div>
                     </div>
                   </Tooltip>
                 </CircleMarker>
@@ -252,6 +281,74 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
       </MapContainer>
 
       <Legend counts={counts} />
+      {/* Ranked receiving facilities for the clicked patient. The per-factor reasons
+          are the point: a dispatcher should see WHY a hospital placed where it did,
+          not a bare score. Bed counts are absent on purpose — they are simulated,
+          and ranking on them would let invented numbers choose a destination. */}
+      {selected ? (
+        <div className="absolute bottom-4 right-4 z-[500] w-[21rem] max-h-[60%] overflow-y-auto rounded-lg border bg-background/97 p-3 shadow-xl backdrop-blur">
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold">{selected.name}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {[selected.village, selected.district].filter(Boolean).join(", ")}
+                {selected.intake_source === "simulated_cohort" ? " · simulated" : ""}
+              </div>
+            </div>
+            <button
+              onClick={() => setSelected(null)}
+              className="rounded px-1.5 text-muted-foreground hover:bg-muted"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="mb-2 border-t pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Where this patient would be sent
+          </div>
+
+          {rankError ? (
+            <p className="text-xs text-destructive">Ranking failed: {rankError}</p>
+          ) : ranked === null ? (
+            <p className="text-xs text-muted-foreground">Ranking…</p>
+          ) : ranked.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No dispatch-eligible facility found. Our OpenStreetMap coverage is
+              Guwahati and Patna only, so a patient outside both has nowhere to rank.
+            </p>
+          ) : (
+            <ol className="space-y-2">
+              {ranked.map((f, i) => (
+                <li key={f.facility_id} className="rounded-md border bg-card p-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-semibold">
+                      {i + 1}. {f.name}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {f.score.toFixed(3)}
+                    </span>
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {f.reasons.map((r) => (
+                      <li key={r} className="text-[11px] leading-snug text-muted-foreground">
+                        · {r}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          <p className="mt-2 border-t pt-2 text-[10px] leading-snug text-muted-foreground">
+            Ranked on proximity (0.55), facility tier (0.30) and recorded emergency
+            capability (0.15) — the three factors OpenStreetMap actually provides.
+            Bed availability is 0% covered by any public source, so it is excluded.
+          </p>
+        </div>
+      ) : null}
+
 
       {/* Beside the zoom buttons, not top-right: LayersControl lives there and the
           label was rendering clipped underneath it. */}

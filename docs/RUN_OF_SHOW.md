@@ -137,6 +137,21 @@ address. Holding real household coordinates for 302 people with clinical risk
 attached would be sensitive personal data under the DPDP Act, so nobody's house is
 on this map by construction."*
 
+**Then click a patient pin.** A panel ranks the five facilities that patient would
+actually be sent to, each with three stated reasons.
+
+*"Proximity, facility tier, recorded emergency capability. Three factors, and every
+one of them comes from OpenStreetMap. Beds, doctors on duty, specialists, blood
+units — 0% coverage in any public source, so they are not inputs. A nine-factor
+score where six factors are invented looks more rigorous and is less true."*
+
+From a Dispur patient the top result is **GMCH Emergency Centre**, then GMCH itself,
+then Apollo. Worth saying why that ordering was hard: *"An emergency centre is the
+receiving point, so it ranks first. But OpenStreetMap maps every building on a
+teaching campus as its own hospital, and 'GMCH Pediatric Division' was outranking
+Gauhati Medical College as the destination for an arbitrary acute case. Campus
+sub-units are demoted now."*
+
 ---
 
 ## Act 4 — Acute seam (2 min)

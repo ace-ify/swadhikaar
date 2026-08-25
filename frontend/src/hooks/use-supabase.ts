@@ -647,3 +647,37 @@ export async function createAuditLog(entry: {
   const { error } = await getSupabase().from("audit_log").insert(payload);
   return { error: error?.message || null };
 }
+
+/**
+ * Ranked receiving facilities for a location, from `rank_receiving_facilities()`.
+ *
+ * Three factors, all sourced from OpenStreetMap: proximity 0.55, facility tier
+ * 0.30, emergency capability 0.15. Bed counts are deliberately NOT an input — they
+ * are simulated on every row, and ranking on them would let generated numbers
+ * choose where a real patient goes.
+ *
+ * Each row carries its own `reasons`, so the UI shows why a facility placed where
+ * it did rather than an unexplained score.
+ */
+export type RankedFacility = {
+  facility_id: string;
+  name: string;
+  distance_km: number;
+  tier: string;
+  emergency: boolean | null;
+  score: number;
+  reasons: string[];
+};
+
+export async function rankReceivingFacilities(
+  lat: number,
+  lon: number,
+  limit = 5
+): Promise<{ data: RankedFacility[]; error: string | null }> {
+  const { data, error } = await getSupabase().rpc("rank_receiving_facilities", {
+    p_lat: lat,
+    p_lon: lon,
+    p_limit: limit,
+  });
+  return { data: (data as RankedFacility[]) ?? [], error: error?.message ?? null };
+}
