@@ -52,8 +52,14 @@ const TRANSLATIONS = {
     title: "My Health Overview",
     abhaId: "ABHA ID",
     sos: "EMERGENCY SOS",
-    sosSub: "Dispatch Ambulance & Notify Doctor",
-    sosTriggered: "Ambulance Dispatched. Dr. Sharma has been notified. Stay calm.",
+    // Was "Dispatch Ambulance & Notify Doctor" / "Ambulance Dispatched. Dr. Sharma
+    // has been notified." No ambulance dispatch exists anywhere in this system and
+    // there is no Dr. Sharma — the button writes a CRITICAL escalation the on-call
+    // doctor sees. Telling someone an ambulance is coming is what stops them from
+    // calling 108 themselves, so this is a safety fix, not just accurate wording.
+    sosSub: "Alert the on-call doctor",
+    sosTriggered:
+      "Alert sent — the on-call doctor can see your vitals and history now. If you cannot breathe, have chest pain, or are bleeding heavily, call 108 now. This app does not send an ambulance.",
     bp: "Blood Pressure",
     glucose: "Blood Glucose",
     bmi: "BMI",
@@ -78,8 +84,9 @@ const TRANSLATIONS = {
     title: "मेरा स्वास्थ्य विवरण",
     abhaId: "आभा आईडी",
     sos: "आपातकालीन (SOS)",
-    sosSub: "एंबुलेंस बुलाएं",
-    sosTriggered: "एंबुलेंस भेज दी गई है। डॉक्टर शर्मा को सूचित कर दिया गया है।",
+    sosSub: "ऑन-कॉल डॉक्टर को सूचित करें",
+    sosTriggered:
+      "सूचना भेज दी गई — ऑन-कॉल डॉक्टर अब आपकी जानकारी देख सकते हैं। अगर साँस लेने में तकलीफ़ है, सीने में दर्द है, या ज़्यादा खून बह रहा है तो अभी 108 पर कॉल करें। यह ऐप एंबुलेंस नहीं भेजता।",
     bp: "रक्तचाप",
     glucose: "रक्त शर्करा",
     bmi: "बीएमआई",

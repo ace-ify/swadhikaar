@@ -95,6 +95,13 @@ LANGUAGE_CODES: dict[str, str] = {
     "kannada": "kn-IN",
     "malayalam": "ml-IN",
     "punjabi": "pa-IN",
+    # Assam. Google Cloud STT recognises as-IN but Cloud TTS has no Assamese
+    # voice, so mapping to as-IN would recognise the caller and then fail to
+    # answer. bn-IN is the closest available: Bengali and Assamese are both
+    # Eastern Indo-Aryan and share very nearly the same script. This is an
+    # approximation, not Assamese support — do not describe it as Assamese in
+    # anything user-facing until a real voice exists.
+    "assamese": "bn-IN",
     # Dialects — fall back to Hindi for STT accuracy
     "bhojpuri": "hi-IN",
     "maithili": "hi-IN",
