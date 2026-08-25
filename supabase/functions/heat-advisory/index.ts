@@ -29,15 +29,25 @@ function json(payload: unknown, status = 200) {
   });
 }
 
+// WHICH TEMPERATURE MATTERS
+// Dry-bulb 40C is IMD's *meteorological* heatwave line for the plains. It is the
+// wrong gate for *occupational* heat stress: at 89% monsoon humidity sweat stops
+// evaporating, so a Muzaffarpur field labourer at 36.4C air temperature is enduring
+// an apparent 42C. Thresholding on dry bulb told 16 outdoor workers there was no
+// heat risk on a day the heat index was two degrees over the line. We gate on heat
+// index and report dry bulb beside it, so the number that made the decision and the
+// number a thermometer shows are both visible.
 type Reading = {
   source: "openweather" | "simulated";
-  max_temp_c: number;
+  heat_index_c: number;
+  dry_bulb_c: number;
+  humidity_pct: number;
   resolved_place?: string;
   note?: string;
 };
 
 function simulated(note: string): Reading {
-  return { source: "simulated", max_temp_c: 43.2, note };
+  return { source: "simulated", heat_index_c: 43.2, dry_bulb_c: 41, humidity_pct: 60, note };
 }
 
 // The district arrives as free text from an operator's keyboard, so a hardcoded
@@ -85,15 +95,26 @@ async function readWeather(district: string, lat?: number, lon?: number): Promis
   if (!res.ok) return simulated(`openweather ${res.status} - fell back to simulated reading`);
 
   const data = await res.json();
-  const temps: number[] = (data.list ?? [])
-    .slice(0, 16) // ~48h of 3-hourly slots
-    .map((s: { main?: { temp_max?: number } }) => s.main?.temp_max)
-    .filter((t: unknown): t is number => typeof t === "number");
-  if (!temps.length) return simulated("openweather returned no temperatures");
+  const slots = (data.list ?? []).slice(0, 16); // ~48h of 3-hourly slots
+  // Independent maxima, not the readings from a single slot: the threshold should
+  // answer "what is the worst moment in this window", and peak humidity does not
+  // have to land on the same three-hour slot as peak air temperature.
+  const pick = (read: (m: Record<string, number>) => number | undefined) =>
+    slots
+      .map((s: { main?: Record<string, number> }) => (s.main ? read(s.main) : undefined))
+      .filter((n: unknown): n is number => typeof n === "number");
+
+  const dry = pick((m) => m.temp_max);
+  const feels = pick((m) => m.feels_like);
+  const hum = pick((m) => m.humidity);
+  if (!dry.length) return simulated("openweather returned no temperatures");
 
   return {
     source: "openweather",
-    max_temp_c: Math.max(...temps),
+    // feels_like is absent on some plans; dry bulb is then the honest best estimate.
+    heat_index_c: Math.round((feels.length ? Math.max(...feels) : Math.max(...dry)) * 100) / 100,
+    dry_bulb_c: Math.round(Math.max(...dry) * 100) / 100,
+    humidity_pct: hum.length ? Math.max(...hum) : 0,
     resolved_place: place ?? `${lat}, ${lon}`,
   };
 }
@@ -132,7 +153,7 @@ Deno.serve(async (req) => {
 
     const reading = await readWeather(district, body.lat, body.lon);
     const forced = body.force === true;
-    const triggered = forced || reading.max_temp_c >= threshold;
+    const triggered = forced || reading.heat_index_c >= threshold;
 
     if (!triggered) {
       return json({
@@ -141,7 +162,9 @@ Deno.serve(async (req) => {
         triggered: false,
         weather: reading,
         threshold_celsius: threshold,
-        message: `${reading.max_temp_c}°C is below the ${threshold}°C threshold - no advisory issued`,
+        message: `heat index ${reading.heat_index_c}°C (air ${reading.dry_bulb_c}°C at ` +
+          `${reading.humidity_pct}% humidity) is below the ${threshold}°C threshold ` +
+          `- no advisory issued`,
       });
     }
 
@@ -197,7 +220,9 @@ Deno.serve(async (req) => {
             extracted_data: {
               district,
               occupation: p.occupation,
-              max_temp_c: reading.max_temp_c,
+              heat_index_c: reading.heat_index_c,
+              dry_bulb_c: reading.dry_bulb_c,
+              humidity_pct: reading.humidity_pct,
               weather_source: reading.source,
               threshold_celsius: threshold,
             },
@@ -220,7 +245,8 @@ Deno.serve(async (req) => {
         district,
         cohort_size: people.length,
         calls_queued: (queued as unknown[]).length,
-        max_temp_c: reading.max_temp_c,
+        heat_index_c: reading.heat_index_c,
+        dry_bulb_c: reading.dry_bulb_c,
         weather_source: reading.source,
         forced,
       },

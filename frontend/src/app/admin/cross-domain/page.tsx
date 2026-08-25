@@ -50,7 +50,14 @@ type AdvisoryResult = {
   triggered?: boolean;
   dry_run?: boolean;
   forced?: boolean;
-  weather?: { source: string; max_temp_c: number; resolved_place?: string; note?: string };
+  weather?: {
+    source: string;
+    heat_index_c: number;
+    dry_bulb_c: number;
+    humidity_pct: number;
+    resolved_place?: string;
+    note?: string;
+  };
   threshold_celsius?: number;
   cohort_size?: number;
   calls_queued?: number;
@@ -169,7 +176,7 @@ export default function CrossDomainPage() {
         <CardHeader>
           <CardTitle className="text-base">Heat advisory</CardTitle>
           <CardDescription>
-            Weather threshold → outdoor-worker cohort → advisory call in each
+            Live heat index → outdoor-worker cohort → advisory call in each
             patient&apos;s own language. Calls are queued into the existing
             recovery-call executor; no separate dispatcher.
           </CardDescription>
@@ -244,7 +251,7 @@ export default function CrossDomainPage() {
                           : "outline"
                       }
                     >
-                      {advisory.weather.max_temp_c}°C ·{" "}
+                      {advisory.weather.heat_index_c}°C felt ·{" "}
                       {advisory.weather.source === "openweather"
                         ? `OpenWeather${
                             advisory.weather.resolved_place
@@ -260,6 +267,19 @@ export default function CrossDomainPage() {
                     </span>
                   ) : null}
                 </div>
+
+                {/* The gate is heat index, not air temperature. Showing only the
+                    number that decided invites "but it's only 36 degrees" — showing
+                    both makes the humidity argument itself. */}
+                {advisory.weather?.source === "openweather" ? (
+                  <p className="text-muted-foreground text-xs">
+                    Air temperature {advisory.weather.dry_bulb_c}°C at{" "}
+                    {advisory.weather.humidity_pct}% humidity feels like{" "}
+                    {advisory.weather.heat_index_c}°C. Sweat stops evaporating in
+                    humidity this high, so the apparent temperature is what injures an
+                    outdoor worker — the advisory gates on that, not on the thermometer.
+                  </p>
+                ) : null}
 
                 {advisory.message ? (
                   <p className="text-muted-foreground">{advisory.message}</p>
