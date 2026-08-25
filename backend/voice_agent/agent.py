@@ -79,78 +79,91 @@ logger = logging.getLogger("swadhikaar.agent")
 # ---------------------------------------------------------------------------
 
 # Languages → BCP-47 codes, shared by STT and every TTS provider.
-LANGUAGE_CODES: dict[str, str] = {
-    "hindi": "hi-IN",
-    "english": "en-IN",
-    "bengali": "bn-IN",
-    "tamil": "ta-IN",
-    "telugu": "te-IN",
-    "marathi": "mr-IN",
-    "gujarati": "gu-IN",
-    "kannada": "kn-IN",
-    "malayalam": "ml-IN",
-    "punjabi": "pa-IN",
-    # Assam. NO provider we can reach has an Assamese voice — checked live on
-    # 2026-08-25, not inferred from docs: Murf's /v1/speech/voices returned 162
-    # voices and zero as-*, Sarvam's bulbul v2/v3 ships 11 languages without it,
-    # and Google Cloud TTS has no as-IN in its voice list. bn-IN is the closest
-    # reachable voice: Bengali and Assamese are both Eastern Indo-Aryan and share
-    # very nearly the same script. This is an approximation, NOT Assamese support
-    # — do not call it Assamese in anything user-facing. Real Assamese needs
-    # Bhashini or AI4Bharat IndicTTS, which is a new provider, not a config flag.
-    "assamese": "bn-IN",
-    # Urdu — 45 patients in this database. Spoken Hindustani is common to Hindi
-    # and Urdu, so a hi-IN voice is right for the audio even though the scripts
-    # differ; no provider above has a ur-IN voice either. This used to resolve
-    # through the .get() default, i.e. correctly but by accident.
-    "urdu": "hi-IN",
-    # Dialects — fall back to Hindi for STT accuracy
-    "bhojpuri": "hi-IN",
-    "maithili": "hi-IN",
+# WHICH CATALOGUE YOU ARE LOOKING AT
+# Murf serves TWO voice libraries and the endpoint defaults to the wrong one for us.
+# GET /v1/speech/voices returns 162 "Gen2" studio voices; GET
+# /v1/speech/voices?model=FALCON returns 117 streaming voices, and they barely
+# overlap. The LiveKit plugin defaults to model="FALCON", so FALCON is the only list
+# that describes what this agent can actually say. Querying the unfiltered endpoint
+# is how en-IN-anisha got declared non-existent and replaced with three Gen2 voices
+# that answer 400 on the streaming path. Always pass ?model=FALCON.
+#
+# STT AND TTS DO NOT AGREE ON LANGUAGES, SO THEY GET SEPARATE COLUMNS
+# Deepgram nova-3 has no Assamese; Murf FALCON does. Deepgram has Urdu; Murf has no
+# Urdu voice at all. Collapsing both into one code meant Assamese would have crashed
+# STT and Urdu was being transcribed as Hindi for no reason. Neither provider
+# validates a language in its constructor, so both failures land mid-call.
+#
+# language -> (Deepgram STT code, TTS BCP-47)
+LANGUAGES: dict[str, tuple[str, str]] = {
+    "hindi": ("hi", "hi-IN"),
+    "english": ("en-IN", "en-IN"),
+    "bengali": ("bn", "bn-IN"),
+    "tamil": ("ta", "ta-IN"),
+    "telugu": ("te", "te-IN"),
+    "marathi": ("mr", "mr-IN"),
+    "gujarati": ("gu", "gu-IN"),
+    "kannada": ("kn", "kn-IN"),
+    "malayalam": ("ml", "ml-IN"),
+    "punjabi": ("pa", "pa-IN"),
+    # Assam speaks Assamese out and is understood in Bengali. Murf FALCON has a real
+    # as-IN voice — verified as 6.37s of Assamese audio through the plugin, not from
+    # a docs page — so the advisory is genuinely in Assamese. Deepgram nova-3 does
+    # not list "as", so comprehension degrades to Bengali, the nearest Eastern
+    # Indo-Aryan language it does have. For an outbound advisory the speaking half is
+    # the half that matters.
+    "assamese": ("bn", "as-IN"),
+    # Urdu — 45 patients here. Deepgram transcribes "ur" natively, so use it; Murf
+    # has no Urdu voice in either catalogue, and spoken Hindustani is common to both
+    # languages, so a Hindi voice is right for the audio even though scripts differ.
+    "urdu": ("ur", "hi-IN"),
+    # Dialects — Hindi is the closest thing either provider models.
+    "bhojpuri": ("hi", "hi-IN"),
+    "maithili": ("hi", "hi-IN"),
 }
 
 # WHICH VOICE ACTUALLY EXISTS
-# Verified against GET https://api.murf.ai/v1/speech/voices on 2026-08-25. Only
-# these four Indic locales have a native Murf voice; te/mr/gu/kn/ml/pa have none.
+# Every entry verified by synthesising real audio through the plugin on 2026-08-25,
+# because a voice id is accepted by the constructor and only rejected at synthesis —
+# "it initialised fine" proves nothing here.
 #
-# This map is also the "can Murf speak it" predicate, so there is no second list to
-# keep in sync. The previous default voice, "en-IN-anisha", is not among Murf's 162
-# voices — the API answers "400 Invalid voice_id". And the plugin does not validate
-# the voice in its constructor, so nothing failed at startup: the selector picked
-# Murf, reported a healthy pipeline, and then every synthesis 400'd. The patient
-# heard SILENCE for the whole call, in all four languages this database speaks.
-# A voice id invented in a default argument is invisible until someone lists the
-# real ones.
-# Murf has native voices for only four Indic locales, but many voices are
-# "multi-native": bn-IN-anwesha carries 41 locales and will speak any of the ten
-# Indic ones when multiNativeLocale is passed (the plugin exposes it as `locale`).
-# A native voice is preferred where one exists — that language's own voice rather
-# than a Bengali one doing an impression — and anwesha covers the rest. Single-locale
-# voices cannot cross over: hi-IN-shweta + te-IN is a hard 400, "Supported locales
-# are [hi-IN]", so nothing here is a guess.
+# en-IN-anisha carries 11 of the 12 locales below, so one voice covers nearly the
+# whole country. That is deliberate: a health service calling the same household in
+# Hindi one week and Assamese the next should sound like the same organisation.
+# Gujarati is the only gap and gets a native voice.
 #
-# bcp47 -> (voice id, multiNativeLocale or None when the voice is already native)
-MURF_VOICES: dict[str, tuple[str, str | None]] = {
-    "hi-IN": ("hi-IN-shweta", None),   # F, styles: Calm/Conversational/Promo/Sad
-    "en-IN": ("en-IN-priya", None),    # F, styles: Conversational/Narration/Promo
-    "bn-IN": ("bn-IN-anwesha", None),  # F, also the multi-native voice below
-    "ta-IN": ("ta-IN-iniya", None),    # F, styles: Conversational
-    # No native Murf voice for these six. Each verified as real audio through
-    # anwesha: te 6.19s, mr 6.04s, gu 5.77s, kn 5.81s, ml 5.89s, pa 5.49s.
-    "te-IN": ("bn-IN-anwesha", "te-IN"),
-    "mr-IN": ("bn-IN-anwesha", "mr-IN"),
-    "gu-IN": ("bn-IN-anwesha", "gu-IN"),
-    "kn-IN": ("bn-IN-anwesha", "kn-IN"),
-    "ml-IN": ("bn-IN-anwesha", "ml-IN"),
-    "pa-IN": ("bn-IN-anwesha", "pa-IN"),
+# Style is per-voice, not global. anisha advertises "Conversation" while most FALCON
+# voices advertise "Conversational", and a single MURF_STYLE env var applied to all
+# of them is a config value pretending to be a property of the data.
+#
+# bcp47 -> (voice, multiNativeLocale or None if the voice is native, style or None)
+MURF_VOICES: dict[str, tuple[str, str | None, str | None]] = {
+    "en-IN": ("en-IN-anisha", None, "Conversation"),
+    # anisha reaching each of these was measured, one synthesis per locale:
+    # as 6.37s, hi 6.01s, bn 3.45s, ta 2.77s, te 2.85s, or 2.89s.
+    "as-IN": ("en-IN-anisha", "as-IN", "Conversation"),
+    "hi-IN": ("en-IN-anisha", "hi-IN", "Conversation"),
+    "bn-IN": ("en-IN-anisha", "bn-IN", "Conversation"),
+    "ta-IN": ("en-IN-anisha", "ta-IN", "Conversation"),
+    "te-IN": ("en-IN-anisha", "te-IN", "Conversation"),
+    "or-IN": ("en-IN-anisha", "or-IN", "Conversation"),
+    "kn-IN": ("en-IN-anisha", "kn-IN", "Conversation"),
+    "ml-IN": ("en-IN-anisha", "ml-IN", "Conversation"),
+    "mr-IN": ("en-IN-anisha", "mr-IN", "Conversation"),
+    "pa-IN": ("en-IN-anisha", "pa-IN", "Conversation"),
+    # The one locale anisha does not carry. Native voice, verified 3.57s.
+    "gu-IN": ("gu-IN-diya", None, "Conversational"),
 }
 
-# Sarvam bulbul v2/v3: 11 languages (10 Indic + English), verified from the model
-# reference on 2026-08-25. Assamese is absent; od-IN is Odia and is Sarvam-only.
 SARVAM_LANGS = frozenset({
     "hi-IN", "bn-IN", "en-IN", "ta-IN", "te-IN",
     "gu-IN", "kn-IN", "ml-IN", "mr-IN", "pa-IN", "od-IN",
 })
+# Sarvam bulbul v2/v3: 11 languages (10 Indic + English), from the model reference
+# on 2026-08-25. No Assamese, so on an Assamese call Murf is the only provider that
+# can speak at all and the gate skips straight past Sarvam. Sarvam spells Odia
+# "od-IN" where Murf spells it "or-IN" — same language, neither is a typo, which is
+# why these stay two separate sets instead of one shared constant.
 
 
 def tts_candidates(chain, preferred, bcp47_code):
@@ -1212,7 +1225,11 @@ async def entrypoint(ctx: JobContext) -> None:
         metadata = {}
 
     language: str = metadata.get("language", "hindi").lower()
-    bcp47_code = LANGUAGE_CODES.get(language, "hi-IN")
+    # Two codes, not one. Deepgram and Murf disagree about which languages exist, so
+    # deriving the STT code by chopping the TTS one (bcp47_code.split("-")[0]) sent
+    # "as" to a model that has no Assamese and "hi" to Urdu speakers Deepgram can
+    # transcribe natively.
+    stt_language, bcp47_code = LANGUAGES.get(language, ("hi", "hi-IN"))
 
     session_kwargs: dict[str, Any] = {
         "allow_interruptions": True,
@@ -1229,7 +1246,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     stt = deepgram_plugin.STT(
         model="nova-3",
-        language=bcp47_code.split("-")[0],  # "hi" from "hi-IN"
+        language=stt_language,
         interim_results=True,
         smart_format=True,
         no_delay=True,
@@ -1289,32 +1306,24 @@ async def entrypoint(ctx: JobContext) -> None:
     # voice was aura-asteria-en, so leaving it in the chain meant one failed Indic
     # lookup away from reading a Bhojpuri advisory in English.
     def _murf_tts():
-        # Only pass what is explicitly configured. Murf validates `style` against
-        # its own library, so an unset value must mean "use the plugin default",
-        # not a guess. ("Conversation" and "Conversational" both work — verified —
-        # despite the docs using them interchangeably.)
-        #
-        # MURF_LOCALE is opt-in only: Murf infers locale from the voice id
-        # (`{locale}-{name}`), and passing a conflicting one is an error.
-        # MURF_LOCALE overrides the multiNativeLocale from the map. Passing a locale
-        # the voice does not carry is a hard 400, so it is not a free-text knob.
-        voice, locale = MURF_VOICES[bcp47_code]
+        # Voice, locale and style all travel together from MURF_VOICES, because they
+        # are one fact about the language, not three settings. A global MURF_STYLE is
+        # what broke this before: styles differ per voice, and the plugin's own
+        # default voice is en-US-matthew, so any lookup miss means American English.
+        voice, locale, style = MURF_VOICES[bcp47_code]
         kwargs: dict[str, object] = {
-            # MURF_VOICE overrides for one-off experiments; the map is the default
-            # so the voice follows the patient's language instead of being fixed.
-            "voice": os.getenv("MURF_VOICE") or voice,
+            "voice": voice,
+            # FALCON is the streaming catalogue this map was verified against.
+            # Changing the model changes which voice ids exist.
             "model": os.getenv("MURF_MODEL", "FALCON"),
         }
-        # Only set for a voice that is not already native to this language — a
-        # native voice infers its locale from the id and rejects a conflicting one.
+        # Set only for a voice that is not native to this language: a native voice
+        # infers its locale from the id and rejects a conflicting one with a 400.
         if locale:
             kwargs["locale"] = locale
-        for env, key, cast in (
-            ("MURF_STYLE", "style", str),
-            ("MURF_LOCALE", "locale", str),
-            ("MURF_SPEED", "speed", int),
-            ("MURF_PITCH", "pitch", int),
-        ):
+        if style:
+            kwargs["style"] = style
+        for env, key, cast in (("MURF_SPEED", "speed", int), ("MURF_PITCH", "pitch", int)):
             raw = os.getenv(env)
             if raw:
                 kwargs[key] = cast(raw)
