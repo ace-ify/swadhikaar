@@ -26,6 +26,7 @@ import {
   IndianRupee,
   Sprout,
   Ambulance,
+  Map as MapIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,6 +69,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Patients", href: "/admin/patients", icon: Users },
     { label: "Workflows", href: "/admin/workflows", icon: Workflow },
     { label: "Coordination", href: "/admin/coordination", icon: Network },
+    { label: "Operations Map", href: "/admin/map", icon: MapIcon },
     { label: "Finance", href: "/admin/finance", icon: IndianRupee },
     { label: "Consent", href: "/admin/consent", icon: ShieldCheck },
     { label: "FHIR Reports", href: "/admin/reports", icon: FileBarChart },

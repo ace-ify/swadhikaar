@@ -99,7 +99,35 @@ export interface Patient {
   consent_status: string;
   assigned_doctor_id: string | null;
   journey_status: string;
+  district: string | null;
+  village: string | null;
+  // Locality centroid plus a deterministic per-patient offset — NOT a household
+  // location, which we never had and would not want to hold for 242 people with
+  // clinical risk attached. Anything rendering these must say "approximate".
+  lat: number | null;
+  lon: number | null;
+  coord_source: string | null;
   created_at: string;
+}
+
+export interface Facility {
+  id: string;
+  name: string;
+  amenity: string | null;
+  healthcare: string | null;
+  district: string | null;
+  lat: number;
+  lon: number;
+  emergency: boolean | null;
+  beds_total: number | null;
+  beds_available: number | null;
+  doctors_on_duty: number | null;
+  // Per-field provenance: the name and coordinates are real OpenStreetMap data,
+  // the bed and staffing counts are generated. No public source publishes live
+  // Indian bed counts, so a single row is part sourced and part simulated.
+  coord_source: string;
+  capacity_source: string;
+  dispatch_eligible: boolean;
 }
 
 export interface HealthVitals {
@@ -251,6 +279,18 @@ export function usePatients(filters?: { risk_level?: string; camp_type?: string 
   return useSupabaseQuery<Patient>("patients", {
     order: { column: "created_at", ascending: false },
     eq: eq.length > 0 ? eq : undefined,
+  });
+}
+
+// Only the columns the map needs. 537 rows, so selecting * would ship bed counts,
+// websites and postcodes into the browser for markers that show none of it.
+export function useFacilities(dispatchEligibleOnly = false) {
+  return useSupabaseQuery<Facility>("facilities", {
+    select:
+      "id,name,amenity,healthcare,district,lat,lon,emergency,beds_total," +
+      "beds_available,doctors_on_duty,coord_source,capacity_source,dispatch_eligible",
+    order: { column: "beds_total", ascending: false },
+    eq: dispatchEligibleOnly ? [["dispatch_eligible", true]] : undefined,
   });
 }
 
