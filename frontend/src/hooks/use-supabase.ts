@@ -101,6 +101,10 @@ export interface Patient {
   journey_status: string;
   district: string | null;
   village: string | null;
+  // 'health_camp' = from the provided dataset. 'simulated_cohort' = generated for
+  // demo coverage (the Assam flood cohort). Any surface showing these must badge
+  // them; that is the whole reason the column is read into the client.
+  intake_source: string | null;
   // Locality centroid plus a deterministic per-patient offset — NOT a household
   // location, which we never had and would not want to hold for 242 people with
   // clinical risk attached. Anything rendering these must say "approximate".

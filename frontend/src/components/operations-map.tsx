@@ -47,6 +47,7 @@ function Legend({ counts }: { counts: Record<string, number> }) {
         ["#2563eb", `Facility, dispatch-eligible (${counts.eligible})`],
         ["#94a3b8", `Facility, not receiving (${counts.ineligible})`],
         ["#7c3aed", `Open escalation (${counts.escalations})`],
+        ["#1e293b", `Simulated record, dashed ring (${counts.simulated})`],
       ].map(([color, label]) => (
         <div key={label} className="flex items-center gap-2 py-0.5">
           <span
@@ -91,6 +92,7 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
       eligible: facilities.filter((f) => f.dispatch_eligible).length,
       ineligible: facilities.filter((f) => !f.dispatch_eligible).length,
       escalations: escalationPoints.length,
+      simulated: plotted.filter((p) => p.intake_source === "simulated_cohort").length,
     }),
     [plotted, facilities, escalationPoints]
   );
@@ -137,10 +139,17 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
                   center={[p.lat as number, p.lon as number]}
                   radius={5}
                   pathOptions={{
-                    color: RISK_COLOR[p.risk_level] ?? "#64748b",
+                    // Simulated records get a dark outline so they read as
+                    // different at a glance; the fill still carries risk level.
+                    color:
+                      p.intake_source === "simulated_cohort"
+                        ? "#1e293b"
+                        : RISK_COLOR[p.risk_level] ?? "#64748b",
                     fillColor: RISK_COLOR[p.risk_level] ?? "#64748b",
                     fillOpacity: 0.7,
-                    weight: 1,
+                    weight: p.intake_source === "simulated_cohort" ? 2 : 1,
+                    dashArray:
+                      p.intake_source === "simulated_cohort" ? "2,2" : undefined,
                   }}
                 >
                   <Tooltip>
@@ -155,6 +164,11 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
                       <div className="mt-1 text-[10px] italic text-muted-foreground">
                         approximate — locality centroid
                       </div>
+                      {p.intake_source === "simulated_cohort" ? (
+                        <div className="mt-0.5 text-[10px] font-semibold text-slate-700">
+                          SIMULATED record
+                        </div>
+                      ) : null}
                     </div>
                   </Tooltip>
                 </CircleMarker>
