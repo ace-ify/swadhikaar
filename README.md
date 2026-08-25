@@ -160,8 +160,16 @@ supabase secrets set ACUTE_INGRESS_SECRET=<random-32-bytes>
 ### 4) Run voice worker
 
 ```bash
+# Local development — hot-reloads on file change.
 python backend/voice_agent/agent.py dev
+
+# Demos and anything that places real calls — no hot reload.
+python backend/voice_agent/agent.py start
 ```
+
+Use `start` for a demo. In `dev` mode the worker restarts when any file under the
+project changes, and a restart mid-call drops the call — including a call the
+`place-due-recovery-calls` cron placed a few seconds earlier.
 
 ### 5) Run frontend
 

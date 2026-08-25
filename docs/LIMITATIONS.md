@@ -127,9 +127,11 @@ production path; this is labelled as what it is and never dressed up as IMD.
 
 ## Not tested
 
-- **No clinician has reviewed the advisory scripts.** The escalation thresholds and
-  call content are engineering judgement, not signed-off clinical protocol. This is
-  the largest gap in the system and no amount of infrastructure compensates for it.
+- **No clinician has reviewed the advisory scripts or any clinical threshold.** The
+  escalation cutoffs, risk bands, vital-sign danger signs and weather gates are
+  engineering judgement drawn from published numbers. Every one of them is listed
+  for sign-off in [CLINICAL_REVIEW.md](CLINICAL_REVIEW.md). This is the largest gap
+  in the system and no amount of infrastructure compensates for it.
 - **No real patient has ever received a call from this system.**
 - **Load**: the largest exercised cohort is 51. Nothing is known about 10,000.
 - **Accessibility**: the UI has font scaling and a language toggle; it has not been
