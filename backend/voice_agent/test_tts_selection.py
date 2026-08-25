@@ -37,14 +37,38 @@ MURF_REAL_IDS = {
     "ta-IN-sarvesh", "ta-IN-suresh", "ta-IN-iniya", "ta-IN-abirami",
 }
 
+# Voices whose supportedLocales covers all ten Indic locales, so they may legally
+# be paired with a multiNativeLocale. Anything else is single-locale and a
+# cross-locale request is a hard 400.
+MURF_MULTI_NATIVE = {"bn-IN-anwesha", "en-UK-hazel", "en-US-wayne"}
+
 
 def test_shipped_voice_ids_exist():
     """The original bug: a voice id that existed only in a default argument."""
-    for bcp47, voice in MURF_VOICES.items():
+    for bcp47, (voice, locale) in MURF_VOICES.items():
         assert voice in MURF_REAL_IDS, f"{voice!r} is not a real Murf voice"
-        # Murf derives locale from the id, so a mismatch is a silent wrong language.
-        assert voice.startswith(bcp47 + "-"), f"{voice!r} is not a {bcp47} voice"
+        if locale is None:
+            # Native voice: Murf derives locale from the id, so a mismatch would be
+            # a silent wrong language.
+            assert voice.startswith(bcp47 + "-"), (
+                f"{voice!r} is not native to {bcp47} and needs an explicit locale"
+            )
+        else:
+            # Multi-native voice: the locale must be the language we want, and the
+            # voice must actually carry it.
+            assert locale == bcp47, f"{bcp47} mapped to locale {locale}"
+            assert voice in MURF_MULTI_NATIVE, (
+                f"{voice!r} is single-locale; {locale} would 400"
+            )
     assert "en-IN-anisha" not in MURF_REAL_IDS, "the invented default came back"
+
+
+def test_murf_covers_all_ten_indic_locales():
+    """Native voices exist for only four; multiNativeLocale reaches the other six."""
+    assert set(MURF_VOICES) == {
+        "hi-IN", "en-IN", "bn-IN", "ta-IN",
+        "te-IN", "mr-IN", "gu-IN", "kn-IN", "ml-IN", "pa-IN",
+    }
 
 
 def test_every_patient_language_reaches_a_provider():
@@ -84,8 +108,10 @@ def test_murf_first_for_hindi():
 
 
 def test_language_murf_lacks_skips_to_sarvam():
-    """te-IN: Sarvam has it, Murf has no Telugu voice at all."""
-    assert _names(_chain(), "murf", "te-IN") == ["sarvam", "google"]
+    """od-IN (Odia) is the one language Sarvam has and Murf does not — Murf covers
+    the other ten Indic locales via multiNativeLocale."""
+    assert "od-IN" in SARVAM_LANGS and "od-IN" not in MURF_VOICES
+    assert _names(_chain(), "murf", "od-IN") == ["sarvam", "google"]
 
 
 def test_assamese_routes_to_bengali_voice_on_murf():

@@ -121,11 +121,28 @@ LANGUAGE_CODES: dict[str, str] = {
 # heard SILENCE for the whole call, in all four languages this database speaks.
 # A voice id invented in a default argument is invisible until someone lists the
 # real ones.
-MURF_VOICES: dict[str, str] = {
-    "hi-IN": "hi-IN-shweta",   # F, styles: Calm/Conversational/Promo/Sad
-    "en-IN": "en-IN-priya",    # F, styles: Conversational/Narration/Promo
-    "bn-IN": "bn-IN-anwesha",  # F, and the one Indic voice that is multi-locale
-    "ta-IN": "ta-IN-iniya",    # F, styles: Conversational
+# Murf has native voices for only four Indic locales, but many voices are
+# "multi-native": bn-IN-anwesha carries 41 locales and will speak any of the ten
+# Indic ones when multiNativeLocale is passed (the plugin exposes it as `locale`).
+# A native voice is preferred where one exists — that language's own voice rather
+# than a Bengali one doing an impression — and anwesha covers the rest. Single-locale
+# voices cannot cross over: hi-IN-shweta + te-IN is a hard 400, "Supported locales
+# are [hi-IN]", so nothing here is a guess.
+#
+# bcp47 -> (voice id, multiNativeLocale or None when the voice is already native)
+MURF_VOICES: dict[str, tuple[str, str | None]] = {
+    "hi-IN": ("hi-IN-shweta", None),   # F, styles: Calm/Conversational/Promo/Sad
+    "en-IN": ("en-IN-priya", None),    # F, styles: Conversational/Narration/Promo
+    "bn-IN": ("bn-IN-anwesha", None),  # F, also the multi-native voice below
+    "ta-IN": ("ta-IN-iniya", None),    # F, styles: Conversational
+    # No native Murf voice for these six. Each verified as real audio through
+    # anwesha: te 6.19s, mr 6.04s, gu 5.77s, kn 5.81s, ml 5.89s, pa 5.49s.
+    "te-IN": ("bn-IN-anwesha", "te-IN"),
+    "mr-IN": ("bn-IN-anwesha", "mr-IN"),
+    "gu-IN": ("bn-IN-anwesha", "gu-IN"),
+    "kn-IN": ("bn-IN-anwesha", "kn-IN"),
+    "ml-IN": ("bn-IN-anwesha", "ml-IN"),
+    "pa-IN": ("bn-IN-anwesha", "pa-IN"),
 }
 
 # Sarvam bulbul v2/v3: 11 languages (10 Indic + English), verified from the model
@@ -1279,12 +1296,19 @@ async def entrypoint(ctx: JobContext) -> None:
         #
         # MURF_LOCALE is opt-in only: Murf infers locale from the voice id
         # (`{locale}-{name}`), and passing a conflicting one is an error.
+        # MURF_LOCALE overrides the multiNativeLocale from the map. Passing a locale
+        # the voice does not carry is a hard 400, so it is not a free-text knob.
+        voice, locale = MURF_VOICES[bcp47_code]
         kwargs: dict[str, object] = {
             # MURF_VOICE overrides for one-off experiments; the map is the default
             # so the voice follows the patient's language instead of being fixed.
-            "voice": os.getenv("MURF_VOICE") or MURF_VOICES[bcp47_code],
+            "voice": os.getenv("MURF_VOICE") or voice,
             "model": os.getenv("MURF_MODEL", "FALCON"),
         }
+        # Only set for a voice that is not already native to this language — a
+        # native voice infers its locale from the id and rejects a conflicting one.
+        if locale:
+            kwargs["locale"] = locale
         for env, key, cast in (
             ("MURF_STYLE", "style", str),
             ("MURF_LOCALE", "locale", str),
