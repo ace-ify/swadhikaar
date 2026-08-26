@@ -143,10 +143,29 @@ production path; this is labelled as what it is and never dressed up as IMD.
 
 ## Known open issues
 
-- Three copies of the severity ladder exist independently; `triage-assess` is real,
-  tested, and has no callers.
-- `user_roles_role_check` has no role for a receiving facility, so hospitals cannot
-  log in to see what was dispatched to them.
-- `patients.source_incident_id` is a text column with no foreign key.
-- The local `risk-predict/index.ts` is v1 while the deployed function is v2 — git is
-  behind production for that one function.
+- **Receiving facilities cannot log in.** `user_roles_role_check` allows only
+  `admin`, `doctor`, `asha`, `patient`, `farmer`. Deliberately not added yet: nothing
+  is *dispatched* to a facility, it is only *ranked*, so there is no dispatch record
+  for a hospital to open. Adding the role first would be a login that shows an empty
+  screen. The prerequisite is a dispatch/handover table, not a role.
+- **`triage-assess` is deployed and unreachable.** Zero callers, verified. The live
+  severity ladder is `_CRITICAL_KEYWORDS_HI` in `backend/voice_agent/agent.py`, which
+  has 41 critical keywords against the function's 10. The one keyword the live path
+  lacked has been merged in, so nothing there is unique any more. Left deployed
+  because nothing calls it; marked SUPERSEDED in its own source so nobody wires in a
+  second, poorer definition of "critical".
+- **`patients.source_incident_id` has no foreign key, correctly.** Previously listed
+  here as a defect; it is not. The values are external identifiers issued by the
+  acute/SOS system (`H-DEMO-MT75XGSS`), and no local `incidents` table exists for
+  them to reference. A check constraint now enforces the rule that does apply: an
+  `acute_incident` patient must carry the incident id that created them.
+- **No `incidents` table.** The flood-triggered incident layer is designed and not
+  built. Deliberately not started two days before the demo — it needs a table, a
+  status machine, a role, and four UI surfaces.
+- **Temperature is collected and never used**, and age and gender are collected and
+  discarded. See [CLINICAL_REVIEW.md](CLINICAL_REVIEW.md) section 8.
+- **The campus sub-unit problem has been fixed three times in three layers** — bed
+  counts, map draw order, and dispatch ranking — because OpenStreetMap maps every
+  building on a teaching-hospital campus as its own `amenity=hospital`. Three fixes
+  by name-matching is the signal that the data wants a `parent_facility_id` resolved
+  from OSM site relations at load time.

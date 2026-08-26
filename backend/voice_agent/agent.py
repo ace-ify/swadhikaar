@@ -262,6 +262,11 @@ _CRITICAL_KEYWORDS_HI = [
     "sudden headache",
     # Bleeding
     "khoon aa raha hai",
+    # "beh" (flowing) as well as "aa" (coming) — this was the ONE critical keyword
+    # the unreachable triage-assess edge function had that the live path did not.
+    # Merged here rather than left in a function nothing calls.
+    "khoon beh raha hai",
+    "khoon beh",
     "bleeding",
     "bahut khoon",
     "haemorrhage",
