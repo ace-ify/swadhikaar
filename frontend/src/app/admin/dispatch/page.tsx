@@ -51,6 +51,33 @@ const SEVERITY_STYLE: Record<string, string> = {
   standard: "border-slate-400 bg-slate-50 text-slate-700",
 };
 
+// Enum names are for the database. These are for the person reading the screen.
+const OFFER_WORDS: Record<OfferStateName, string> = {
+  pending: "waiting",
+  accepted: "accepted",
+  declined: "said no",
+  superseded: "went elsewhere",
+  timed_out: "no answer",
+};
+
+const STATUS_WORDS: Record<string, string> = {
+  pending: "waiting for a hospital",
+  dispatched: "hospital accepted",
+  en_route: "ambulance on the way",
+  arrived: "at hospital",
+  resolved: "closed",
+  expired: "timed out",
+  cancelled: "cancelled",
+};
+
+const DISPATCH_WORDS: Record<string, string> = {
+  offering: "asking hospitals",
+  accepted: "hospital accepted",
+  exhausted: "nobody accepted",
+  no_candidates: "no hospital in range",
+  stood_down: "stood down",
+};
+
 const OFFER_STYLE: Record<OfferStateName, string> = {
   pending: "border-blue-500 text-blue-700",
   accepted: "border-emerald-600 bg-emerald-50 text-emerald-700",
@@ -159,7 +186,7 @@ function Fuse({ dispatch, now }: { dispatch: IncidentDispatch; now: number }) {
           : "font-mono text-sm font-semibold text-red-600"
       }
     >
-      {overdue ? `overdue ${mmss(-left)} — sweep pending` : mmss(left)}
+      {overdue ? `${mmss(-left)} over — moving on` : mmss(left)}
     </span>
   );
 }
@@ -174,23 +201,73 @@ function GoldenHour({ start, now }: { start: string; now: number }) {
   );
 }
 
-// The reason a facility placed where it did, with where each number came from.
-// A dispatcher overruling the engine deserves to see which factors were real.
-//
-// `factors` is not uniformly shaped — it also carries `eta_basis` (a string) and
-// `sourced_weight_redistributed` (a boolean) — so the non-factor keys are pulled
-// out rather than rendered as empty rows.
+// Why this hospital, in words a dispatcher can act on. The arithmetic is still
+// available one tap down, because someone will eventually want to check it — but it
+// is not what you read while a timer is running.
+const SOURCE_WORDS: Record<string, string> = {
+  OSM_COORDINATES: "map data",
+  OSM_TAGS: "map data",
+  NAME_DERIVED: "from its name",
+  OUR_DISPATCH_TABLE: "our records",
+  OUR_FACILITIES_TABLE: "our records",
+  OUR_OFFER_HISTORY: "past answers",
+  SIMULATED: "made up for the demo",
+  NOT_AVAILABLE: "nobody publishes this",
+};
+
+const FACTOR_WORDS: Record<string, string> = {
+  proximity: "Distance",
+  specialty: "Right speciality",
+  load: "How busy",
+  emergency: "Emergency unit",
+  freshness: "Record freshness",
+  reliability: "Usually accepts",
+  capacity: "Free beds",
+  staffing: "Doctors on duty",
+  blood: "Blood stock",
+};
+
+// The database emits sourced factors lower-case and unobtainable ones upper-case,
+// so matching on the literal string silently missed six of the nine.
+function sourceWords(source: string | undefined): string {
+  return SOURCE_WORDS[(source ?? "").toUpperCase()] ?? source ?? "unknown";
+}
+
+function factorOf(factors: FactorMap, key: string): ScoreFactor | null {
+  const v = factors?.[key];
+  return isFactor(v) ? v : null;
+}
+
+function reasonWords(factors: FactorMap): string[] {
+  const out: string[] = [];
+  const prox = factorOf(factors, "proximity");
+  if (prox && (prox.value ?? 0) >= 0.85) out.push("very close");
+
+  const spec = factorOf(factors, "specialty");
+  if (spec?.matched) {
+    const needed = (spec.needed ?? []).join(" and ");
+    out.push(needed ? `handles ${needed}` : "right speciality");
+  }
+
+  const load = factorOf(factors, "load");
+  if (load && (load.value ?? 0) >= 0.9) out.push("not busy");
+
+  const em = factorOf(factors, "emergency");
+  if (em && (em.value ?? 0) >= 0.9) out.push("has an emergency unit");
+
+  const rel = factorOf(factors, "reliability");
+  if (rel && (rel.value ?? 0) >= 0.8) out.push("usually accepts");
+
+  return out.slice(0, 3);
+}
+
+// Kept behind a <details>: native, no state to get wrong, closed by default.
 function Factors({ factors }: { factors: FactorMap }) {
   const rows = Object.entries(factors ?? {}).filter(
     (e): e is [string, ScoreFactor] => isFactor(e[1]),
   );
   if (rows.length === 0) return null;
 
-  const etaBasis =
-    typeof factors.eta_basis === "string" ? factors.eta_basis : null;
-  const redistributed = factors.sourced_weight_redistributed === true;
-
-  // Included first, then the ones no public source can fill.
   rows.sort(
     (a, b) =>
       Number(b[1].included !== false) - Number(a[1].included !== false) ||
@@ -198,11 +275,13 @@ function Factors({ factors }: { factors: FactorMap }) {
   );
 
   return (
-    <div className="mt-2 space-y-1.5">
-      <div className="grid gap-1 sm:grid-cols-2">
+    <details className="mt-2">
+      <summary className="text-muted-foreground cursor-pointer text-xs">
+        How this was worked out
+      </summary>
+      <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
         {rows.map(([name, f]) => {
           const off = f.included === false;
-          const contribution = (f.value ?? 0) * (f.weight ?? 0);
           return (
             <div
               key={name}
@@ -210,41 +289,19 @@ function Factors({ factors }: { factors: FactorMap }) {
                 off ? "border-dashed opacity-60" : ""
               }`}
             >
-              <span className="font-medium capitalize">
-                {name.replace(/_/g, " ")}
+              <span className="font-medium">
+                {FACTOR_WORDS[name] ?? name.replace(/_/g, " ")}
               </span>
-              <span className="flex items-center gap-1.5">
-                {off ? (
-                  <span className="text-muted-foreground">
-                    off · weight {f.weight} redistributed
-                  </span>
-                ) : (
-                  <span className="font-mono">
-                    {(f.value ?? 0).toFixed(2)} × {f.weight} ={" "}
-                    {contribution.toFixed(3)}
-                  </span>
-                )}
-                <span
-                  className={
-                    off
-                      ? "rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-800"
-                      : "rounded bg-muted px-1 text-[10px] uppercase text-muted-foreground"
-                  }
-                >
-                  {f.source}
-                </span>
+              <span className="text-muted-foreground">
+                {off
+                  ? sourceWords(f.source)
+                  : `${Math.round((f.value ?? 0) * 100)}% · ${sourceWords(f.source)}`}
               </span>
             </div>
           );
         })}
       </div>
-      <p className="text-muted-foreground text-[11px]">
-        {redistributed
-          ? "Unobtainable factors excluded, their weight redistributed across the sourced ones. "
-          : ""}
-        {etaBasis ? `ETA: ${etaBasis}.` : ""}
-      </p>
-    </div>
+    </details>
   );
 }
 
@@ -277,7 +334,7 @@ function OfferCard({
       toast.success(
         kind === "accept"
           ? `Accepted by ${String(res.facility_name ?? offer.facility?.name)}`
-          : `Declined — ${String(res.still_pending_in_wave ?? 0)} still pending in this wave`,
+          : `Said no — ${String(res.still_pending_in_wave ?? 0)} still to answer`,
       );
     } else if (res.error === "already_accepted") {
       // Not a failure to hide: this is the race the engine exists to resolve, and
@@ -294,15 +351,14 @@ function OfferCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">
-            #{offer.rank} {offer.facility?.name ?? offer.facility_id}
+            {offer.facility?.name ?? offer.facility_id}
           </p>
           <p className="text-muted-foreground text-xs">
-            wave {offer.wave_index} · {Number(offer.distance_km).toFixed(1)} km ·
-            score {Number(offer.score).toFixed(3)}
+            {Number(offer.distance_km).toFixed(1)} km
             {offer.eta_seconds
-              ? ` · ETA ~${Math.round(offer.eta_seconds / 60)} min`
+              ? ` · about ${Math.round(offer.eta_seconds / 60)} min away`
               : ""}
-            {offer.decline_reason ? ` · "${offer.decline_reason}"` : ""}
+            {offer.decline_reason ? ` · said no: ${offer.decline_reason}` : ""}
             {offer.state === "superseded" && offer.winner
               ? ` · lost to ${offer.winner.name}`
               : ""}
@@ -310,7 +366,7 @@ function OfferCard({
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={OFFER_STYLE[offer.state]}>
-            {offer.state}
+            {OFFER_WORDS[offer.state]}
           </Badge>
           {live ? (
             <>
@@ -329,12 +385,35 @@ function OfferCard({
           ) : null}
         </div>
       </div>
-      {/* Only where the decision is still live, or where it was made. Fifteen
-          collapsed factor grids for timed-out offers is noise over an ops board. */}
-      {live || offer.state === "accepted" ? <Factors factors={offer.factors} /> : null}
+      {live || offer.state === "accepted" ? (
+        <>
+          {reasonWords(offer.factors).length > 0 ? (
+            <p className="mt-1 text-sm">
+              {reasonWords(offer.factors).join(" · ")}
+            </p>
+          ) : null}
+          <Factors factors={offer.factors} />
+        </>
+      ) : null}
     </div>
   );
 }
+
+const ACTION_WORDS: Record<string, string> = {
+  incident_created: "case opened",
+  dispatch_opened: "hospitals contacted",
+  wave_offered: "next hospitals asked",
+  offer_declined: "hospital said no",
+  offer_accepted: "hospital accepted",
+  status_changed: "status changed",
+  dispatch_exhausted: "no hospital accepted",
+  dispatch_no_candidates: "no hospital in range",
+  ambulance_offered: "ambulances asked",
+  ambulance_accepted: "ambulance accepted",
+  ambulance_rejected: "crew said no",
+  ambulance_exhausted: "no ambulance available",
+  ambulance_no_units: "no ambulance nearby",
+};
 
 // Append-only. Status transitions are written by trigger, so an actor cannot omit
 // one — which is the difference between an audit trail and a log.
@@ -354,11 +433,13 @@ function Trail({ events }: { events: IncidentEvent[] }) {
             })}
           </span>
           <span className="min-w-0">
-            <span className="font-medium">{e.action.replace(/_/g, " ")}</span>
-            {e.from_status || e.to_status ? (
+            <span className="font-medium">
+              {ACTION_WORDS[e.action] ?? e.action.replace(/_/g, " ")}
+            </span>
+            {e.to_status ? (
               <span className="text-muted-foreground">
                 {" "}
-                {e.from_status ?? "—"} → {e.to_status ?? "—"}
+                → {STATUS_WORDS[e.to_status] ?? e.to_status}
               </span>
             ) : null}
             {e.detail?.facility_name ? (
@@ -368,7 +449,10 @@ function Trail({ events }: { events: IncidentEvent[] }) {
               </span>
             ) : null}
             {e.detail?.reason ? (
-              <span className="text-muted-foreground"> · {String(e.detail.reason)}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {String(e.detail.reason).replace(/_/g, " ")}
+              </span>
             ) : null}
           </span>
         </li>
@@ -380,7 +464,7 @@ function Trail({ events }: { events: IncidentEvent[] }) {
 function Candidates({ ranked }: { ranked: RankedCandidate[] }) {  if (!ranked || ranked.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        No candidate scored above zero within 60 km.
+        No hospital within 60 km could take this.
       </p>
     );
   }
@@ -400,8 +484,8 @@ function Candidates({ ranked }: { ranked: RankedCandidate[] }) {  if (!ranked ||
               <span className="text-muted-foreground text-xs"> · {c.tier}</span>
             ) : null}
           </span>
-          <span className="text-muted-foreground shrink-0 font-mono text-xs">
-            {Number(c.score).toFixed(3)} · {Number(c.distance_km).toFixed(1)} km
+          <span className="text-muted-foreground shrink-0 text-xs">
+            {Number(c.distance_km).toFixed(1)} km
           </span>
         </li>
       ))}
@@ -475,10 +559,9 @@ function Ambulance({
           </div>
         </div>
         <CardDescription>
-          Attempt {dispatch.ambulance_attempts + 1} of 4 · opened automatically when the
-          hospital accepted
+          Try {dispatch.ambulance_attempts + 1} of 4
           {dispatch.ambulance_relay_facility_id
-            ? " · borrowed from another hospital's station, because the receiving one had no free vehicle"
+            ? " · borrowed from another hospital, the receiving one had none free"
             : ""}
         </CardDescription>
       </CardHeader>
@@ -495,7 +578,7 @@ function Ambulance({
 
         {dispatch.ambulance_state === "no_operator" ? (
           <p className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-800">
-            No vehicle accepted. Needs a phone call — the case stays open.
+            No ambulance free. Needs a phone call — the case stays open.
           </p>
         ) : null}
 
@@ -517,7 +600,14 @@ function Ambulance({
               </span>
             </span>
             <span className="flex items-center gap-2">
-              <Badge variant="outline">{f.state.replace(/_/g, " ")}</Badge>
+              <Badge variant="outline">
+                {({
+                  awaiting_response: "waiting",
+                  accepted: "accepted",
+                  rejected: "said no",
+                  no_response: "no answer",
+                } as Record<string, string>)[f.state] ?? f.state}
+              </Badge>
               {f.state === "awaiting_response" ? (
                 <>
                   <Button size="sm" disabled={busy === f.id} onClick={() => void act(f.id, "accept")}>
@@ -540,6 +630,15 @@ function Ambulance({
     </Card>
   );
 }
+
+const OUTBOX_WORDS: Record<string, string> = {
+  sent: "sent",
+  queued: "waiting to send",
+  sending: "sending",
+  failed: "failed",
+  abandoned: "gave up",
+  skipped_unconfigured: "not sent",
+};
 
 const OUTBOX_STYLE: Record<string, string> = {
   sent: "border-emerald-600 text-emerald-700",
@@ -579,11 +678,15 @@ function Outbox({ rows }: { rows: OutboxRow[] }) {
                 {channel === "in_app" ? "In the app" : channel.toUpperCase()} · {v.n}
               </span>
               <Badge variant="outline" className={OUTBOX_STYLE[status] ?? ""}>
-                {status.replace(/_/g, " ")}
+                {OUTBOX_WORDS[status] ?? status.replace(/_/g, " ")}
               </Badge>
             </div>
             {v.why ? (
-              <p className="text-muted-foreground text-xs">{v.why}</p>
+              <p className="text-muted-foreground text-xs">
+                {status === "skipped_unconfigured"
+                  ? "not set up on this system yet"
+                  : v.why}
+              </p>
             ) : null}
           </div>
         );
@@ -624,14 +727,16 @@ function BoardRow({
         {incident.address ?? incident.district ?? "—"}
       </p>
       <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">{incident.status}</span>
+        <span className="text-muted-foreground">
+          {STATUS_WORDS[incident.status] ?? incident.status}
+        </span>
         {d ? (
           <span className="font-mono">
             {d.state === "offering"
-              ? `wave ${d.wave_index + 1}/${d.max_waves} · ${
-                  left !== null && left >= 0 ? mmss(left) : "sweep due"
+              ? `round ${d.wave_index + 1}/${d.max_waves} · ${
+                  left !== null && left >= 0 ? mmss(left) : "checking"
                 }`
-              : d.state}
+              : (DISPATCH_WORDS[d.state] ?? d.state)}
           </span>
         ) : (
           <span className="text-amber-600">not dispatched</span>
@@ -691,18 +796,14 @@ export default function DispatchPage() {
           Dispatch Console
         </h1>
         <p className="text-muted-foreground text-sm font-medium">
-          Wave-based offer and accept. A facility is offered a case and may decline —
-          it is never silently assigned.
+          Hospitals are asked a few at a time. The first to accept gets the patient.
         </p>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base tracking-tight">Open an incident</CardTitle>
-          <CardDescription>
-            Severity is derived by the database from triage colour and vitals, not
-            chosen here — so intake cannot downgrade a red case.
-          </CardDescription>
+          <CardTitle className="text-base tracking-tight">Start a test case</CardTitle>
+          <CardDescription>How urgent it is gets worked out automatically.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
@@ -809,18 +910,15 @@ export default function DispatchPage() {
                 <CardHeader className="pb-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <CardTitle className="text-base tracking-tight">
-                      Wave {dispatch.wave_index + 1} of {dispatch.max_waves} ·{" "}
-                      {dispatch.state}
+                      Round {dispatch.wave_index + 1} of {dispatch.max_waves} ·{" "}
+                      {DISPATCH_WORDS[dispatch.state] ?? dispatch.state}
                     </CardTitle>
                     <Fuse dispatch={dispatch} now={now} />
                   </div>
                   <CardDescription>
-                    {dispatch.parallel_per_wave} offered in parallel ·{" "}
-                    {Math.round(dispatch.wave_timeout_ms / 1000)}s fuse ·{" "}
-                    {dispatch.ordered_facility_ids.length} candidates ranked
-                    {dispatch.last_escalation_reason
-                      ? ` · last escalation: ${dispatch.last_escalation_reason}`
-                      : ""}
+                    Asking {dispatch.parallel_per_wave} at a time ·{" "}
+                    {Math.round(dispatch.wave_timeout_ms / 1000)}s to answer ·{" "}
+                    {dispatch.ordered_facility_ids.length} hospitals in range
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -837,8 +935,8 @@ export default function DispatchPage() {
 
                   {dispatch.state === "exhausted" ? (
                     <p className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-800">
-                      Every wave exhausted without an acceptance. This needs a human —
-                      the incident is still open and was never deleted.
+                      No hospital accepted. Someone needs to phone around — the case is
+                      still open.
                     </p>
                   ) : null}
 
@@ -858,7 +956,7 @@ export default function DispatchPage() {
                     <>
                       <Separator />
                       <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
-                        Earlier waves
+                        Earlier rounds
                       </p>
                       <div className="space-y-2 opacity-70">
                         {earlierOffers.map((o) => (
@@ -896,12 +994,8 @@ export default function DispatchPage() {
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base tracking-tight">
-                    Ranked candidates
+                    Hospitals in order
                   </CardTitle>
-                  <CardDescription>
-                    Frozen at dispatch time, so retuning the policy tomorrow cannot
-                    rewrite how this case was meant to behave.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Candidates ranked={dispatch?.ranked_candidates ?? []} />
@@ -913,10 +1007,7 @@ export default function DispatchPage() {
                   <CardTitle className="text-base tracking-tight">
                     Notifications sent
                   </CardTitle>
-                  <CardDescription>
-                    One row per recipient per wave, with retries. A send that could not
-                    happen says why.
-                  </CardDescription>
+                  <CardDescription>Who was told, and how.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Outbox rows={outbox} />
@@ -926,9 +1017,6 @@ export default function DispatchPage() {
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base tracking-tight">Activity</CardTitle>
-                  <CardDescription>
-                    Append-only. No update or delete policy exists on this table.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Trail events={events} />

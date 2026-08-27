@@ -12,7 +12,6 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
 
@@ -26,13 +25,15 @@ type Result = {
   dispatch?: { offered_to?: number; candidates?: number; state?: string };
 };
 
+// Hindi first, English under it. This is the one screen a person in a village holds
+// in an emergency; the admin screens are read by staff who work in English.
 const KINDS = [
-  { label: "Accident", type: "Road traffic accident", triage: "red" },
-  { label: "Chest pain", type: "Cardiac emergency", triage: "red" },
-  { label: "Breathing trouble", type: "Breathlessness", triage: "orange" },
-  { label: "Bleeding", type: "Severe bleeding", triage: "red" },
-  { label: "Fall / injury", type: "Fall", triage: "yellow" },
-  { label: "Something else", type: "Emergency", triage: null },
+  { hi: "दुर्घटना", en: "Accident", type: "Road traffic accident", triage: "red" },
+  { hi: "सीने में दर्द", en: "Chest pain", type: "Cardiac emergency", triage: "red" },
+  { hi: "सांस लेने में तकलीफ", en: "Breathing trouble", type: "Breathlessness", triage: "orange" },
+  { hi: "बहुत खून बह रहा है", en: "Heavy bleeding", type: "Severe bleeding", triage: "red" },
+  { hi: "गिर गए / चोट", en: "Fall or injury", type: "Fall", triage: "yellow" },
+  { hi: "कुछ और", en: "Something else", type: "Emergency", triage: null },
 ] as const;
 
 function position(): Promise<GeolocationPosition> {
@@ -58,10 +59,10 @@ export default function SosPage() {
     setBusy(true);
     setResult(null);
     try {
-      setStage("Finding your location…");
+      setStage("जगह पता कर रहे हैं… / Finding your location…");
       const pos = await position();
 
-      setStage("Sending…");
+      setStage("भेज रहे हैं… / Sending…");
       const supabase = createClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
@@ -94,7 +95,7 @@ export default function SosPage() {
       // browser error string.
       setResult({
         error: /denied|permission/i.test(message)
-          ? "Location is switched off, so we cannot tell anyone where you are. Turn it on, or call 112 now."
+          ? "लोकेशन बंद है, इसलिए हम किसी को आपकी जगह नहीं बता सकते। इसे चालू करें, या अभी 112 पर कॉल करें। / Location is off — turn it on, or call 112 now."
           : message,
       });
     } finally {
@@ -106,30 +107,41 @@ export default function SosPage() {
   return (
     <div className="mx-auto max-w-xl space-y-5 pb-20">
       <div className="space-y-1 px-1">
-        <h1 className="text-2xl font-bold tracking-tight">Get help now</h1>
-        <p className="text-muted-foreground text-sm">
-          Tap what is happening. The nearest hospitals are asked straight away.
+        <h1 className="text-2xl font-bold tracking-tight" lang="hi">
+          मदद चाहिए?
+        </h1>
+        <p className="text-muted-foreground text-sm" lang="hi">
+          जो हो रहा है उस पर दबाएं। नज़दीकी अस्पतालों को तुरंत बताया जाएगा।
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Tap what is happening. The nearest hospitals are told straight away.
         </p>
       </div>
 
       <a href="tel:112" className="block">
         <Button variant="outline" size="lg" className="h-14 w-full text-base">
           <Phone className="mr-2 size-5" />
-          Call 112
+          <span lang="hi">112 पर कॉल करें</span>
+          <span className="text-muted-foreground ml-2 text-xs">Call 112</span>
         </Button>
       </a>
 
       <div className="grid gap-3 sm:grid-cols-2">
         {KINDS.map((k) => (
           <Button
-            key={k.label}
+            key={k.en}
             size="lg"
             variant={k.triage === "red" ? "destructive" : "default"}
             className="h-16 text-base"
             disabled={busy}
             onClick={() => void send(k)}
           >
-            {k.label}
+            <span className="flex flex-col items-center leading-tight">
+              <span lang="hi" className="text-base font-semibold">
+                {k.hi}
+              </span>
+              <span className="text-xs font-normal opacity-80">{k.en}</span>
+            </span>
           </Button>
         ))}
       </div>
@@ -152,26 +164,31 @@ export default function SosPage() {
       {result?.ok ? (
         <Card className="border-emerald-600">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Help is being arranged</CardTitle>
+            <CardTitle className="text-base">
+              <span lang="hi">मदद भेजी जा रही है</span>
+              <span className="text-muted-foreground ml-2 text-xs font-normal">
+                Help is being arranged
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p>
-              Reference <span className="font-mono font-semibold">{result.ref}</span>. Keep
-              this to hand.
+            <p lang="hi">
+              नंबर <span className="font-mono font-semibold">{result.ref}</span> — यह
+              याद रखें।
             </p>
-            <p>
-              {result.dispatch?.offered_to
-                ? `${result.dispatch.offered_to} hospital${
-                    result.dispatch.offered_to === 1 ? "" : "s"
-                  } asked. Someone will answer shortly.`
-                : "No hospital nearby could be reached automatically — please call 112."}
-            </p>
-            {result.severity ? (
-              <Badge variant="outline">assessed as {result.severity}</Badge>
-            ) : null}
+            {result.dispatch?.offered_to ? (
+              <p lang="hi">
+                {result.dispatch.offered_to} अस्पतालों को बताया गया है। थोड़ी देर में
+                जवाब आएगा।
+              </p>
+            ) : (
+              <p lang="hi">
+                पास कोई अस्पताल नहीं मिला — कृपया 112 पर कॉल करें।
+              </p>
+            )}
             {result.rate_limit_flagged ? (
-              <p className="text-muted-foreground text-xs">
-                You have sent several requests recently. This one was still passed on.
+              <p className="text-muted-foreground text-xs" lang="hi">
+                आपने कई बार भेजा है। यह फिर भी आगे भेज दिया गया है।
               </p>
             ) : null}
           </CardContent>

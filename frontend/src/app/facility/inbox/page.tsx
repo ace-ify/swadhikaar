@@ -26,6 +26,16 @@ const SEVERITY_STYLE: Record<string, string> = {
   standard: "border-slate-400 bg-slate-50 text-slate-700",
 };
 
+// Raw enum names were showing on screen. A nurse does not need to know the word
+// "superseded" to understand that another hospital took the patient.
+const STATE_WORDS: Record<string, string> = {
+  pending: "waiting for you",
+  accepted: "you accepted",
+  declined: "you said no",
+  superseded: "went to another hospital",
+  timed_out: "time ran out",
+};
+
 const DECLINE_REASONS = [
   "No bed available",
   "No specialist on duty",
@@ -123,7 +133,11 @@ function OfferCard({
                   {inc.severity}
                 </Badge>
               ) : null}
-              {!live ? <Badge variant="outline">{offer.state}</Badge> : null}
+              {!live ? (
+                <Badge variant="outline">
+                  {STATE_WORDS[offer.state] ?? offer.state}
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>
@@ -210,7 +224,7 @@ function OfferCard({
 
         {live && !canAccept ? (
           <p className="text-muted-foreground text-sm">
-            Your account can view this case but not answer for this facility.
+            You can see this case but cannot answer for this hospital.
           </p>
         ) : null}
       </CardContent>
@@ -228,8 +242,14 @@ export default function FacilityInboxPage() {
   const acceptable = new Set(
     mine.filter((m) => m.can_accept).map((m) => m.facility_id),
   );
-  const live = offers.filter((o) => o.state === "pending");
-  const past = offers.filter((o) => o.state !== "pending");
+
+  // RLS lets an ops account read EVERY offer, so without this gate an admin opening
+  // this page saw a hospital's screen filled with other hospitals' patients — under a
+  // heading saying no hospital was linked to the account. Correct data, wrong screen.
+  const linked = mine.length > 0;
+  const mineOnly = offers.filter((o) => mine.some((m) => m.facility_id === o.facility_id));
+  const live = linked ? mineOnly.filter((o) => o.state === "pending") : [];
+  const past = linked ? mineOnly.filter((o) => o.state !== "pending") : [];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-20">
@@ -238,7 +258,7 @@ export default function FacilityInboxPage() {
         <p className="text-muted-foreground text-sm font-medium">
           {mine.length > 0
             ? mine.map((m) => m.facility?.name).filter(Boolean).join(", ")
-            : "No facility is linked to this account yet."}
+            : "Not linked to a hospital"}
         </p>
       </div>
 
@@ -248,7 +268,19 @@ export default function FacilityInboxPage() {
         </Card>
       ) : null}
 
-      {!loading && live.length === 0 ? (
+      {!linked && !loading ? (
+        <Card>
+          <CardContent className="space-y-2 py-8 text-center text-sm">
+            <p className="font-medium">This account is not linked to a hospital.</p>
+            <p className="text-muted-foreground">
+              An administrator links staff accounts to a hospital. If you coordinate
+              dispatch, use the Dispatch Console instead.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {linked && !loading && live.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
             Nothing waiting. New cases appear here on their own.

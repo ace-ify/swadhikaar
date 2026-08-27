@@ -102,32 +102,17 @@ export default function MapPage() {
         escalations={escalations}
       />
 
-      {/* Stated on the page, not only in the tooltips: a judge reading over someone's
-          shoulder should not have to hover to learn which half is simulated. */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base tracking-tight">
-            What is real on this map
-          </CardTitle>
+          <CardTitle className="text-base tracking-tight">About this map</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
+        <CardContent className="space-y-1.5 text-sm text-muted-foreground">
+          <p>Hospital names and locations are real, from OpenStreetMap.</p>
           <p>
-            <span className="font-medium text-foreground">Sourced:</span> facility
-            names and coordinates are OpenStreetMap data for Guwahati and Patna.
-            District centroids come from Nominatim.
+            Patient pins are approximate — the area, not the house. We were never given
+            addresses.
           </p>
-          <p>
-            <span className="font-medium text-foreground">Approximate:</span> patient
-            pins are locality centroids with a per-patient offset. The source records
-            carried a health-camp name and vitals, never an address — so nobody&apos;s
-            household is on this map, by construction and on purpose.
-          </p>
-          <p>
-            <span className="font-medium text-foreground">Simulated:</span> bed and
-            staffing counts. No public source publishes live Indian bed availability;
-            it lives in each facility&apos;s own HMIS. Hidden by default and labelled
-            wherever shown.
-          </p>
+          <p>Bed and staff counts are made up, and hidden by default.</p>
         </CardContent>
       </Card>
     </div>
