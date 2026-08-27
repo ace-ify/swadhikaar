@@ -12,6 +12,7 @@ const ROLE_HOME: Record<UserRole, string> = {
   doctor: "/doctor/dashboard",
   admin: "/admin/dashboard",
   asha: "/asha/dashboard",
+  facility_staff: "/facility/inbox",
 };
 
 /**

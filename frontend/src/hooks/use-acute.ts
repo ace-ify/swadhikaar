@@ -138,6 +138,53 @@ export interface IncidentDispatch {
   exhausted_at: string | null;
   last_escalation_reason: string | null;
   fallback_notified: boolean;
+  // Vehicle leg. Opens automatically when a hospital accepts — a crew with nowhere
+  // to deliver is not a plan, so the hospital acceptance gates it.
+  ambulance_state: AmbulanceState | null;
+  ambulance_attempts: number;
+  ambulance_dispatched_at: string | null;
+  ambulance_notified_units: string[];
+  assigned_unit_id: string | null;
+  ambulance_accepted_at: string | null;
+  ambulance_eta_seconds: number | null;
+  // Set when the accepting hospital had no free vehicle and one was borrowed from
+  // the next facility on the ranked list.
+  ambulance_relay_facility_id: string | null;
+  ambulance_exhausted_at: string | null;
+}
+
+export type AmbulanceState =
+  | "pending_operator"
+  | "en_route"
+  | "on_scene"
+  | "transporting"
+  | "no_operator";
+
+export type FleetOfferState =
+  | "awaiting_response"
+  | "accepted"
+  | "rejected"
+  | "no_response";
+
+export interface FleetAssignment {
+  id: string;
+  incident_id: string;
+  unit_id: string;
+  attempt: number;
+  state: FleetOfferState;
+  source: string;
+  distance_km: number | null;
+  dispatched_at: string;
+  response_deadline_at: string;
+  responded_at: string | null;
+  reason: string | null;
+  unit: {
+    call_sign: string;
+    driver_name: string | null;
+    vehicle_type: string;
+    is_simulated: boolean;
+  } | null;
+  station: { name: string } | null;
 }
 
 export interface DispatchOffer {
@@ -249,6 +296,7 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
   const [dispatch, setDispatch] = useState<IncidentDispatch | null>(null);
   const [offers, setOffers] = useState<DispatchOffer[]>([]);
   const [events, setEvents] = useState<IncidentEvent[]>([]);
+  const [fleet, setFleet] = useState<FleetAssignment[]>([]);
   // Which incident the rows in state actually belong to. Without this, clicking a
   // second incident renders the FIRST one's offers under the second one's header
   // until the fetch lands — an ops screen attributing one case's offers to another.
@@ -282,11 +330,21 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
         .select("*")
         .eq("incident_id", incidentId)
         .order("at", { ascending: true }),
-    ]).then(([d, o, e]) => {
+      client
+        .from("fleet_assignments")
+        .select(
+          "*, unit:fleet_units(call_sign,driver_name,vehicle_type,is_simulated)," +
+            "station:facilities(name)",
+        )
+        .eq("incident_id", incidentId)
+        .order("attempt", { ascending: false })
+        .order("distance_km", { ascending: true }),
+    ]).then(([d, o, e, f]) => {
       if (cancelled) return;
       setDispatch((d.data as IncidentDispatch | null) ?? null);
       setOffers((o.data as unknown as DispatchOffer[]) ?? []);
       setEvents((e.data as IncidentEvent[]) ?? []);
+      setFleet((f.data as unknown as FleetAssignment[]) ?? []);
       setLoadedFor(incidentId);
     });
 
@@ -300,12 +358,104 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
     dispatch: fresh ? dispatch : null,
     offers: fresh ? offers : [],
     events: fresh ? events : [],
+    fleet: fresh ? fleet : [],
     loading: incidentId !== null && !fresh,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Mutations — all security-definer rpc, all returning {ok:false, error} rather
+// Facility side
+// ---------------------------------------------------------------------------
+
+// The facility's own inbox. No `.eq("facility_id", ...)` filter and none is
+// needed: RLS returns only rows for facilities this account is staff of, so the
+// query cannot be widened by editing the client. The incident is embedded because
+// a facility deciding whether to accept needs the case, not an id.
+export function useFacilityOffers(pulse = 0) {
+  const [data, setData] = useState<FacilityOffer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .from("dispatch_offers")
+      .select(
+        "*, facility:facilities!dispatch_offers_facility_id_fkey(name,district,emergency)," +
+          "winner:facilities!dispatch_offers_superseded_by_fkey(name)," +
+          "incident:incidents(id,ref,incident_type,description,severity,triage_colour," +
+          "victim_name,victim_age,address,district,lat,lon,vitals,required_services," +
+          "status,golden_hour_start,is_simulated)",
+      )
+      .order("offered_at", { ascending: false })
+      .limit(40)
+      .then(({ data: rows, error: err }) => {
+        if (cancelled) return;
+        setData((rows as unknown as FacilityOffer[]) ?? []);
+        setError(err?.message ?? null);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading, error };
+}
+
+export type FacilityOffer = DispatchOffer & {
+  incident: Pick<
+    Incident,
+    | "id"
+    | "ref"
+    | "incident_type"
+    | "description"
+    | "severity"
+    | "triage_colour"
+    | "victim_name"
+    | "victim_age"
+    | "address"
+    | "district"
+    | "lat"
+    | "lon"
+    | "vitals"
+    | "required_services"
+    | "status"
+    | "golden_hour_start"
+    | "is_simulated"
+  > | null;
+};
+
+export interface MyFacility {
+  facility_id: string;
+  can_accept: boolean;
+  facility: { name: string } | null;
+}
+
+// Which facilities this account may answer for. Read from facility_staff, so the
+// UI and accept_dispatch_offer's own guard agree instead of guessing.
+export function useMyFacilities(pulse = 0) {
+  const [data, setData] = useState<MyFacility[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .from("facility_staff")
+      .select("facility_id, can_accept, facility:facilities(name)")
+      .then(({ data: rows }) => {
+        if (cancelled) return;
+        setData((rows as unknown as MyFacility[]) ?? []);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading };
+}
+
 // than throwing, because "already_accepted" is a normal race outcome the console
 // has to render, not an exception.
 // ---------------------------------------------------------------------------
@@ -340,6 +490,19 @@ export const declineOffer = (incidentId: string, facilityId: string, reason: str
     p_facility: facilityId,
     p_reason: reason,
   });
+
+// Vehicle leg. Both refuse a caller who is neither the unit's operator, nor ops,
+// nor staff of the dispatching facility — the same identity rule as the hospital
+// side, because a signed-in account answering for someone else's ambulance is the
+// defect EOS ships (`allow write: if request.auth != null` on their fleet units).
+export const acceptFleetOffer = (assignmentId: string, etaSeconds?: number | null) =>
+  rpc("accept_fleet_offer", {
+    p_assignment: assignmentId,
+    p_eta_seconds: etaSeconds ?? null,
+  });
+
+export const rejectFleetOffer = (assignmentId: string, reason: string) =>
+  rpc("reject_fleet_offer", { p_assignment: assignmentId, p_reason: reason });
 
 // No escalate here on purpose: escalate_dispatch is revoked from `authenticated`.
 // Waves advance from the cron sweep against an absolute deadline, or when every

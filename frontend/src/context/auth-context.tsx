@@ -11,9 +11,20 @@ import {
 import { createClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 
-export type UserRole = "patient" | "doctor" | "admin" | "asha";
+export type UserRole =
+  | "patient"
+  | "doctor"
+  | "admin"
+  | "asha"
+  | "facility_staff";
 
-const ROLES: readonly UserRole[] = ["patient", "doctor", "admin", "asha"];
+const ROLES: readonly UserRole[] = [
+  "patient",
+  "doctor",
+  "admin",
+  "asha",
+  "facility_staff",
+];
 
 interface AuthState {
   user: User | null;

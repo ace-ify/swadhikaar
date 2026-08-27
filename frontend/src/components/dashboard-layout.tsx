@@ -53,6 +53,7 @@ interface NavItem {
 const navByRole: Record<string, NavItem[]> = {
   patient: [
     { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
+    { label: "Get Help Now", href: "/patient/sos", icon: Siren },
     { label: "My Records", href: "/patient/records", icon: ClipboardList },
     { label: "Call History", href: "/patient/calls", icon: PhoneCall },
     { label: "Consent", href: "/patient/consent", icon: ShieldCheck },
@@ -78,7 +79,18 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Occupational Health", href: "/admin/cross-domain", icon: Sprout },
     { label: "Acute Seam", href: "/admin/seam-trigger", icon: Ambulance },
   ],
+  facility_staff: [
+    { label: "Incoming Cases", href: "/facility/inbox", icon: Siren },
+  ],
 };
+
+// `facility_staff` would otherwise render as "facility_staff Portal" in the header.
+const ROLE_LABEL: Record<string, string> = {
+  doctor: "coordinator",
+  facility_staff: "facility",
+};
+
+const roleLabel = (role: string) => ROLE_LABEL[role] ?? role;
 
 export function AppSidebar({ role }: { role: string }) {
   const pathname = usePathname();
@@ -89,13 +101,15 @@ export function AppSidebar({ role }: { role: string }) {
   return (
     <Sidebar collapsible="icon" className="border-r border-border/50">
       <SidebarHeader className="pt-6 pb-2 px-4 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:pt-4">
-        <Link href={`/${role}/dashboard`} className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+        {/* First nav item, not `/${role}/dashboard`: facility_staff has no
+            dashboard route, and a logo linking to a 404 is worse than no link. */}
+        <Link href={items[0]?.href ?? "/"} className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
           <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
             <ShieldCheck className="size-5!" />
           </div>
           <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
             <span className="font-semibold text-base tracking-tight">Swadhikaar</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{role === "doctor" ? "coordinator" : role} Portal</span>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{roleLabel(role)} Portal</span>
           </div>
         </Link>
       </SidebarHeader>
@@ -180,7 +194,7 @@ export function DashboardHeader({
         <SidebarTrigger className="-ml-2 h-8 w-8 text-muted-foreground hover:text-foreground" />
         <div className="h-4 w-px bg-border/60 mx-1 hidden md:block"></div>
         <h2 className="text-[13px] uppercase tracking-widest font-bold text-foreground/80 hidden sm:block">
-          {role === "doctor" ? "Coordinator" : role} Dashboard
+          {roleLabel(role)} Dashboard
         </h2>
       </div>
 

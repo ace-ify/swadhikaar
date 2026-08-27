@@ -29,9 +29,12 @@ import {
   createIncident,
   acceptOffer,
   declineOffer,
+  acceptFleetOffer,
+  rejectFleetOffer,
   isFactor,
   type DispatchOffer,
   type FactorMap,
+  type FleetAssignment,
   type Incident,
   type IncidentDispatch,
   type IncidentEvent,
@@ -373,8 +376,7 @@ function Trail({ events }: { events: IncidentEvent[] }) {
   );
 }
 
-function Candidates({ ranked }: { ranked: RankedCandidate[] }) {
-  if (!ranked || ranked.length === 0) {
+function Candidates({ ranked }: { ranked: RankedCandidate[] }) {  if (!ranked || ranked.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
         No candidate scored above zero within 60 km.
@@ -403,6 +405,138 @@ function Candidates({ ranked }: { ranked: RankedCandidate[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+const AMBULANCE_LABEL: Record<string, string> = {
+  pending_operator: "waiting for a crew to answer",
+  en_route: "on the way to the scene",
+  on_scene: "at the scene",
+  transporting: "carrying the patient",
+  no_operator: "no vehicle available",
+};
+
+// The vehicle leg. Opens by itself the moment a hospital accepts — 8 crews offered
+// at once on a 3-minute deadline, then 4 at a time, 4 attempts. EOS's numbers.
+function Ambulance({
+  dispatch,
+  fleet,
+  now,
+  onDone,
+}: {
+  dispatch: IncidentDispatch;
+  fleet: FleetAssignment[];
+  now: number;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!dispatch.ambulance_state) return null;
+
+  const open = fleet.filter((f) => f.state === "awaiting_response");
+  const answered = fleet.filter((f) => f.state !== "awaiting_response");
+  const accepted = fleet.find((f) => f.state === "accepted");
+
+  async function act(id: string, kind: "accept" | "reject") {
+    setBusy(id);
+    const res =
+      kind === "accept"
+        ? await acceptFleetOffer(id)
+        : await rejectFleetOffer(id, "crew on another call");
+    setBusy(null);
+    if (res.ok) {
+      toast.success(
+        kind === "accept"
+          ? `${String(res.call_sign)} is on the way`
+          : `Declined — ${String(res.still_open ?? 0)} crews still to answer`,
+      );
+    } else {
+      toast.error(String(res.error ?? "Could not send that"));
+    }
+    onDone();
+  }
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base tracking-tight">
+            Ambulance · {AMBULANCE_LABEL[dispatch.ambulance_state] ?? dispatch.ambulance_state}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="border-amber-500 text-amber-700">
+              simulated vehicles
+            </Badge>
+            {dispatch.ambulance_state === "pending_operator" && open.length > 0 ? (
+              <span className="font-mono text-sm font-semibold text-red-600">
+                {mmss(secondsUntil(open[0].response_deadline_at, now) ?? 0)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <CardDescription>
+          Attempt {dispatch.ambulance_attempts + 1} of 4 · opened automatically when the
+          hospital accepted
+          {dispatch.ambulance_relay_facility_id
+            ? " · borrowed from another hospital's station, because the receiving one had no free vehicle"
+            : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {accepted ? (
+          <p className="rounded-lg border border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {accepted.unit?.call_sign} responding
+            {accepted.unit?.driver_name ? ` · ${accepted.unit.driver_name}` : ""}
+            {dispatch.ambulance_eta_seconds
+              ? ` · about ${Math.round(dispatch.ambulance_eta_seconds / 60)} min to the scene`
+              : ""}
+          </p>
+        ) : null}
+
+        {dispatch.ambulance_state === "no_operator" ? (
+          <p className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-800">
+            No vehicle accepted. Needs a phone call — the case stays open.
+          </p>
+        ) : null}
+
+        {[...open, ...answered].map((f) => (
+          <div
+            key={f.id}
+            className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5 text-sm ${
+              f.state === "awaiting_response" ? "" : "opacity-70"
+            }`}
+          >
+            <span className="min-w-0">
+              <span className="font-semibold">{f.unit?.call_sign ?? "unit"}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {f.distance_km ? `${Number(f.distance_km).toFixed(1)} km` : "distance unknown"}
+                {f.unit?.driver_name ? ` · ${f.unit.driver_name}` : ""}
+                {f.station?.name ? ` · from ${f.station.name}` : ""}
+                {f.reason ? ` · ${f.reason.replace(/_/g, " ")}` : ""}
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              <Badge variant="outline">{f.state.replace(/_/g, " ")}</Badge>
+              {f.state === "awaiting_response" ? (
+                <>
+                  <Button size="sm" disabled={busy === f.id} onClick={() => void act(f.id, "accept")}>
+                    Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === f.id}
+                    onClick={() => void act(f.id, "reject")}
+                  >
+                    Decline
+                  </Button>
+                </>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -467,7 +601,7 @@ export default function DispatchPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected =
     incidents.find((i) => i.id === selectedId) ?? incidents[0] ?? null;
-  const { dispatch, offers, events } = useIncidentDetail(
+  const { dispatch, offers, events, fleet } = useIncidentDetail(
     selected?.id ?? null,
     pulse + nudge,
   );
@@ -696,6 +830,15 @@ export default function DispatchPage() {
                 </CardContent>
               </Card>
             )}
+
+            {dispatch ? (
+              <Ambulance
+                dispatch={dispatch}
+                fleet={fleet}
+                now={now}
+                onDone={refresh}
+              />
+            ) : null}
 
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="shadow-sm">
