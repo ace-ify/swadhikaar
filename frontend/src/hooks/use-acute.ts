@@ -208,6 +208,26 @@ export interface DispatchOffer {
   winner: { name: string } | null;
 }
 
+export interface OutboxRow {
+  id: string;
+  channel: "in_app" | "sms" | "push" | "voice";
+  kind: string;
+  wave_index: number | null;
+  status:
+    | "queued"
+    | "sending"
+    | "sent"
+    | "failed"
+    | "skipped_unconfigured"
+    | "abandoned";
+  attempts: number;
+  next_attempt_at: string;
+  last_error: string | null;
+  sent_at: string | null;
+  facility: { name: string } | null;
+  unit: { call_sign: string } | null;
+}
+
 export interface IncidentEvent {
   id: string;
   incident_id: string;
@@ -297,6 +317,7 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
   const [offers, setOffers] = useState<DispatchOffer[]>([]);
   const [events, setEvents] = useState<IncidentEvent[]>([]);
   const [fleet, setFleet] = useState<FleetAssignment[]>([]);
+  const [outbox, setOutbox] = useState<OutboxRow[]>([]);
   // Which incident the rows in state actually belong to. Without this, clicking a
   // second incident renders the FIRST one's offers under the second one's header
   // until the fetch lands — an ops screen attributing one case's offers to another.
@@ -339,12 +360,18 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
         .eq("incident_id", incidentId)
         .order("attempt", { ascending: false })
         .order("distance_km", { ascending: true }),
-    ]).then(([d, o, e, f]) => {
+      client
+        .from("notification_outbox")
+        .select("*, facility:facilities(name), unit:fleet_units(call_sign)")
+        .eq("incident_id", incidentId)
+        .order("created_at", { ascending: false }),
+    ]).then(([d, o, e, f, n]) => {
       if (cancelled) return;
       setDispatch((d.data as IncidentDispatch | null) ?? null);
       setOffers((o.data as unknown as DispatchOffer[]) ?? []);
       setEvents((e.data as IncidentEvent[]) ?? []);
       setFleet((f.data as unknown as FleetAssignment[]) ?? []);
+      setOutbox((n.data as unknown as OutboxRow[]) ?? []);
       setLoadedFor(incidentId);
     });
 
@@ -359,6 +386,7 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
     offers: fresh ? offers : [],
     events: fresh ? events : [],
     fleet: fresh ? fleet : [],
+    outbox: fresh ? outbox : [],
     loading: incidentId !== null && !fresh,
   };
 }

@@ -40,6 +40,7 @@ import {
   type IncidentEvent,
   type NewIncident,
   type OfferStateName,
+  type OutboxRow,
   type RankedCandidate,
   type ScoreFactor,
 } from "@/hooks/use-acute";
@@ -540,6 +541,57 @@ function Ambulance({
   );
 }
 
+const OUTBOX_STYLE: Record<string, string> = {
+  sent: "border-emerald-600 text-emerald-700",
+  queued: "border-blue-500 text-blue-700",
+  sending: "border-blue-500 text-blue-700",
+  failed: "border-red-500 text-red-600",
+  abandoned: "border-red-500 text-red-600",
+  skipped_unconfigured: "border-amber-500 text-amber-700",
+};
+
+// Grouped by channel and outcome rather than listed row by row: fifteen recipients
+// across five waves is a wall, and what a dispatcher needs is "did the message get
+// out, and if not why not".
+function Outbox({ rows }: { rows: OutboxRow[] }) {
+  if (rows.length === 0) {
+    return <p className="text-muted-foreground text-sm">Nothing queued yet.</p>;
+  }
+
+  const grouped = new Map<string, { n: number; why: string | null }>();
+  for (const r of rows) {
+    const key = `${r.channel}|${r.status}`;
+    const prev = grouped.get(key);
+    grouped.set(key, {
+      n: (prev?.n ?? 0) + 1,
+      why: prev?.why ?? r.last_error,
+    });
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {[...grouped.entries()].map(([key, v]) => {
+        const [channel, status] = key.split("|");
+        return (
+          <div key={key} className="space-y-0.5">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-medium">
+                {channel === "in_app" ? "In the app" : channel.toUpperCase()} · {v.n}
+              </span>
+              <Badge variant="outline" className={OUTBOX_STYLE[status] ?? ""}>
+                {status.replace(/_/g, " ")}
+              </Badge>
+            </div>
+            {v.why ? (
+              <p className="text-muted-foreground text-xs">{v.why}</p>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BoardRow({
   incident,
   selected,
@@ -601,7 +653,7 @@ export default function DispatchPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected =
     incidents.find((i) => i.id === selectedId) ?? incidents[0] ?? null;
-  const { dispatch, offers, events, fleet } = useIncidentDetail(
+  const { dispatch, offers, events, fleet, outbox } = useIncidentDetail(
     selected?.id ?? null,
     pulse + nudge,
   );
@@ -858,7 +910,22 @@ export default function DispatchPage() {
 
               <Card className="shadow-sm">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base tracking-tight">Audit trail</CardTitle>
+                  <CardTitle className="text-base tracking-tight">
+                    Notifications sent
+                  </CardTitle>
+                  <CardDescription>
+                    One row per recipient per wave, with retries. A send that could not
+                    happen says why.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Outbox rows={outbox} />
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base tracking-tight">Activity</CardTitle>
                   <CardDescription>
                     Append-only. No update or delete policy exists on this table.
                   </CardDescription>

@@ -230,32 +230,122 @@ grid read `factors->score`, which does not exist — the payload carries `value`
 `weight`. Both were silent: the page rendered, with the entire reason-for-choice
 column empty.
 
+## The vehicle leg
+
+A second offer/accept machine, opened automatically the moment a hospital accepts.
+There is no ambulance-first path: a crew with nowhere to deliver is not a plan, and
+EOS gates it the same way.
+
+EOS's numbers, kept: **180 s** response deadline, **8** crews offered at once then
+**4** per attempt, **4** attempts, a **1-minute** sweep, **90 s** heartbeat TTL,
+ordering by straight-line distance alone, first accept wins.
+
+**Provenance, before anything else.** EOS's fleet units are real — every row is
+written by a signed-in operator's device posting GPS on a ~5 s heartbeat, and their
+dispatch reads only those rows. We have no ambulance operators and no GPS feed, and
+**EOS's own repository contains no seeder**: their demo units are injected out of
+band, and their motion is synthesised in the client from `docId.hashCode` against a
+wall clock and never persisted. So the engine here is a faithful port and the 48
+vehicles are simulated — `is_simulated` on every row, badged in the console.
+
+Ported from `functions/index.js:2481-2953`. **Not** from
+`functions/src/fleet_assignments.js`, which looks authoritative and is dead code:
+never required, its `require`s sit below first use, it targets an orphan collection
+with no security rules, and its numbers contradict production.
+
+Six divergences, each fixing something their code admits:
+
+| EOS | here |
+|---|---|
+| accept reads the status, checks it in app code, then writes three documents outside any transaction — two operators accepting in the same tick both win | one atomic `UPDATE ... WHERE state='awaiting_response'`; zero rows means you lost |
+| `"rejected"` appears in no cloud function: eight instant refusals still wait 180–240 s | rejecting escalates once the last crew in the attempt has answered |
+| relay to another hospital's station runs only inside escalation, which refuses unless the state is already `pending_operator` — so it never runs when the accepting hospital has no vehicle | relay runs on the first dispatch too |
+| exhaustion by attempt cap is silent, while both zero-candidate paths raise an alert | every exhaustion writes an audit event |
+| no radius at all, and `assignedIncidentId` never checked — a unit 400 km away enters the list on a 999 km sentinel | 60 km, and units already on a run are excluded |
+| heartbeat TTL is 45 s in the client and 90 s in two server files, with a comment asserting they match | one value |
+
+## Notifications
+
+An outbox, because EOS's six inline send sites have no retry and no per-send failure
+record — a Twilio 5xx there loses the notification permanently, and one of their
+senders discards its own return value so partial failure is invisible even in the
+logs.
+
+Two of their defects disappear into the table shape rather than into code. Their
+"per-wave SMS fallback" is keyed per **incident** (`smsFallbackSent` is set once and
+escalation never resets it, so waves 2–6 of a critical case get push only, contrary
+to their own docs); the unique index here is keyed on the wave. And their standard
+tier can never send a fallback SMS at all — a 180 s threshold against a 120 s wave
+timeout means the wave always escalates first.
+
+Honest state of each channel:
+
+| channel | state |
+|---|---|
+| in_app | **real** — the offer row is in the realtime publication and rendered by the console and the facility inbox |
+| sms | **no gateway configured.** Parked as `skipped_unconfigured`, `last_error` naming the exact missing variables. Not marked sent, not silently dropped |
+| push | **no credentials.** Same treatment. EOS's web push is also permanently off — their VAPID key is a hardcoded empty string with a TODO |
+| voice | not implemented. EOS has no outbound voice channel either |
+
+SMS is queued with a delay — 30 s critical, 60 s high, 90 s standard — because there
+is no point paying for a message the console has already answered.
+
+## Intake
+
+`incident-intake` (edge function) is the only way in from outside the ops console.
+RLS lets ops insert incidents and nobody else, so a patient's phone cannot write one
+directly — EOS allows exactly that, which is why their rate limiter runs as a
+parallel `onDocumentCreated` trigger and can never gate the fan-out it exists to gate.
+
+The order is the point:
+
+1. **log the raw request** — before any parsing
+2. authenticate (a user's token, or the shared secret for machine callers)
+3. parse and range-check
+4. rate-limit — **flag, never block**
+5. insert, then open dispatch
+
+Step 1 is there because EOS answers `200` with empty TwiML on an unparseable SMS and
+`console.log`s the first 100 characters: a genuine emergency their regex did not
+expect leaves no durable trace anywhere. Their `webhook_events` table exists but is
+written only by the partner API path.
+
+Step 4 keeps their reasoning and not their implementation. They blocked once, a
+blocked incident dropped out of other devices' listeners, and the result was **missed
+alerts** — so a flagged incident here still dispatches and stays visible.
+
+Severity is never accepted from a caller. Coordinates are range-checked in the
+function and by `CHECK` constraints, so `x=999` is not storable and no read path
+needs to coerce `(0,0)` — EOS validates with `isNaN` only and their reader coerces
+missing coordinates to the Gulf of Guinea.
+
+`/patient/sos` sits on top of it, with **Call 112** on the same screen and always
+enabled: whatever this app does or fails to do, the phone network does not depend on
+us.
+
 ## Known gaps
 
-- **No notification transport.** Offers land in the database and the console; there
-  is no FCM/SMS push. EOS has a four-channel fan-out. The offer rows are the
-  integration point.
-- **No facility-side portal.** `facility_staff` binds an account to a facility and
-  RLS already limits a facility to its own offers, but there are no `/facility/*`
-  routes and `auth-context` knows four roles, so accept and decline are driven from
-  the ops console. The authorisation does not depend on the UI: the rpc refuses a
-  caller who is neither ops nor staff of that facility.
-- **No ambulance/fleet leg.** EOS has a second offer/accept machine for vehicles
-  after a hospital accepts, with its own 3-minute deadline and 4-attempt cap.
-  `incident_responders` models the crew but nothing dispatches one.
-- **Intake is the console's three presets.** No SOS button, no IVR hook, no GeoSMS
-  (EOS parses a Twilio webhook with signature verification). Presets deliberately do
-  not let anyone set severity by hand — the classifier is the only thing that decides.
-- **ETA is haversine at 30 km/h**, not traffic-aware. EOS calls Google Routes with a
-  2500 ms timeout for the nearest 10 candidates. Labelled `eta_basis` in every score
-  and shown in the UI.
+- **SMS and push cannot actually send.** No Twilio account and no FCM credentials are
+  configured, so those outbox rows park as `skipped_unconfigured`. The gap is
+  credentials, not code: the enqueue side, retry columns, wave keying and dedupe
+  index are all in place and a worker claims the same rows unchanged.
+- **No facility-side portal beyond the inbox.** `facility_staff` binds an account to
+  a facility and RLS limits it to its own offers; there is one screen, not a portal.
+- **Ambulance vehicles are simulated.** 48 units at 16 stations, `is_simulated` on
+  every row. No GPS feed exists, and no live position updates — a unit does not move
+  on the map while responding.
+- **ETA is haversine at 30 km/h**, not traffic-aware, on both legs. EOS does not
+  compute a vehicle ETA at all: theirs is clamped client input and the only caller
+  hardcodes 12 minutes, so every EOS ambulance ETA in production is `"~12 min"`.
+- **`intake_events` has no retention policy.** It keeps every raw inbound request,
+  including payloads from unauthenticated callers, and nothing prunes it.
 - **Speciality tags are name-derived.** A facility whose name does not say what it is
   stays unclassified and falls back to tier alone. The upgrade path is OSM's
   `healthcare:speciality`, today at 4.8% coverage. See the "Vision hospital" note in
   [LIMITATIONS.md](LIMITATIONS.md) for where name-matching has to stop.
 - **Vital thresholds in `classify_incident_severity` are not clinician-reviewed.**
   Section 1 of CLINICAL_REVIEW.md.
-- **The console's own copy is too wordy.** Every card currently carries a sentence
-  defending a design decision, and the factor sources render as internal jargon
+- **The console's own copy is too wordy.** Every card carries a sentence defending a
+  design decision, and factor sources render as internal jargon
   (`OSM_COORDINATES`, `OUR_DISPATCH_TABLE`). A plain-language pass across all screens
-  is pending.
+  is pending and is the next piece of work.

@@ -20,6 +20,7 @@ from the repo would have silently reverted the model.
 | `003_acute_layer_rls.sql` | acute layer: RLS policies, role helpers, cron schedule (as comments) |
 | `004_acute_layer_hardening.sql` | authorisation on accept/decline/open, `numeric_or_null`, vitals key fix, realtime publication |
 | `005_fleet_and_intake.sql` | ambulance leg (units, assignments, dispatch columns), `intake_events`, coordinate constraints, RLS |
+| `006_notification_outbox.sql` | outbox with retry and wave keying, enqueue triggers, drain cron |
 
 ## What is NOT captured
 
