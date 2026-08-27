@@ -159,7 +159,7 @@ clinic, was dispatch-eligible for human emergencies.** The load script excluded
 
 A red-triage road accident at Dispur with SpO2 88, SBP 85, HR 138, GCS 7:
 
-1. classified **critical** — from triage colour and vitals, not the default
+1. classified **critical** — from triage colour, keywords and vitals, not the default
 2. wave 0 offered to **3** facilities on a **45 s** fuse
 3. `required_services = {trauma, neurosurgery}` put the neuro hospital at rank 1
 4. one decline of three did **not** escalate; two remained pending
@@ -169,21 +169,93 @@ A red-triage road accident at Dispur with SpO2 88, SBP 85, HR 138, GCS 7:
 8. forced timeout → sweep escalated to wave 1, `fallback_notified` cleared
 9. full audit trail: `incident_created → dispatch_opened → wave_offered → offer_declined → status_changed → offer_accepted`
 
+Step 1 was originally written as "from triage colour and vitals". It was half true,
+and the console is what exposed it — see the vitals key mismatch below.
+
+## The console
+
+`/admin/dispatch`. Live board of incidents with wave state and the fuse counting
+down, the current wave's offers with accept and decline, the ranked candidate list
+with a per-factor breakdown, and the activity trail. Realtime, not polled: the four
+acute tables are in the `supabase_realtime` publication with `replica identity full`,
+so an offer going `pending → superseded` carries its old row and the console can tell
+what changed.
+
+Accept and decline call the security-definer functions. There is no client write
+policy on `incident_dispatch` or `dispatch_offers` at all, which is what makes "only
+the current wave may accept" enforceable rather than advisory.
+
+## Five defects the console found in the engine
+
+The engine was verified with SQL before any UI existed, and all five of these
+survived that. Each one needed a real caller — a browser, with a real logged-in
+user — to surface.
+
+**Anyone could accept for anyone.** `accept_dispatch_offer` and
+`decline_dispatch_offer` were `SECURITY DEFINER` and checked the wave, the offer
+state and the dispatch state — but never that the caller had anything to do with the
+facility they were answering for. Any authenticated account could accept a case on
+behalf of any hospital in the state. This is the same defect this document
+criticises EOS for (`ops_fleet_units`: `allow write: if request.auth != null`),
+reproduced by accident in our own engine, and SQL testing could not see it because
+`psql` is always the superuser. Now: ops role, or a `facility_staff` row for that
+facility with `can_accept`.
+
+**`escalate_dispatch` and `open_dispatch` were public rpc.** Any authenticated
+account could force any incident to its next wave, or spend fifteen facilities'
+attention on any incident. `escalate_dispatch` is revoked rather than guarded —
+`decline_dispatch_offer` calls it when the last member of a wave declines, and there
+the caller is legitimately facility staff, not ops. Inside a `SECURITY DEFINER`
+function privilege checks run as the definer, so the internal path needs no grant.
+
+**A malformed vital destroyed the whole incident.** The classifier used
+`nullif(x,'')::numeric`, which handles missing and empty and throws `22P02` on
+anything else — and it runs inside the severity trigger. `"spo2":"low"` from an SMS
+or a voice transcription did not degrade to "unmeasured"; it aborted the `INSERT`
+and the emergency was never recorded. Now `numeric_or_null()`, which cannot throw.
+
+**Vitals were written and never read.** The classifier read only `health_vitals`'
+column spellings — `oxygen_saturation`, `systolic_bp`, `heart_rate` — while every
+acute caller sends clinical shorthand: `spo2`, `sbp`, `hr`. A key that does not match
+reads as absent, and absent vitals escalate nothing. So the flagship demo case, GCS 7
+and SpO2 88, was reaching `critical` on its triage colour and the word "accident"
+with the physiology contributing **nothing at all**. Fixed in the reader rather than
+in each caller, so no future intake path has to know which spelling this function
+prefers.
+
+**The offer list never loaded, and the factor grid showed no numbers.**
+`dispatch_offers` has two foreign keys to `facilities` (`facility_id` and
+`superseded_by`), so a bare embed is ambiguous and PostgREST answered `300`. And the
+grid read `factors->score`, which does not exist — the payload carries `value` and
+`weight`. Both were silent: the page rendered, with the entire reason-for-choice
+column empty.
+
 ## Known gaps
 
 - **No notification transport.** Offers land in the database and the console; there
   is no FCM/SMS push. EOS has a four-channel fan-out. The offer rows are the
   integration point.
+- **No facility-side portal.** `facility_staff` binds an account to a facility and
+  RLS already limits a facility to its own offers, but there are no `/facility/*`
+  routes and `auth-context` knows four roles, so accept and decline are driven from
+  the ops console. The authorisation does not depend on the UI: the rpc refuses a
+  caller who is neither ops nor staff of that facility.
 - **No ambulance/fleet leg.** EOS has a second offer/accept machine for vehicles
   after a hospital accepts, with its own 3-minute deadline and 4-attempt cap.
   `incident_responders` models the crew but nothing dispatches one.
+- **Intake is the console's three presets.** No SOS button, no IVR hook, no GeoSMS
+  (EOS parses a Twilio webhook with signature verification). Presets deliberately do
+  not let anyone set severity by hand — the classifier is the only thing that decides.
 - **ETA is haversine at 30 km/h**, not traffic-aware. EOS calls Google Routes with a
-  2500 ms timeout for the nearest 10 candidates. Labelled `eta_basis` in every score.
-- **No GeoSMS intake.** EOS parses a Twilio webhook with signature verification.
-- **`incident_events` is not yet in the realtime publication**, so the console polls
-  rather than streams.
+  2500 ms timeout for the nearest 10 candidates. Labelled `eta_basis` in every score
+  and shown in the UI.
 - **Speciality tags are name-derived.** A facility whose name does not say what it is
   stays unclassified and falls back to tier alone. The upgrade path is OSM's
-  `healthcare:speciality`, today at 4.8% coverage.
+  `healthcare:speciality`, today at 4.8% coverage. See the "Vision hospital" note in
+  [LIMITATIONS.md](LIMITATIONS.md) for where name-matching has to stop.
 - **Vital thresholds in `classify_incident_severity` are not clinician-reviewed.**
   Section 1 of CLINICAL_REVIEW.md.
+- **The console's own copy is too wordy.** Every card currently carries a sentence
+  defending a design decision, and the factor sources render as internal jargon
+  (`OSM_COORDINATES`, `OUR_DISPATCH_TABLE`). A plain-language pass across all screens
+  is pending.

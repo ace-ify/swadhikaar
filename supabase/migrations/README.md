@@ -18,6 +18,7 @@ from the repo would have silently reverted the model.
 | `001_grant_app_role.sql` | role helper |
 | `002_acute_layer_schema.sql` | acute layer: types, tables, indexes, `facilities` additions |
 | `003_acute_layer_rls.sql` | acute layer: RLS policies, role helpers, cron schedule (as comments) |
+| `004_acute_layer_hardening.sql` | authorisation on accept/decline/open, `numeric_or_null`, vitals key fix, realtime publication |
 
 ## What is NOT captured
 

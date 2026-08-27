@@ -143,29 +143,46 @@ production path; this is labelled as what it is and never dressed up as IMD.
 
 ## Known open issues
 
-- **Receiving facilities cannot log in.** `user_roles_role_check` allows only
-  `admin`, `doctor`, `asha`, `patient`, `farmer`. Deliberately not added yet: nothing
-  is *dispatched* to a facility, it is only *ranked*, so there is no dispatch record
-  for a hospital to open. Adding the role first would be a login that shows an empty
-  screen. The prerequisite is a dispatch/handover table, not a role.
-- **`triage-assess` is deployed and unreachable.** Zero callers, verified. The live
-  severity ladder is `_CRITICAL_KEYWORDS_HI` in `backend/voice_agent/agent.py`, which
-  has 41 critical keywords against the function's 10. The one keyword the live path
-  lacked has been merged in, so nothing there is unique any more. Left deployed
-  because nothing calls it; marked SUPERSEDED in its own source so nobody wires in a
-  second, poorer definition of "critical".
+- **Receiving facilities have a role and a screen, but no portal of their own.**
+  `facility_staff` now exists as a role and as a table binding an account to one or
+  more facilities, and `dispatch_offers` is the screen — a facility sees only its own
+  offers, enforced by RLS. What is missing is the login route: `auth-context` still
+  knows four roles, and there are no `/facility/*` pages, so accept and decline are
+  driven from the ops console at `/admin/dispatch`. The authorisation is real either
+  way: `accept_dispatch_offer` refuses a caller who is neither ops nor staff of that
+  facility.
+- **`triage-assess` is gone.** Deleted on 2026-08-26; the repo holds a 410 tombstone
+  so nothing silently gets a second, weaker definition of "critical". The live
+  severity ladder is `_CRITICAL_KEYWORDS_HI` in `backend/voice_agent/agent.py` (45
+  keywords) plus `classify_incident_severity()` in the database. The deployed slug
+  still needs removing in Dashboard → Edge Functions; the Management API is not
+  reachable from this environment.
 - **`patients.source_incident_id` has no foreign key, correctly.** Previously listed
   here as a defect; it is not. The values are external identifiers issued by the
-  acute/SOS system (`H-DEMO-MT75XGSS`), and no local `incidents` table exists for
-  them to reference. A check constraint now enforces the rule that does apply: an
-  `acute_incident` patient must carry the incident id that created them.
-- **No `incidents` table.** The flood-triggered incident layer is designed and not
-  built. Deliberately not started two days before the demo — it needs a table, a
-  status machine, a role, and four UI surfaces.
+  EOS-side acute system (`H-DEMO-MT75XGSS`), not references to our own `incidents`
+  table, so a foreign key would reject exactly the rows it exists to describe. A
+  check constraint enforces the rule that does apply: an `acute_incident` patient
+  must carry the incident id that created them.
+- **The incident layer is built; the transport around it is not.** `incidents`,
+  `incident_dispatch`, `dispatch_offers`, `incident_responders`, `incident_events`
+  and the wave engine all exist and are verified end to end — see
+  [ACUTE_LAYER.md](ACUTE_LAYER.md). Still missing: any notification transport (offers
+  land in the database and the console, nothing pushes), an ambulance leg, and an
+  intake path other than the console's own presets.
 - **Temperature is collected and never used**, and age and gender are collected and
   discarded. See [CLINICAL_REVIEW.md](CLINICAL_REVIEW.md) section 8.
-- **The campus sub-unit problem has been fixed three times in three layers** — bed
-  counts, map draw order, and dispatch ranking — because OpenStreetMap maps every
-  building on a teaching-hospital campus as its own `amenity=hospital`. Three fixes
-  by name-matching is the signal that the data wants a `parent_facility_id` resolved
-  from OSM site relations at load time.
+- **The OpenStreetMap naming problem has now been handled in five places** — bed
+  counts, map draw order, dispatch eligibility, dispatch ranking, and speciality
+  routing — because OSM maps every building on a teaching-hospital campus as its own
+  `amenity=hospital`, and because a facility's name is the only clue to what it
+  treats. Five fixes by name-matching is the signal that the data wants a
+  `parent_facility_id` resolved from OSM site relations at load time.
+
+  Where the name-matching stops: a facility called **"Vision hospital"** is tagged
+  `amenity=hospital` with 155 beds and no speciality tag. It looks like an eye
+  hospital and may well be one — but "Vision" is also a common Indian hospital brand
+  name, and OSM says *hospital*. It was offered a cardiac arrest at rank 8 of 15,
+  only after three waves of better-matched hospitals failed to answer. That is the
+  engine widening its search, not a misroute, and demoting it on the word alone
+  would repeat the mistake corrected earlier: a speciality guess strong enough to
+  promote is not automatically strong enough to exclude.

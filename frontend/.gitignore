@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template. `.env*` also swallowed .env.example, so the one file that
+# documents which key the app needs was untracked — and a legacy anon key sitting in
+# .env.local disabled every login with nothing in the repo to check against.
+!.env.example
 
 # vercel
 .vercel

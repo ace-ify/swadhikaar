@@ -74,6 +74,19 @@ Dashboard → Authentication → Users → the row's **⋮** menu → **Reset pa
 a recovery email, or **Update user** sets one directly. The app itself has no
 "forgot password" screen — worth adding before real ASHAs use it.
 
+## If nobody can log in, check the key before the password
+
+Sign-in returning 401 for every account, with the page saying *"This page is out of
+date"*, is not a password problem — that message is what `humanError()` shows for any
+API-key error. It happened once already: `frontend/.env.local` held the **legacy JWT
+anon key** (`eyJhbGciOi...`), which is disabled on this project, while the backend had
+already moved to the publishable key.
+
+Correct value is the `sb_publishable_...` key from Dashboard → Project Settings → API
+keys. See `frontend/.env.example`. Restart `next dev` afterwards —
+`NEXT_PUBLIC_*` values are inlined at build time, so editing `.env.local` under a
+running server changes nothing.
+
 ## If you delete users
 
 Deleting an auth user cascades. `user_roles`, `field_worker_areas`, and the
