@@ -583,6 +583,27 @@ export const rejectFleetOffer = (assignmentId: string, reason: string) =>
 // member of the current wave has declined. A dispatcher button that skips a
 // facility's remaining fuse would be a way to lose a bed that was about to say yes.
 
+// Booth housekeeping. Narrow on purpose: the rpc deletes only incidents it created
+// itself and never touches a row representing a person.
+export interface DemoState {
+  simulated_incidents: number;
+  real_incidents: number;
+  open_offers: number;
+  units_total: number;
+  units_free: number;
+  reliability_rows: number;
+  calls_due_now: number;
+  routable_phones: number;
+  hospital_logins: number;
+}
+
+export async function demoState(): Promise<DemoState | null> {
+  const { data } = await db().rpc("demo_state");
+  return (data as DemoState) ?? null;
+}
+
+export const resetDemoState = () => rpc("reset_demo_state", {});
+
 export interface NewIncident {
   victim_name: string;
   victim_age: number | null;

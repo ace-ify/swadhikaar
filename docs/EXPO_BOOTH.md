@@ -172,19 +172,21 @@ Answer it before they ask:
 ## Reset between visitors
 
 Every visitor who presses a preset creates a real incident. After a few, the board is
-cluttered and the story is muddier. Reset in ten seconds:
+cluttered and the story is muddier.
 
-```sql
-delete from incidents where is_simulated;
-delete from facility_reliability;   -- test timeouts otherwise skew the real scores
-update fleet_units u
-   set available = true, assigned_incident_id = null,
-       lat = f.lat + ((('x'||substr(md5(u.call_sign),1,4))::bit(16)::int % 17 - 8) * 0.0035),
-       lon = f.lon + ((('x'||substr(md5(u.call_sign),5,4))::bit(16)::int % 19 - 9) * 0.0035)
-  from facilities f where f.id = u.stationed_facility_id;
-```
+**Keep `/admin/dispatch` and `/admin/demo-reset` open in two tabs.** The reset page shows
+whether a reset is even needed — test cases on the board, ambulances free, calls due,
+whether the hospital login is linked — and clears it in one press.
 
-Keep it open in a Supabase SQL Editor tab. Do this between groups, not mid-explanation.
+It is deliberately not in the sidebar: a visitor should not see the scaffolding, and a
+destructive control one tap from "Accept patient" is a bad idea regardless of who is
+watching. Type the URL.
+
+The reset touches only what the demo created. Patients, screenings, voice calls,
+escalations, consents and the audit log are never deletable from there, and it refuses
+outright for any account that is not an admin.
+
+Do this between groups, not mid-explanation.
 
 ---
 
