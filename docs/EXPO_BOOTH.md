@@ -9,6 +9,51 @@ the table.
 
 ---
 
+## The spine — say this before you show anything
+
+Four layers built over three weeks stop feeling like four products the moment they are
+described as one loop rather than a list:
+
+```
+   ASHA screens someone in a village          <- how a person with no record enters
+             |
+             v
+   Voice calls them in their language         <- how they stay in view between visits
+             |                                   7 call types across the journey
+             |
+    something goes wrong
+             |
+             v
+   Dispatch finds a hospital in 45 seconds    <- the exit ramp
+             |
+             v
+   Discharge creates the follow-up protocol   <- and puts them back in the loop
+             |
+             +--> back to voice
+```
+
+The sentence that ties it:
+
+> *"Most health systems are episodic. A person appears when they are sick and disappears
+> afterwards. We built the loop that keeps them in view between episodes — and can push
+> them out of it, into a hospital bed, in forty-five seconds when something goes wrong."*
+
+Why each piece is load-bearing rather than bolted on, in case anyone asks:
+
+| Piece | The question it answers |
+|---|---|
+| ASHA screening, offline-first | How does someone with no medical record get one? Signal does not exist in the field, so the phone queues and syncs later. |
+| Voice, 10 Indic languages | How do you stay in contact with someone who cannot read and has no smartphone? |
+| Weather advisory | How do you reach people *before* anyone is sick? Heat index pulls a cohort into the call queue. |
+| Dispatch engine | When it is an emergency, which hospital will actually take them? |
+| Discharge seam | What stops someone vanishing after the hospital door? |
+
+If a visitor only has time for one branch, show dispatch — it is the most visceral. But
+say the loop first, in twenty seconds, or the dispatch console looks like a standalone
+tool.
+
+---
+
 ## Before the doors open
 
 Four tabs, signed in, loaded, in this order. Nothing should be loading while you talk.
