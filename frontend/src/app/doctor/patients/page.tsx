@@ -1,5 +1,6 @@
 "use client";
 
+import { journeyWords } from "@/lib/labels";
 import { useState } from "react";
 import {
   Card,
@@ -359,7 +360,7 @@ function PatientDetailSheet({
                 { label: "Phone", value: patient.phone },
                 { label: "Language", value: patient.language },
                 { label: "Camp Type", value: patient.camp_type },
-                { label: "Journey Status", value: patient.journey_status },
+                { label: "Stage", value: journeyWords(patient.journey_status) },
                 { label: "Consent", value: patient.consent_status },
                 { label: "Enrolled", value: formatDate(patient.created_at) },
               ].map((row) => (

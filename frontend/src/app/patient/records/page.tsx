@@ -277,9 +277,9 @@ export default function PatientRecordsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">FHIR Documents</CardTitle>
+              <CardTitle className="text-base">Your medical records</CardTitle>
               <CardDescription>
-                Your health records in ABDM-compliant FHIR R4 format
+                In the standard format hospitals and insurers can read (ABDM / FHIR R4)
               </CardDescription>
             </div>
             <Button

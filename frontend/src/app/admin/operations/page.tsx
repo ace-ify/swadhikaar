@@ -1,5 +1,6 @@
 "use client";
 
+import { journeyWords } from "@/lib/labels";
 import {
   Card,
   CardContent,
@@ -538,7 +539,7 @@ export default function AdminOperationsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">
-                        {od.patient.journey_status?.replace(/_/g, " ") || "screened"}
+                        {journeyWords(od.patient.journey_status)}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-sm font-semibold text-slate-900">

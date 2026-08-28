@@ -206,10 +206,7 @@ export default function CrossDomainPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Weather advisory</CardTitle>
-          <CardDescription>
-            {HAZARD[hazard].blurb} Calls are queued into the existing
-            recovery-call executor; no separate dispatcher.
-          </CardDescription>
+          <CardDescription>{HAZARD[hazard].blurb}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">

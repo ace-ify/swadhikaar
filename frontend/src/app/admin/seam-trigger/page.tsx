@@ -1,5 +1,6 @@
 "use client";
 
+import { journeyWords } from "@/lib/labels";
 import { useState } from "react";
 import {
   Card,
@@ -180,8 +181,7 @@ export default function SeamTriggerPage() {
           <CardHeader>
             <CardTitle className="text-base">Result</CardTitle>
             <CardDescription>
-              Replaying the same incident id resolves the same patient and adds no
-              duplicate Encounter or call.
+              Sending the same incident twice will not create a second patient.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -214,7 +214,7 @@ export default function SeamTriggerPage() {
                   <dt className="text-muted-foreground">Resolved by</dt>
                   <dd>{result.patient?.resolved_by}</dd>
                   <dt className="text-muted-foreground">Journey</dt>
-                  <dd>{result.patient?.journey_status}</dd>
+                  <dd>{journeyWords(result.patient?.journey_status)}</dd>
                   <dt className="text-muted-foreground">Intake</dt>
                   <dd>{result.patient?.intake_source}</dd>
                 </dl>

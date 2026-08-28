@@ -232,7 +232,7 @@ export default function AdminReportsPage() {
       {/* Resource Type Breakdown */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">FHIR Resource Type Breakdown</CardTitle>
+          <CardTitle className="text-base">Records by type</CardTitle>
           <CardDescription>All generated resources by type — ABDM R4 profiles</CardDescription>
         </CardHeader>
         <CardContent>

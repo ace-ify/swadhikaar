@@ -63,7 +63,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Escalation Queue", href: "/doctor/escalations", icon: HeartPulse },
     { label: "Health Camp Patients", href: "/doctor/patients", icon: Stethoscope },
     { label: "Vaccinations", href: "/doctor/vaccinations", icon: Syringe },
-    { label: "AI Verification", href: "/doctor/review", icon: BrainCircuit },
+    { label: "Check AI Records", href: "/doctor/review", icon: BrainCircuit },
   ],
   admin: [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
@@ -75,9 +75,9 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Dispatch Console", href: "/admin/dispatch", icon: Siren },
     { label: "Finance", href: "/admin/finance", icon: IndianRupee },
     { label: "Consent", href: "/admin/consent", icon: ShieldCheck },
-    { label: "FHIR Reports", href: "/admin/reports", icon: FileBarChart },
-    { label: "Occupational Health", href: "/admin/cross-domain", icon: Sprout },
-    { label: "Acute Seam", href: "/admin/seam-trigger", icon: Ambulance },
+    { label: "Health Records Export", href: "/admin/reports", icon: FileBarChart },
+    { label: "Farm & Worker Health", href: "/admin/cross-domain", icon: Sprout },
+    { label: "Discharge to Follow-up", href: "/admin/seam-trigger", icon: Ambulance },
   ],
   facility_staff: [
     { label: "Incoming Cases", href: "/facility/inbox", icon: Siren },
