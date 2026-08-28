@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, ClipboardList, Users } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, ClipboardList, Users, LogOut } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
 import { ConnectivitySlot } from "@/components/asha/ui";
 import { startOfflineRuntime } from "@/lib/offline/register";
@@ -18,6 +19,13 @@ const NAV = [
 
 export default function AshaLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuth();
+
+  async function handleLogout() {
+    await signOut();
+    router.push("/login");
+  }
 
   // Registers the service worker and drains the outbox on `online` /
   // `visibilitychange`. Without this the queue only moves when someone taps
@@ -36,8 +44,20 @@ export default function AshaLayout({ children }: { children: React.ReactNode }) 
           </span>
           <span className="text-[16px] font-bold">Swadhikaar</span>
         </Link>
-        {/* placeholder chip — swap ConnectivitySlot's body, not this slot */}
-        <ConnectivitySlot />
+        <div className="flex items-center gap-2">
+          {/* placeholder chip — swap ConnectivitySlot's body, not this slot */}
+          <ConnectivitySlot />
+          {/* Header, not the bottom nav: that has three thumb-sized targets and a
+              fourth would put "sign out" next to "new screening". A shared phone
+              still needs a way off the account, which this shell had no route to. */}
+          <button
+            onClick={() => void handleLogout()}
+            aria-label="लॉग आउट / Log out"
+            className="grid size-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 active:bg-slate-100"
+          >
+            <LogOut aria-hidden className="size-4" />
+          </button>
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-[430px] px-4 pt-4 pb-28">{children}</main>
