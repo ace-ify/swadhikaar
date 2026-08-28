@@ -43,10 +43,7 @@ export function MedicalSnapshot({
 
   if (empty) {
     return (
-      <p className="text-muted-foreground text-xs">
-        No medical history on file — this person is not in the system, or reported the
-        emergency for someone else.
-      </p>
+      <p className="text-muted-foreground text-xs">No medical history on file.</p>
     );
   }
 
