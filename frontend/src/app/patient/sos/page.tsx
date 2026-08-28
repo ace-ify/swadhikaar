@@ -9,21 +9,13 @@
 // Calling 112 is on this screen too, and always enabled. Whatever this app does or
 // fails to do, the phone network is the fallback that does not depend on us.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
-
-type Result = {
-  ok?: boolean;
-  ref?: string;
-  severity?: string;
-  error?: string;
-  detail?: string;
-  rate_limit_flagged?: boolean;
-  dispatch?: { offered_to?: number; candidates?: number; state?: string };
-};
+import { SosStatus } from "@/components/patient/sos-status";
+import { useAcutePulse, useMyLiveIncident, myDispatch } from "@/hooks/use-acute";
 
 // Hindi first, English under it. This is the one screen a person in a village holds
 // in an emergency; the admin screens are read by staff who work in English.
@@ -50,14 +42,38 @@ function position(): Promise<GeolocationPosition> {
   });
 }
 
+function useNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 export default function SosPage() {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const now = useNow();
+
+  // Realtime, then a nudge for the moment right after sending, so the screen never
+  // depends on a socket to be correct.
+  const pulse = useAcutePulse();
+  const [nudge, setNudge] = useState(0);
+  const { data: incident, error: loadError } = useMyLiveIncident(pulse + nudge);
+
+  // "Live" means the case has not finished. A delivered or closed case drops back to the
+  // buttons, because the next emergency is a new one.
+  const d = myDispatch(incident);
+  const live =
+    incident !== null &&
+    !["resolved", "cancelled", "expired"].includes(incident.status) &&
+    !(incident.status === "arrived" && d?.ambulance_state === "delivered");
 
   async function send(kind: (typeof KINDS)[number]) {
     setBusy(true);
-    setResult(null);
+    setError(null);
     try {
       setStage("जगह पता कर रहे हैं… / Finding your location…");
       const pos = await position();
@@ -88,16 +104,21 @@ export default function SosPage() {
           }),
         },
       );
-      setResult((await res.json()) as Result);
+      const body = (await res.json()) as { ok?: boolean; error?: string; detail?: string };
+      if (!res.ok || !body.ok) {
+        setError(body.detail ?? body.error ?? "Could not send.");
+      } else {
+        setNudge((n) => n + 1);
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not send.";
       // A geolocation refusal is the common case and needs its own words, not a
       // browser error string.
-      setResult({
-        error: /denied|permission/i.test(message)
+      setError(
+        /denied|permission/i.test(message)
           ? "लोकेशन बंद है, इसलिए हम किसी को आपकी जगह नहीं बता सकते। इसे चालू करें, या अभी 112 पर कॉल करें। / Location is off — turn it on, or call 112 now."
           : message,
-      });
+      );
     } finally {
       setBusy(false);
       setStage("");
@@ -108,16 +129,22 @@ export default function SosPage() {
     <div className="mx-auto max-w-xl space-y-5 pb-20">
       <div className="space-y-1 px-1">
         <h1 className="text-2xl font-bold tracking-tight" lang="hi">
-          मदद चाहिए?
+          {live ? "मदद आ रही है" : "मदद चाहिए?"}
         </h1>
         <p className="text-muted-foreground text-sm" lang="hi">
-          जो हो रहा है उस पर दबाएं। नज़दीकी अस्पतालों को तुरंत बताया जाएगा।
+          {live
+            ? "यह पेज अपने आप बदलता रहेगा। बंद न करें।"
+            : "जो हो रहा है उस पर दबाएं। नज़दीकी अस्पतालों को तुरंत बताया जाएगा।"}
         </p>
         <p className="text-muted-foreground text-xs">
-          Tap what is happening. The nearest hospitals are told straight away.
+          {live
+            ? "This page updates on its own. You can keep it open."
+            : "Tap what is happening. The nearest hospitals are told straight away."}
         </p>
       </div>
 
+      {/* Always available, live case or not. Whatever this app does or fails to do, the
+          phone network is the fallback that does not depend on us. */}
       <a href="tel:112" className="block">
         <Button variant="outline" size="lg" className="h-14 w-full text-base">
           <Phone className="mr-2 size-5" />
@@ -126,71 +153,52 @@ export default function SosPage() {
         </Button>
       </a>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {KINDS.map((k) => (
-          <Button
-            key={k.en}
-            size="lg"
-            variant={k.triage === "red" ? "destructive" : "default"}
-            className="h-16 text-base"
-            disabled={busy}
-            onClick={() => void send(k)}
-          >
-            <span className="flex flex-col items-center leading-tight">
-              <span lang="hi" className="text-base font-semibold">
-                {k.hi}
+      {live && incident ? (
+        <SosStatus incident={incident} now={now} />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {KINDS.map((k) => (
+            <Button
+              key={k.en}
+              size="lg"
+              variant={k.triage === "red" ? "destructive" : "default"}
+              className="h-16 text-base"
+              disabled={busy}
+              onClick={() => void send(k)}
+            >
+              <span className="flex flex-col items-center leading-tight">
+                <span lang="hi" className="text-base font-semibold">
+                  {k.hi}
+                </span>
+                <span className="text-xs font-normal opacity-80">{k.en}</span>
               </span>
-              <span className="text-xs font-normal opacity-80">{k.en}</span>
-            </span>
-          </Button>
-        ))}
-      </div>
+            </Button>
+          ))}
+        </div>
+      )}
 
-      {busy ? (
-        <p className="text-center text-sm font-medium">{stage}</p>
-      ) : null}
+      {busy ? <p className="text-center text-sm font-medium">{stage}</p> : null}
 
-      {result?.error ? (
-        <Card className="border-destructive">
-          <CardContent className="space-y-1 py-5">
-            <p className="font-semibold">{result.error}</p>
-            {result.detail ? (
-              <p className="text-muted-foreground text-sm">{result.detail}</p>
-            ) : null}
+      {/* Stated, not silent. The last known state stays on screen above; this says it
+          may be stale rather than letting the screen quietly contradict itself. */}
+      {loadError ? (
+        <Card className="border-amber-500">
+          <CardContent className="py-4 text-sm">
+            <p className="font-semibold" lang="hi">
+              इंटरनेट नहीं मिल रहा — यह जानकारी पुरानी हो सकती है।
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Cannot reach the server, so this may be out of date. If anything changes,
+              call 112.
+            </p>
           </CardContent>
         </Card>
       ) : null}
 
-      {result?.ok ? (
-        <Card className="border-emerald-600">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
-              <span lang="hi">मदद भेजी जा रही है</span>
-              <span className="text-muted-foreground ml-2 text-xs font-normal">
-                Help is being arranged
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p lang="hi">
-              नंबर <span className="font-mono font-semibold">{result.ref}</span> — यह
-              याद रखें।
-            </p>
-            {result.dispatch?.offered_to ? (
-              <p lang="hi">
-                {result.dispatch.offered_to} अस्पतालों को बताया गया है। थोड़ी देर में
-                जवाब आएगा।
-              </p>
-            ) : (
-              <p lang="hi">
-                पास कोई अस्पताल नहीं मिला — कृपया 112 पर कॉल करें।
-              </p>
-            )}
-            {result.rate_limit_flagged ? (
-              <p className="text-muted-foreground text-xs" lang="hi">
-                आपने कई बार भेजा है। यह फिर भी आगे भेज दिया गया है।
-              </p>
-            ) : null}
+      {error ? (
+        <Card className="border-destructive">
+          <CardContent className="py-5">
+            <p className="font-semibold">{error}</p>
           </CardContent>
         </Card>
       ) : null}

@@ -53,6 +53,9 @@ export interface Incident {
   required_services: string[];
   status: IncidentStatus;
   vitals: Record<string, number | string | null>;
+  // Copied from the patient's profile at create time. Empty for a bystander call about
+  // someone the system does not know.
+  medical_snapshot: Record<string, unknown>;
   golden_hour_start: string;
   intake_source: string;
   is_simulated: boolean;
@@ -158,6 +161,7 @@ export type AmbulanceState =
   | "en_route"
   | "on_scene"
   | "transporting"
+  | "delivered"
   | "no_operator";
 
 export type FleetOfferState =
@@ -266,6 +270,10 @@ export function useAcutePulse() {
       "incident_dispatch",
       "dispatch_offers",
       "incident_events",
+      // Without this the patient's map never moves on its own: the vehicle's position
+      // changes in fleet_units and nothing else does, so no other table's event would
+      // wake the refetch.
+      "fleet_units",
     ]) {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, bump);
     }
@@ -395,6 +403,150 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
 }
 
 // ---------------------------------------------------------------------------
+// Patient side — their own live emergency
+// ---------------------------------------------------------------------------
+
+export interface MyIncident {
+  id: string;
+  ref: string;
+  incident_type: string;
+  description: string | null;
+  severity: "critical" | "high" | "standard";
+  status: IncidentStatus;
+  address: string | null;
+  district: string | null;
+  lat: number;
+  lon: number;
+  golden_hour_start: string;
+  created_at: string;
+  medical_snapshot: Record<string, unknown>;
+  dispatch: MyDispatch | MyDispatch[] | null;
+}
+
+export interface MyDispatch {
+  state: DispatchStateName;
+  wave_index: number;
+  max_waves: number;
+  wave_timeout_at: string | null;
+  eta_seconds: number | null;
+  ambulance_state: AmbulanceState | null;
+  ambulance_eta_seconds: number | null;
+  hospital: { name: string; lat: number; lon: number } | null;
+  unit: {
+    call_sign: string;
+    driver_name: string | null;
+    lat: number | null;
+    lon: number | null;
+    heading_deg: number | null;
+  } | null;
+}
+
+export function myDispatch(i: MyIncident | null): MyDispatch | null {
+  if (!i?.dispatch) return null;
+  return Array.isArray(i.dispatch) ? (i.dispatch[0] ?? null) : i.dispatch;
+}
+
+// The patient's own most recent emergency, with everything the screen needs in one
+// round trip. The FK hint is mandatory: incident_dispatch has two foreign keys to
+// facilities (accepted and relay), so a bare embed is ambiguous and PostgREST answers
+// 300 -- the same trap dispatch_offers set earlier.
+export function useMyLiveIncident(pulse = 0) {
+  const [data, setData] = useState<MyIncident | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .from("incidents")
+      .select(
+        "id,ref,incident_type,description,severity,status,address,district,lat,lon," +
+          "golden_hour_start,created_at,medical_snapshot," +
+          "dispatch:incident_dispatch(state,wave_index,max_waves,wave_timeout_at," +
+          "eta_seconds,ambulance_state,ambulance_eta_seconds," +
+          "hospital:facilities!incident_dispatch_accepted_facility_id_fkey(name,lat,lon)," +
+          "unit:fleet_units(call_sign,driver_name,lat,lon,heading_deg))",
+      )
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data: rows, error: err }) => {
+        if (cancelled) return;
+        // A failed request must NOT read as "you have no emergency". The first version
+        // set data to null on any outcome, so one dropped connection put the SOS buttons
+        // back in front of someone whose ambulance was already on its way -- observed in
+        // the browser, not theorised. Keep the last known state and report the failure.
+        if (err) {
+          setError(err.message);
+        } else {
+          setError(null);
+          setData((rows as unknown as MyIncident[])?.[0] ?? null);
+        }
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading, error };
+}
+
+export interface EmergencyProfile {
+  id: string;
+  name: string;
+  phone: string | null;
+  language: string | null;
+  abha_id: string | null;
+  blood_group: string | null;
+  allergies: string[] | null;
+  chronic_conditions: string[] | null;
+  current_medications: string[] | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_profile_updated_at: string | null;
+}
+
+export function useMyProfile(pulse = 0) {
+  const [data, setData] = useState<EmergencyProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .from("patients")
+      .select(
+        "id,name,phone,language,abha_id,blood_group,allergies,chronic_conditions," +
+          "current_medications,emergency_contact_name,emergency_contact_phone," +
+          "emergency_profile_updated_at",
+      )
+      .limit(1)
+      .then(({ data: rows }) => {
+        if (cancelled) return;
+        setData((rows as unknown as EmergencyProfile[])?.[0] ?? null);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading };
+}
+
+// Writes go through the table, not an rpc: patients_update already restricts to
+// visible_patient_ids(), which for a patient is their own row and nobody else's.
+export async function saveMyProfile(
+  id: string,
+  patch: Record<string, string[] | string | null>,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await db()
+    .from("patients")
+    .update({ ...patch, emergency_profile_updated_at: new Date().toISOString() })
+    .eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // Facility side
 // ---------------------------------------------------------------------------
 
@@ -416,7 +568,7 @@ export function useFacilityOffers(pulse = 0) {
           "winner:facilities!dispatch_offers_superseded_by_fkey(name)," +
           "incident:incidents(id,ref,incident_type,description,severity,triage_colour," +
           "victim_name,victim_age,address,district,lat,lon,vitals,required_services," +
-          "status,golden_hour_start,is_simulated)",
+          "status,golden_hour_start,is_simulated,medical_snapshot)",
       )
       .order("offered_at", { ascending: false })
       .limit(40)
@@ -454,7 +606,7 @@ export type FacilityOffer = DispatchOffer & {
     | "status"
     | "golden_hour_start"
     | "is_simulated"
-  > | null;
+  > & { medical_snapshot?: Record<string, unknown> | null } | null;
 };
 
 export interface MyFacility {

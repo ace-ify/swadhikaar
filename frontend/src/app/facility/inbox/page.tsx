@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
 import {
   useAcutePulse,
   useFacilityOffers,
@@ -145,6 +146,10 @@ function OfferCard({
 
       <CardContent className="space-y-3">
         {inc?.description ? <p className="text-sm">{inc.description}</p> : null}
+
+        {/* Before the vitals, not after: blood group and allergies change what the team
+            prepares, and a nurse reading top-down should hit them first. */}
+        <MedicalSnapshot snapshot={inc?.medical_snapshot} />
 
         {vitals.length > 0 ? (
           <div className="flex flex-wrap gap-2">

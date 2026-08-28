@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
 import {
   useAcutePulse,
   useIncidents,
@@ -991,6 +992,7 @@ export default function DispatchPage() {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {selected.description ? <p>{selected.description}</p> : null}
+                <MedicalSnapshot snapshot={selected.medical_snapshot} />
                 {Object.keys(selected.vitals ?? {}).length > 0 ? (
                   <p className="font-mono text-xs">
                     {Object.entries(selected.vitals)

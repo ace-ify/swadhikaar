@@ -54,6 +54,7 @@ const navByRole: Record<string, NavItem[]> = {
   patient: [
     { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
     { label: "Get Help Now", href: "/patient/sos", icon: Siren },
+    { label: "Emergency Card", href: "/patient/profile", icon: HeartPulse },
     { label: "My Records", href: "/patient/records", icon: ClipboardList },
     { label: "Call History", href: "/patient/calls", icon: PhoneCall },
     { label: "Consent", href: "/patient/consent", icon: ShieldCheck },
