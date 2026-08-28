@@ -58,3 +58,78 @@ comment on column public.incident_events.seq is
 --     vehicle leg by itself
 --   * both grant_app_role failure paths leave user_roles untouched
 --   * a fresh incident's trail reads incident_created -> dispatch_opened -> wave_offered
+
+-- 4 -------------------------------------------------------------------------
+-- The last three functions with a role-mutable search_path, two of them triggers that
+-- now fire on the acute tables too. Pinned to '' (empty) rather than 'public', because
+-- none of the three references a table or a public type -- the mistake made earlier in
+-- this project was setting '' on a function that DID declare variables of public enum
+-- types, which broke the severity classifier on the next insert.
+--
+-- Verified by exercising the triggers afterwards rather than trusting the migration:
+-- an incident insert still classified critical and still stamped updated_at, and a
+-- patients update still normalised 'critical' to 'High'.
+create or replace function public.canonical_risk_level(v text)
+returns text language sql immutable set search_path to ''
+as $function$
+  select case
+    when v is null or btrim(v) = '' then null
+    when lower(btrim(v)) like 'high%'     then 'High'
+    when lower(btrim(v)) like 'critical%' then 'High'
+    when lower(btrim(v)) like 'mod%'      then 'Moderate'
+    when lower(btrim(v)) like 'medium%'   then 'Moderate'
+    when lower(btrim(v)) like 'low%'      then 'Low'
+    else 'Unknown'
+  end;
+$function$;
+
+create or replace function public.patients_normalise_risk_level()
+returns trigger language plpgsql set search_path to ''
+as $function$
+begin
+  new.risk_level := public.canonical_risk_level(new.risk_level);
+  return new;
+end;
+$function$;
+
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql set search_path to ''
+as $function$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$function$;
+
+-- 5 -------------------------------------------------------------------------
+-- intake_events keeps every raw inbound request, including payloads from callers that
+-- failed to authenticate -- which is the point, and also unbounded growth of a table
+-- holding phone numbers and coordinates. 30 days for anything that produced an
+-- incident, 7 for noise. Not 24 hours: a parse bug found on Monday needs the
+-- weekend's failures to diagnose.
+--
+--   select cron.schedule('prune-intake-events', '20 3 * * *',
+--     $$select public.prune_intake_events()$$);
+--
+-- 03:20, not 03:00, because every scheduler in the world fires on the hour.
+create or replace function public.prune_intake_events()
+returns jsonb language plpgsql security definer set search_path to 'public'
+as $function$
+declare
+  noise integer;
+  aged integer;
+begin
+  delete from intake_events
+   where outcome in ('unauthorised', 'parse_failed', 'rejected', 'duplicate')
+     and received_at < now() - interval '7 days';
+  get diagnostics noise = row_count;
+
+  delete from intake_events
+   where received_at < now() - interval '30 days';
+  get diagnostics aged = row_count;
+
+  return jsonb_build_object('noise_pruned', noise, 'aged_pruned', aged, 'at', now());
+end;
+$function$;
+
+revoke all on function public.prune_intake_events() from public, anon, authenticated;

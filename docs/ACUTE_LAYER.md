@@ -337,8 +337,9 @@ us.
 - **ETA is haversine at 30 km/h**, not traffic-aware, on both legs. EOS does not
   compute a vehicle ETA at all: theirs is clamped client input and the only caller
   hardcodes 12 minutes, so every EOS ambulance ETA in production is `"~12 min"`.
-- **`intake_events` has no retention policy.** It keeps every raw inbound request,
-  including payloads from unauthenticated callers, and nothing prunes it.
+- **`intake_events` retention is 30 days**, 7 for noise (unauthorised, unparseable,
+  rejected). Pruned nightly at 03:20. Not 24 hours: a parse bug found on Monday needs
+  the weekend's failures to diagnose.
 - **Speciality tags are name-derived.** A facility whose name does not say what it is
   stays unclassified and falls back to tier alone. The upgrade path is OSM's
   `healthcare:speciality`, today at 4.8% coverage. See the "Vision hospital" note in
