@@ -25,6 +25,7 @@ import {
   type Escalation,
   type RankedFacility,
 } from "@/hooks/use-supabase";
+import type { FleetUnitLive } from "@/hooks/use-acute";
 
 // Bihar + Assam. Zoom 6 shows both Patna and Guwahati, which is the whole point:
 // the acute layer is in Bihar and the flood advisory fires in Assam.
@@ -40,6 +41,9 @@ type Props = {
   patients: Patient[];
   facilities: Facility[];
   escalations: Escalation[];
+  // Positions are simulated. Passed in rather than fetched here so the page owns the
+  // realtime subscription and this component stays a renderer.
+  units?: FleetUnitLive[];
 };
 
 function Legend({ counts }: { counts: Record<string, number> }) {
@@ -53,6 +57,8 @@ function Legend({ counts }: { counts: Record<string, number> }) {
         ["#2563eb", `Facility, dispatch-eligible (${counts.eligible})`],
         ["#94a3b8", `Facility, not receiving (${counts.ineligible})`],
         ["#7c3aed", `Open escalation (${counts.escalations})`],
+        ["#0891b2", `Ambulance responding (${counts.responding})`],
+        ["#64748b", `Ambulance free (${counts.freeUnits})`],
         ["#1e293b", `Simulated record, dashed ring (${counts.simulated})`],
       ].map(([color, label]) => (
         <div key={label} className="flex items-center gap-2 py-0.5">
@@ -67,13 +73,19 @@ function Legend({ counts }: { counts: Record<string, number> }) {
       <div className="mt-2 max-w-[15rem] border-t pt-2 text-[11px] leading-snug text-muted-foreground">
         Patient pins are locality centroids with an offset, not household
         locations. Facility names and coordinates are OpenStreetMap; bed counts
-        are simulated.
+        are simulated. <strong>Ambulance positions are simulated</strong> — there is
+        no vehicle GPS feed.
       </div>
     </div>
   );
 }
 
-export default function OperationsMap({ patients, facilities, escalations }: Props) {
+export default function OperationsMap({
+  patients,
+  facilities,
+  escalations,
+  units = [],
+}: Props) {
   const [showSimulatedCapacity, setShowSimulatedCapacity] = useState(false);
   // Clicking a patient asks rank_receiving_facilities() where that person would be
   // sent. Ranking lives in Postgres beside the data, so this is one RPC rather than
@@ -118,8 +130,10 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
       ineligible: facilities.filter((f) => !f.dispatch_eligible).length,
       escalations: escalationPoints.length,
       simulated: plotted.filter((p) => p.intake_source === "simulated_cohort").length,
+      responding: units.filter((u) => u.assigned_incident_id !== null).length,
+      freeUnits: units.filter((u) => u.assigned_incident_id === null).length,
     }),
-    [plotted, facilities, escalationPoints]
+    [plotted, facilities, escalationPoints, units]
   );
 
   const unplotted = patients.length - plotted.length;
@@ -275,6 +289,46 @@ export default function OperationsMap({ patients, facilities, escalations }: Pro
                   </Tooltip>
                 </CircleMarker>
               ))}
+            </LayerGroup>
+          </LayersControl.Overlay>
+
+          {/* Last overlay, so vehicles paint above everything else: Leaflet draws in
+              insertion order, and a moving ambulance is what the eye is following. */}
+          <LayersControl.Overlay checked name={`Ambulances (${units.length}, simulated)`}>
+            <LayerGroup>
+              {units
+                .filter((u) => u.lat != null && u.lon != null)
+                .map((u) => {
+                  const responding = u.assigned_incident_id !== null;
+                  return (
+                    <CircleMarker
+                      key={u.id}
+                      center={[u.lat as number, u.lon as number]}
+                      radius={responding ? 8 : 5}
+                      pathOptions={{
+                        color: responding ? "#0891b2" : "#64748b",
+                        fillColor: responding ? "#0891b2" : "#64748b",
+                        fillOpacity: responding ? 0.9 : 0.45,
+                        weight: responding ? 3 : 1,
+                        // Dashed like every other simulated record on this map.
+                        dashArray: "3 3",
+                      }}
+                    >
+                      <Tooltip>
+                        <div className="text-xs">
+                          <div className="font-semibold">{u.call_sign}</div>
+                          <div>{responding ? "On a call" : "Free"}</div>
+                          {u.driver_name ? (
+                            <div className="text-muted-foreground">{u.driver_name}</div>
+                          ) : null}
+                          <div className="text-muted-foreground">
+                            Simulated position
+                          </div>
+                        </div>
+                      </Tooltip>
+                    </CircleMarker>
+                  );
+                })}
             </LayerGroup>
           </LayersControl.Overlay>
         </LayersControl>

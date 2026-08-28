@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { usePatients, useFacilities, useEscalations } from "@/hooks/use-supabase";
+import { useAcutePulse, useFleetUnits } from "@/hooks/use-acute";
 
 // Leaflet reads window at module scope, so this cannot be server-rendered.
 const OperationsMap = dynamic(() => import("@/components/operations-map"), {
@@ -29,6 +30,12 @@ export default function MapPage() {
   const { data: patients, loading: pLoading } = usePatients();
   const { data: facilities, loading: fLoading } = useFacilities();
   const { data: escalations } = useEscalations();
+
+  // The map component takes a `units` prop and, until this was wired, was never
+  // given one -- so it rendered an ambulance layer that always received an empty
+  // array. Same written-but-never-read shape this project keeps meeting.
+  const pulse = useAcutePulse();
+  const { data: units } = useFleetUnits(pulse);
 
   const loading = pLoading || fLoading;
   const plotted = patients.filter((p) => p.lat != null).length;
@@ -100,6 +107,7 @@ export default function MapPage() {
         patients={patients}
         facilities={facilities}
         escalations={escalations}
+        units={units}
       />
 
       <Card className="shadow-sm">

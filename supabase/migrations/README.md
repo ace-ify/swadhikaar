@@ -22,6 +22,7 @@ from the repo would have silently reverted the model.
 | `005_fleet_and_intake.sql` | ambulance leg (units, assignments, dispatch columns), `intake_events`, coordinate constraints, RLS |
 | `006_notification_outbox.sql` | outbox with retry and wave keying, enqueue triggers, drain cron |
 | `007_demo_readiness.sql` | `grant_app_role` for facility_staff, `incident_events.seq`, trail ordering |
+| `008_fleet_telemetry.sql` | simulated vehicle movement, `delivered` state, re-delivery guard, map wiring |
 
 ## What is NOT captured
 

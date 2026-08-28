@@ -331,12 +331,24 @@ us.
   index are all in place and a worker claims the same rows unchanged.
 - **No facility-side portal beyond the inbox.** `facility_staff` binds an account to
   a facility and RLS limits it to its own offers; there is one screen, not a portal.
-- **Ambulance vehicles are simulated.** 48 units at 16 stations, `is_simulated` on
-  every row. No GPS feed exists, and no live position updates — a unit does not move
-  on the map while responding.
-- **ETA is haversine at 30 km/h**, not traffic-aware, on both legs. EOS does not
-  compute a vehicle ETA at all: theirs is clamped client input and the only caller
-  hardcodes 12 minutes, so every EOS ambulance ETA in production is `"~12 min"`.
+- **Ambulance vehicles are simulated, and they do move.** 48 units at 16 stations,
+  `is_simulated` on every row. A cron ticks positions three times a minute at 30 km/h —
+  to the scene, 90 s on scene, then to the hospital — writing to the same `lat`/`lon`
+  columns a real operator's device would post to, so the map, the ETA and realtime are
+  all exercised for real. Swap in devices posting genuine heartbeats and nothing else
+  changes. The positions themselves are invented and the map legend says so.
+- **ETA is haversine at 30 km/h**, not road distance, on both legs. Understated by
+  roughly half: OpenRouteService puts Dispur → GMCH Emergency Centre at **4.41 km by
+  road, 7.2 min**, against our straight-line ~1.9 km. A key is configured
+  (`OPENROUTESERVICE_API_KEY`) and nothing reads it yet — the ETA is computed inside
+  `score_dispatch_candidates`, which cannot cleanly make an HTTP call mid-scoring, so
+  the upgrade is an edge function plus a cache, not a one-line change.
+
+  For comparison: EOS's *hospital* dispatch does call Google Routes with
+  `TRAFFIC_AWARE` on a 2500 ms timeout (`hospital_dispatch_v2.js:324`), falling back to
+  haversine. Their *ambulance* ETA is fiction — clamped client input where the only
+  caller passes a literal `12`, so every EOS ambulance ETA in production reads
+  `"~12 min"`.
 - **`intake_events` retention is 30 days**, 7 for noise (unauthorised, unparseable,
   rejected). Pruned nightly at 03:20. Not 24 hours: a parse bug found on Monday needs
   the weekend's failures to diagnose.

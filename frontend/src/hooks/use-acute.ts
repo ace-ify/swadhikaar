@@ -487,6 +487,49 @@ export function useMyFacilities(pulse = 0) {
   return { data, loading };
 }
 
+export interface FleetUnitLive {
+  id: string;
+  call_sign: string;
+  lat: number | null;
+  lon: number | null;
+  heading_deg: number | null;
+  available: boolean;
+  driver_name: string | null;
+  assigned_incident_id: string | null;
+  is_simulated: boolean;
+  updated_at: string;
+}
+
+// Live vehicle positions. Every one of these is a SIMULATED position — there is no
+// ambulance GPS feed — but it is written to the same lat/lon columns a real operator's
+// device would post to, so the map, the ETA and realtime are exercised for real.
+// Anything rendering these has to say so; the map legend does.
+export function useFleetUnits(pulse = 0) {
+  const [data, setData] = useState<FleetUnitLive[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .from("fleet_units")
+      .select(
+        "id,call_sign,lat,lon,heading_deg,available,driver_name," +
+          "assigned_incident_id,is_simulated,updated_at",
+      )
+      .order("call_sign")
+      .then(({ data: rows }) => {
+        if (cancelled) return;
+        setData((rows as unknown as FleetUnitLive[]) ?? []);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading };
+}
+
 // than throwing, because "already_accepted" is a normal race outcome the console
 // has to render, not an exception.
 // ---------------------------------------------------------------------------
