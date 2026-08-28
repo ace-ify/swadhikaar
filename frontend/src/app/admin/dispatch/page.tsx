@@ -87,14 +87,11 @@ const OFFER_STYLE: Record<OfferStateName, string> = {
   timed_out: "border-red-400 text-red-600",
 };
 
-// Three presets rather than a form. The point of the demo is that severity is
-// derived — the same page cannot be used to hand-set it, because
-// classify_incident_severity() is the only thing that decides and an intake clerk
-// must not be able to downgrade a red-triage case.
-const PRESETS: { label: string; expect: string; incident: NewIncident }[] = [
+// Presets rather than a form, and deliberately no severity field: the classifier is the
+// only thing that decides, so an intake clerk cannot downgrade a red-triage case.
+const PRESETS: { label: string; incident: NewIncident }[] = [
   {
     label: "Road accident, Dispur",
-    expect: "critical → 3 facilities, 45s fuse",
     incident: {
       victim_name: "Unknown male",
       victim_age: 34,
@@ -111,7 +108,6 @@ const PRESETS: { label: string; expect: string; incident: NewIncident }[] = [
   },
   {
     label: "Cardiac arrest, Bharalumukh",
-    expect: "critical → speciality routing to a heart hospital",
     incident: {
       victim_name: "Unknown female",
       victim_age: 61,
@@ -128,11 +124,6 @@ const PRESETS: { label: string; expect: string; incident: NewIncident }[] = [
   },
   {
     label: "Fall at home, Patna",
-    // Labelled from what the classifier actually returns, not from what the tier
-    // table looked like it should be: "fall" is a high-severity keyword, so a
-    // yellow triage colour does not make this standard. Keywords and physiology
-    // only ever escalate.
-    expect: "high → 2 facilities, 75s fuse",
     incident: {
       victim_name: "Ramdev Prasad",
       victim_age: 72,
@@ -579,7 +570,7 @@ function Ambulance({
 
         {dispatch.ambulance_state === "no_operator" ? (
           <p className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-800">
-            No ambulance free. Needs a phone call — the case stays open.
+No ambulance free — needs a phone call.
           </p>
         ) : null}
 
@@ -772,15 +763,13 @@ function CloseCase({
       <CardHeader className="pb-3">
         <CardTitle className="text-base tracking-tight">Close the case</CardTitle>
         <CardDescription>
-          Creates the patient record, the standards-format documents, and the Day 1, 3,
-          7, 14 and 30 follow-up calls — under this incident&apos;s own reference.
+          Creates the patient record and the follow-up call schedule.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {done ? (
           <p className="rounded-lg border border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
-            {done.patient} is enrolled with {done.calls} follow-up calls scheduled.
-            Their record carries {incident.ref}.
+            {done.patient} enrolled · {done.calls} follow-up calls scheduled
           </p>
         ) : (
           <Button
@@ -789,7 +778,7 @@ function CloseCase({
             disabled={busy}
             onClick={() => void close()}
           >
-            {busy ? "Closing…" : "Care complete — enrol for follow-up"}
+            {busy ? "Closing…" : "Close case"}
           </Button>
         )}
       </CardContent>
@@ -897,15 +886,12 @@ export default function DispatchPage() {
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           Dispatch Console
         </h1>
-        <p className="text-muted-foreground text-sm font-medium">
-          Hospitals are asked a few at a time. The first to accept gets the patient.
-        </p>
+
       </div>
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base tracking-tight">Start a test case</CardTitle>
-          <CardDescription>How urgent it is gets worked out automatically.</CardDescription>
+          <CardTitle className="text-base tracking-tight">New case</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
@@ -915,14 +901,8 @@ export default function DispatchPage() {
               size="sm"
               disabled={busyPreset !== null}
               onClick={() => void spawn(p)}
-              className="h-auto flex-col items-start gap-0.5 py-2 text-left"
             >
-              <span className="text-sm font-semibold">
-                {busyPreset === p.label ? "Dispatching…" : p.label}
-              </span>
-              <span className="text-muted-foreground text-xs font-normal">
-                {p.expect}
-              </span>
+              {busyPreset === p.label ? "Opening…" : p.label}
             </Button>
           ))}
         </CardContent>
@@ -940,7 +920,7 @@ export default function DispatchPage() {
             {error ? <p className="text-destructive text-sm">{error}</p> : null}
             {!loading && incidents.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                None open. Use a preset above.
+Nothing open.
               </p>
             ) : null}
             {incidents.map((i) => (
@@ -1038,8 +1018,7 @@ export default function DispatchPage() {
 
                   {dispatch.state === "exhausted" ? (
                     <p className="rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-800">
-                      No hospital accepted. Someone needs to phone around — the case is
-                      still open.
+No hospital accepted — needs a phone call.
                     </p>
                   ) : null}
 
@@ -1117,7 +1096,6 @@ export default function DispatchPage() {
                   <CardTitle className="text-base tracking-tight">
                     Notifications sent
                   </CardTitle>
-                  <CardDescription>Who was told, and how.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Outbox rows={outbox} />

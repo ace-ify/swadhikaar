@@ -115,7 +115,7 @@ export default function EmergencyProfilePage() {
           मेरा इमरजेंसी कार्ड
         </h1>
         <p className="text-muted-foreground text-sm">
-          What an ambulance crew is shown about you before you can speak.
+          What an ambulance crew is shown about you.
         </p>
       </div>
 
@@ -240,10 +240,8 @@ export default function EmergencyProfilePage() {
 
       <p className="text-muted-foreground px-1 text-xs">
         {profile.emergency_profile_updated_at
-          ? `Last updated ${new Date(profile.emergency_profile_updated_at).toLocaleDateString("en-IN")}. `
+          ? `Last updated ${new Date(profile.emergency_profile_updated_at).toLocaleDateString("en-IN")}`
           : ""}
-        This is copied into an emergency the moment you report one, so a later edit cannot
-        change what a crew was told at the time.
       </p>
     </div>
   );

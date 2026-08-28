@@ -229,7 +229,7 @@ function OfferCard({
 
         {live && !canAccept ? (
           <p className="text-muted-foreground text-sm">
-            You can see this case but cannot answer for this hospital.
+View only — you cannot answer for this hospital.
           </p>
         ) : null}
       </CardContent>
@@ -277,10 +277,7 @@ export default function FacilityInboxPage() {
         <Card>
           <CardContent className="space-y-2 py-8 text-center text-sm">
             <p className="font-medium">This account is not linked to a hospital.</p>
-            <p className="text-muted-foreground">
-              An administrator links staff accounts to a hospital. If you coordinate
-              dispatch, use the Dispatch Console instead.
-            </p>
+            <p className="text-muted-foreground">Ask an administrator to link it.</p>
           </CardContent>
         </Card>
       ) : null}
@@ -288,7 +285,7 @@ export default function FacilityInboxPage() {
       {linked && !loading && live.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            Nothing waiting. New cases appear here on their own.
+Nothing waiting.
           </CardContent>
         </Card>
       ) : null}

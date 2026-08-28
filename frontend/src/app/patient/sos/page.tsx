@@ -132,15 +132,9 @@ export default function SosPage() {
           {live ? "मदद आ रही है" : "मदद चाहिए?"}
         </h1>
         <p className="text-muted-foreground text-sm" lang="hi">
-          {live
-            ? "यह पेज अपने आप बदलता रहेगा। बंद न करें।"
-            : "जो हो रहा है उस पर दबाएं। नज़दीकी अस्पतालों को तुरंत बताया जाएगा।"}
+          {live ? "बंद न करें।" : "जो हो रहा है उस पर दबाएं।"}
         </p>
-        <p className="text-muted-foreground text-xs">
-          {live
-            ? "This page updates on its own. You can keep it open."
-            : "Tap what is happening. The nearest hospitals are told straight away."}
-        </p>
+
       </div>
 
       {/* Always available, live case or not. Whatever this app does or fails to do, the
