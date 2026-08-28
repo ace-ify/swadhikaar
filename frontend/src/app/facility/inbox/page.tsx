@@ -72,11 +72,16 @@ function OfferCard({
   offer,
   now,
   canAccept,
+  // True when this account covers more than one hospital. The same case is offered to
+  // several hospitals in a wave, so an account covering two of them sees two identical
+  // cards -- and pressing Accept on the wrong one accepts for the wrong hospital.
+  showFacility,
   onDone,
 }: {
   offer: FacilityOffer;
   now: number;
   canAccept: boolean;
+  showFacility: boolean;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -117,6 +122,11 @@ function OfferCard({
             <CardTitle className="text-lg tracking-tight">
               {inc?.incident_type ?? "Incident"}
             </CardTitle>
+            {showFacility && offer.facility?.name ? (
+              <p className="text-primary text-xs font-semibold">
+                for {offer.facility.name}
+              </p>
+            ) : null}
             <p className="text-muted-foreground mt-0.5 text-sm">
               {inc?.victim_name ?? "Unidentified"}
               {inc?.victim_age ? `, ${inc.victim_age}` : ""} ·{" "}
@@ -213,7 +223,9 @@ function OfferCard({
                 disabled={busy}
                 onClick={() => void respond("accept")}
               >
-                Accept patient
+                {showFacility && offer.facility?.name
+                  ? `Accept for ${offer.facility.name}`
+                  : "Accept patient"}
               </Button>
               <Button
                 size="lg"
@@ -296,6 +308,7 @@ Nothing waiting.
           offer={o}
           now={now}
           canAccept={acceptable.has(o.facility_id)}
+          showFacility={mine.length > 1}
           onDone={() => setNudge((n) => n + 1)}
         />
       ))}
@@ -311,6 +324,7 @@ Nothing waiting.
               offer={o}
               now={now}
               canAccept={false}
+              showFacility={mine.length > 1}
               onDone={() => setNudge((n) => n + 1)}
             />
           ))}
