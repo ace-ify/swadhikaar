@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import {
   Card,
@@ -111,7 +112,13 @@ const TRANSLATIONS = {
 
 export default function PatientDashboardPage() {
   const { data: allPatients } = usePatients();
-  const primaryPatient = allPatients[0];
+  // NOT allPatients[0]. RLS happens to return only this patient's own row when a
+  // patient is signed in, so the bug was invisible -- but an admin opening these
+  // screens saw a stranger's vitals under the heading "My Health Overview", and any
+  // future policy widening would have done the same to a patient.
+  const { user } = useAuth();
+  const primaryPatient =
+    allPatients.find((p) => p.auth_user_id === user?.id) ?? allPatients[0];
   const primaryPatientId =
     primaryPatient?.id || "00000000-0000-0000-0000-000000000001";
 

@@ -1,0 +1,35 @@
+-- CLOSING THE LOOP — as applied 2026-08-28.
+--
+-- The acute layer produced incidents and the continuity layer consumed an incident id
+-- it INVENTED (`H-DEMO-<timestamp>`, generated in the seam route). So a case you had
+-- just dispatched could be watched all the way to hospital and then could not be
+-- closed: closing meant retyping the patient into a second form, and the two halves of
+-- the system could never refer to the same episode.
+--
+-- The fix is in the app, not here: /api/seam-trigger now accepts `incident_ref` and the
+-- dispatch console passes the incident's own reference. Verified end to end against the
+-- live edge function -- H-KAMR-00030 produced a patient with
+-- source_incident_id = 'H-KAMR-00030', journey_status 'recovery', a FHIR Encounter, and
+-- five recovery calls on Day 1/3/7/14/30. Recorded here because the migration directory
+-- is where someone will look for it.
+
+-- ---------------------------------------------------------------- booth housekeeping
+-- reset_demo_state() and demo_state(): a one-press reset for the expo, because every
+-- visitor who presses a preset creates a real incident and after four the board is
+-- cluttered. Read the deployed bodies with pg_get_functiondef.
+--
+-- Narrow by design: it clears incidents the demo created, resets facility_reliability
+-- (test timeouts otherwise teach the scorer that good hospitals refuse everything), and
+-- parks the vehicles. It cannot touch patients, vitals, voice calls, escalations,
+-- consents or the audit log -- nothing representing a person is deletable from there.
+-- Refuses for any account that is not an admin; verified against the asha account.
+--
+-- It clears by intake channel as well as by the is_simulated flag, because the SOS
+-- button goes through the intake function, which correctly does NOT mark its incidents
+-- simulated -- it cannot know the person pressing it is standing at a demo booth. Two
+-- test presses had produced rows the reset could not remove.
+--
+-- LANDMINE, named rather than left implicit: once real users press that button,
+-- deleting by channel deletes real emergencies. The correct fix then is a per-request
+-- flag from the caller, and this function must change with it. It is safe today only
+-- because every press so far has been ours.

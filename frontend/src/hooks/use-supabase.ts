@@ -88,6 +88,9 @@ function useSupabaseQuery<T>(
 // ---------------------------------------------------------------------------
 export interface Patient {
   id: string;
+  // Links a clinical record to a login. Null for every row that arrived from the camp
+  // dataset -- those are records, not accounts.
+  auth_user_id: string | null;
   abha_id: string;
   name: string;
   phone: string;

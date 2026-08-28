@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -93,7 +94,13 @@ function computeStats(calls: VoiceCall[]) {
 export default function PatientCallsPage() {
   const router = useRouter();
   const { data: allPatients } = usePatients();
-  const primaryPatient = allPatients[0];
+  // NOT allPatients[0]. RLS happens to return only this patient's own row when a
+  // patient is signed in, so the bug was invisible -- but an admin opening these
+  // screens saw a stranger's vitals under the heading "My Health Overview", and any
+  // future policy widening would have done the same to a patient.
+  const { user } = useAuth();
+  const primaryPatient =
+    allPatients.find((p) => p.auth_user_id === user?.id) ?? allPatients[0];
   const primaryPatientId =
     primaryPatient?.id || "00000000-0000-0000-0000-000000000001";
 
@@ -114,7 +121,7 @@ export default function PatientCallsPage() {
     duration: formatDuration(c.duration_seconds),
     language: c.language,
     status: c.status,
-    summary: String((c.extracted_data as Record<string, any>)?.summary ?? c.transcript?.slice(0, 120) ?? "Call completed."),
+    summary: String((c.extracted_data as Record<string, unknown>)?.summary ?? c.transcript?.slice(0, 120) ?? "Call completed."),
     rawTranscript: c.transcript,
   }));
 

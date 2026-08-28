@@ -23,6 +23,7 @@ from the repo would have silently reverted the model.
 | `006_notification_outbox.sql` | outbox with retry and wave keying, enqueue triggers, drain cron |
 | `007_demo_readiness.sql` | `grant_app_role` for facility_staff, `incident_events.seq`, trail ordering |
 | `008_fleet_telemetry.sql` | simulated vehicle movement, `delivered` state, re-delivery guard, map wiring |
+| `009_close_the_loop.sql` | seam accepts a real incident ref; `reset_demo_state`, `demo_state` |
 
 ## What is NOT captured
 

@@ -695,6 +695,107 @@ function Outbox({ rows }: { rows: OutboxRow[] }) {
   );
 }
 
+// The end of the thread. A case that reached hospital could be seen, and could not be
+// CLOSED — the continuity layer invented its own incident id, so closing a real case
+// meant retyping the patient into a second form and the two halves of the system could
+// never refer to the same episode. This closes it under the incident's own reference.
+function CloseCase({
+  incident,
+  dispatch,
+  offers,
+  onDone,
+}: {
+  incident: Incident;
+  dispatch: IncidentDispatch | null;
+  offers: DispatchOffer[];
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<{ calls: number; patient: string } | null>(null);
+
+  // Only once a hospital has the patient. Closing a case nobody accepted would create
+  // a discharge record for a hospital visit that never happened.
+  const reached = incident.status === "arrived" || incident.status === "en_route";
+  const hospital =
+    offers.find((o) => o.state === "accepted")?.facility?.name ?? null;
+  if (!reached || !dispatch || dispatch.state !== "accepted") return null;
+
+  async function close() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/seam-trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incident_ref: incident.ref,
+          name: incident.victim_name ?? `Unidentified (${incident.ref})`,
+          phone: incident.reporter_phone ?? undefined,
+          // No phone and no ABHA means the seam cannot resolve a person. Rather than
+          // fail, fall back to an unroutable number in the project's own convention.
+          abha_id: incident.reporter_phone ? undefined : `INC-${incident.ref}`,
+          incident_type: incident.incident_type,
+          severity: incident.severity.toUpperCase(),
+          hospital_name: hospital ?? undefined,
+          outcome_summary: `Treated after ${incident.incident_type.toLowerCase()}; discharged to home follow-up.`,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        patient?: { name: string };
+        scheduled_calls?: unknown[];
+      };
+      if (!res.ok || !data.ok) {
+        toast.error(data.error ?? `Could not close the case (${res.status})`);
+      } else {
+        setDone({
+          calls: data.scheduled_calls?.length ?? 0,
+          patient: data.patient?.name ?? "patient",
+        });
+        toast.success(
+          `Closed — ${data.patient?.name ?? "patient"} enrolled, ${
+            data.scheduled_calls?.length ?? 0
+          } follow-up calls scheduled`,
+        );
+        onDone();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not close the case");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base tracking-tight">Close the case</CardTitle>
+        <CardDescription>
+          Creates the patient record, the standards-format documents, and the Day 1, 3,
+          7, 14 and 30 follow-up calls — under this incident&apos;s own reference.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {done ? (
+          <p className="rounded-lg border border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {done.patient} is enrolled with {done.calls} follow-up calls scheduled.
+            Their record carries {incident.ref}.
+          </p>
+        ) : (
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={busy}
+            onClick={() => void close()}
+          >
+            {busy ? "Closing…" : "Care complete — enrol for follow-up"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function BoardRow({
   incident,
   selected,
@@ -989,6 +1090,13 @@ export default function DispatchPage() {
                 onDone={refresh}
               />
             ) : null}
+
+            <CloseCase
+              incident={selected}
+              dispatch={dispatch}
+              offers={offers}
+              onDone={refresh}
+            />
 
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="shadow-sm">

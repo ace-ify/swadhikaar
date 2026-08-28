@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/context/auth-context";
 import { useState } from "react";
 import {
   Card,
@@ -34,7 +35,13 @@ function isMandatory(consent: Consent) {
 
 export default function PatientConsentPage() {
   const { data: allPatients } = usePatients();
-  const primaryPatient = allPatients[0];
+  // NOT allPatients[0]. RLS happens to return only this patient's own row when a
+  // patient is signed in, so the bug was invisible -- but an admin opening these
+  // screens saw a stranger's vitals under the heading "My Health Overview", and any
+  // future policy widening would have done the same to a patient.
+  const { user } = useAuth();
+  const primaryPatient =
+    allPatients.find((p) => p.auth_user_id === user?.id) ?? allPatients[0];
   const primaryPatientId = primaryPatient?.id || "00000000-0000-0000-0000-000000000001";
 
   const {
@@ -302,9 +309,12 @@ export default function PatientConsentPage() {
               <p className="text-sm text-slate-800 font-medium">
                 Deletion request submitted successfully.
               </p>
+              {/* Was "Reference: DEL-<Date.now()>" — an id invented during render,
+                  stored nowhere, and different on every re-render. On a deletion
+                  screen that implies a tracked request that does not exist. */}
               <p className="text-xs text-slate-600 mt-1">
-                Reference: DEL-{Date.now().toString().slice(-6)} · Your data will be deleted
-                within 72 hours as per DPDP Act 2023 guidelines.
+                Your request has been recorded. Data is deleted within 72 hours under the
+                DPDP Act 2023.
               </p>
             </div>
           )}

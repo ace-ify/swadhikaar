@@ -12,6 +12,11 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 // it is writable by the user it belongs to.
 
 type Body = {
+  // Supplied when closing a case that actually exists in this system. Without it the
+  // seam invents an id, which is how the acute layer and the continuity layer ended up
+  // unable to refer to the same episode: you could dispatch a real case and then had to
+  // retype the patient into a second form to close it.
+  incident_ref?: string;
   name?: string;
   phone?: string;
   abha_id?: string;
@@ -75,9 +80,18 @@ export async function POST(request: Request) {
 
   const completedAt = new Date().toISOString();
 
-  // Incident id is generated here so replaying the same submission is a new
-  // episode, while the edge function stays idempotent per incident id.
-  const incidentId = `H-DEMO-${Date.now().toString(36).toUpperCase()}`;
+  // A real case closes under its OWN reference, so the patient record that comes out
+  // carries the id of the incident that created it and the two halves of the system
+  // describe one episode. The generated form is kept for the standalone demo, where
+  // replaying a submission should be a new episode each time.
+  //
+  // Shape-checked rather than trusted: this value reaches an edge function and is
+  // stored as an external identifier.
+  const suppliedRef = body.incident_ref?.trim();
+  const incidentId =
+    suppliedRef && /^[A-Z0-9-]{4,32}$/.test(suppliedRef)
+      ? suppliedRef
+      : `H-DEMO-${Date.now().toString(36).toUpperCase()}`;
 
   const payload = {
     incident_id: incidentId,
