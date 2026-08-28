@@ -25,6 +25,23 @@ union all select 'flood Patna',    count(*) from flood_risk_cohort('Patna');
 
 -- 3. No routable phone numbers exist. MUST be 0.
 select count(*) from patients where phone !~ '^\+9155';
+
+-- 4. The board starts empty, or Act 4 opens on last night's test cases.
+select count(*) as leftover_incidents from incidents;
+-- If not 0:  delete from incidents where is_simulated;
+--            delete from facility_reliability;   -- test timeouts skew the scores
+
+-- 5. Ambulances are free, or the first case finds none.
+select count(*) filter (where available and assigned_incident_id is null) as free,
+       count(*) as total from fleet_units;
+-- Expect 48 / 48. If not:
+--   update fleet_units set available = true, assigned_incident_id = null;
+
+-- 6. The hospital login is wired to a hospital. MUST return a row.
+select u.email, f.name, s.can_accept
+  from facility_staff s
+  join auth.users u on u.id = s.user_id
+  join facilities f on f.id = s.facility_id;
 ```
 
 Then, **the one that decides your script**: dry-run the Guwahati flood advisory and
@@ -154,27 +171,92 @@ sub-units are demoted now."*
 
 ---
 
-## Act 4 — Acute seam (2 min)
+## Act 4 — A live emergency, end to end (4 min)
 
-`/admin/seam-trigger`. The Layer 1 ↔ Layer 2 join: an acute incident creates a
-patient record and a follow-up protocol, so someone treated in an emergency does not
-fall out of the system afterwards.
+The act that did not exist last week. Two browser windows, side by side:
 
-Have `/admin/operations` open in a second tab — escalations arrive over Supabase
-realtime, which is live because `escalations` is in the `supabase_realtime`
-publication with `replica identity full`.
+- **left:** `/admin/dispatch`, signed in as admin
+- **right:** `/facility/inbox`, signed in as the hospital account (see
+  [USERS_AND_ROLES.md](USERS_AND_ROLES.md) — one Dashboard user plus one SQL call)
+
+**On the left,** press **Road accident, Dispur**. Then stop talking and let them watch
+the timer.
+
+What to say, in this order, because each line is answering the question the last one
+raised:
+
+1. *"Nobody typed 'critical'. The database read a red triage tag, the words 'head
+   injury', and SpO2 88 with a GCS of 7 — and decided. An intake clerk cannot
+   downgrade that."*
+2. *"Three hospitals were asked at the same time, not one after another. A critical
+   case cannot spend two minutes waiting for one polite refusal."*
+3. Point at the countdown. *"Forty-five seconds. That deadline is a timestamp in the
+   row, not a stopwatch in the browser — so a page refresh cannot restart it and the
+   sweep that fires when it expires agrees with what you are reading."*
+4. Tap **How this was worked out** on the first hospital. *"Six of these numbers come
+   from OpenStreetMap or from our own dispatch history. Beds, doctors on duty and
+   blood stock say 'made up for the demo' — no public source publishes them, so their
+   weight is shared out across the six that are real rather than quietly invented."*
+
+**On the right,** the same case is already sitting in the hospital's inbox with its
+own countdown. Press **Accept patient**.
+
+**Back on the left**, without touching anything:
+
+- the other two hospitals flip to **went elsewhere** — one transaction, so a losing
+  hospital can never sit on "waiting" for a case somebody else took
+- the ambulance section appears by itself: **8 crews asked, 3 minutes to answer**
+- the activity list has written every step, in order
+
+*"The ambulances are simulated and the screen says so. There is no ambulance GPS feed
+in Assam we can legally read. Everything above that line — the hospitals, the
+distances, the routing to a trauma centre — is real data."*
+
+**If the ambulance says "no ambulance nearby":** that is the honest answer, not a
+failure. Say *"the receiving hospital has no vehicle stationed with it, so the engine
+borrows from the next hospital on its list; if none of them have one either it stops
+and asks for a human rather than pretending."*
+
+### Then the SOS button (1 min)
+
+`/patient/sos` on a phone-shaped window. Hindi first, English underneath, **112**
+always at the top.
+
+*"This is the one screen a person holds in an emergency. The phone network is the
+fallback that does not depend on us, so calling 112 is never more than one tap
+away — and it works even when everything we built is down."*
+
+Press one. It goes through a server function, never straight into the table: the
+phone has no permission to write an incident. *"Which is why our rate limit can
+actually stop something. The reference implementation writes from the client, so its
+limiter runs as a parallel trigger and always arrives after the alerts have gone
+out."*
 
 ---
 
-## Act 5 — Close (1 min)
+## Act 5 — The seam (1 min)
+
+`/admin/seam-trigger`. The join between the emergency and the year after it: closing
+an incident creates the patient record, the FHIR resources and the Day 1/3/7/14/30
+recovery calls in one step.
+
+*"An emergency that ends at the hospital door is where most systems stop. This is the
+part that does not."*
+
+---
+
+## Act 6 — Close (1 min)
 
 *"Four layers, one patient record. Weather is live, telephony is live, the facility
-map is OpenStreetMap, the voice speaks ten Indic languages including Assamese, and
-every advisory writes an audit row saying which number made the decision.*
+map is OpenStreetMap, the voice speaks ten Indic languages including Assamese, an
+emergency reaches three hospitals in under two seconds, and every advisory writes an
+audit row saying which number made the decision.*
 
-*What is not done: no clinician has signed off the call scripts. That is the largest
-gap and no amount of infrastructure closes it. The next step is a clinical review,
-not another feature."*
+*What is not done: no clinician has signed off the call scripts or the triage
+thresholds. That is the largest gap and no amount of infrastructure closes it. SMS and
+push have nowhere to send — the queue is built, retries and all, and the credentials
+are missing. The ambulances are simulated. The next step is a clinical review, not
+another feature."*
 
 Ending on the gap is deliberate. It is the answer to the question a good judge is
 already forming, and saying it first is worth more than being asked.
@@ -211,4 +293,27 @@ number first, and remember every other number is deliberately unroutable.
   fires every five minutes.
 - Claim Assamese speech *recognition*. Synthesis only.
 - Show bed counts without saying "simulated".
+- Say the ambulances are real. The engine is; the vehicles are seeded and the screen
+  badges them.
+- Say SMS "goes out". It is queued with retries and parked, because no gateway is
+  configured. The console says "not sent" for exactly that reason — show it if asked.
 - Cite `docs/SPRINT.md`. It is stale.
+
+---
+
+## If the dispatch demo goes wrong
+
+**Board is empty after pressing a preset** — check the browser console for a 401. That
+is the anon key, not the engine; see the key note in
+[USERS_AND_ROLES.md](USERS_AND_ROLES.md).
+
+**Timer shows "over — moving on" and nothing advances** — the cron sweep runs four
+times a minute, so up to 15 s of overdue is normal. Longer than that means pg_cron is
+not running: `select jobname, active from cron.job;`.
+
+**Facility inbox says "not linked to a hospital"** — the account has the role but no
+`facility_staff` row. One call fixes it:
+`select grant_app_role('<email>', 'facility_staff', 'GMCH Emergency Centre');`
+
+**Everything looks stuck** — open a case from the console instead of the phone. The
+console path is two calls and no geolocation prompt.

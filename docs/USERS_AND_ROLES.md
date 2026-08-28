@@ -20,6 +20,7 @@ Repeat for each account. Suggested set:
 | `admin@swadhikaar.in` | your choice | admin |
 | `doctor@swadhikaar.in` | your choice | doctor |
 | `asha@swadhikaar.in` | your choice | asha |
+| `gmch@swadhikaar.in` | your choice | facility_staff |
 
 Use a real address you control for at least one of them, so password reset works.
 
@@ -63,7 +64,35 @@ has no role, and the app will drop it to the patient portal.
 | doctor | `/doctor/dashboard` |
 | asha | `/asha/dashboard` |
 | patient | `/patient/dashboard` |
+| facility_staff | `/facility/inbox` |
 | *no role* | `/patient/dashboard` (fallback) |
+
+## A receiving hospital login
+
+`facility_staff` needs **two** things, and one without the other is the usual cause of
+"I logged in and the inbox is empty": the role decides which portal renders, and a
+`facility_staff` row decides which offers RLS returns and whether
+`accept_dispatch_offer` will answer for that hospital at all.
+
+`grant_app_role` does both. The third argument is the hospital name — matched
+case-insensitively, prefix is enough, so you do not have to type
+"Gauhati Medical College and Hospital (GMCH)" exactly:
+
+```sql
+select grant_app_role('gmch@swadhikaar.in', 'facility_staff', 'GMCH Emergency');
+-- OK: gmch@swadhikaar.in -> facility_staff. can accept for GMCH Emergency Centre
+```
+
+It refuses without writing anything if the hospital name matches nothing, or if you
+omit the name. Check which hospitals are available:
+
+```sql
+select name, district from facilities
+ where dispatch_eligible and district ilike 'kamrup%' order by name;
+```
+
+One account can cover more than one hospital — run it once per hospital. That is why
+`facility_staff` is a table and not a column on the user.
 
 Routes are auth-gated but not role-gated, so an admin can open `/doctor/patients`
 directly. RLS still decides what data loads.

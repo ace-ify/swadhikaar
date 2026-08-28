@@ -230,6 +230,7 @@ export interface OutboxRow {
 
 export interface IncidentEvent {
   id: string;
+  seq: number;
   incident_id: string;
   at: string;
   action: string;
@@ -350,7 +351,9 @@ export function useIncidentDetail(incidentId: string | null, pulse = 0) {
         .from("incident_events")
         .select("*")
         .eq("incident_id", incidentId)
-        .order("at", { ascending: true }),
+        // seq, not `at`: `at` defaults to now(), which is transaction time, so
+        // events written in one transaction share a timestamp and sort arbitrarily.
+        .order("seq", { ascending: true }),
       client
         .from("fleet_assignments")
         .select(
