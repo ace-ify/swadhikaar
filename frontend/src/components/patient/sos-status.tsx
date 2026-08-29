@@ -9,12 +9,14 @@
 // reading. Nothing is mocked, and where a number is an estimate it says so.
 
 import dynamic from "next/dynamic";
+import { useState } from "react";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
 import { firstAidFor } from "@/components/patient/first-aid";
-import { myDispatch, type MyIncident } from "@/hooks/use-acute";
+import { myDispatch, cancelMyIncident, type MyIncident } from "@/hooks/use-acute";
 
 // Leaflet reads window at module scope, so this cannot be server-rendered.
 const PatientMap = dynamic(() => import("@/components/patient/patient-map"), {
@@ -59,6 +61,10 @@ export function SosStatus({
 }) {
   const d = myDispatch(incident);
   const step = currentStep(incident);
+  // Two taps, not a dialog: the first tap is small and quiet so nobody hits it while
+  // panicking, and the second one says out loud what it will do.
+  const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const elapsed = Math.max(
     0,
     Math.round((now - new Date(incident.created_at).getTime()) / 1000),
@@ -219,6 +225,62 @@ export function SosStatus({
             </p>
           </CardContent>
         </Card>
+      ) : null}
+
+      {/* Last, and deliberately plain. A person who pressed by mistake had no way to
+          take it back, so fifteen hospitals kept being asked and the only exit was to
+          find a dispatcher. Hidden once the patient is in the vehicle -- at that point
+          the crew is standing next to them and it is not a decision for a phone. */}
+      {d?.ambulance_state !== "transporting" && step < 3 ? (
+        <div className="pt-2 text-center">
+          {confirming ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium" lang="hi">
+                मदद रोक दें? अस्पतालों को बता दिया जाएगा।
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Stop the request? The hospitals being asked will be told.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={cancelling}
+                  onClick={() => setConfirming(false)}
+                >
+                  <span lang="hi">नहीं, मदद चाहिए</span>
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  disabled={cancelling}
+                  onClick={async () => {
+                    setCancelling(true);
+                    const res = await cancelMyIncident(incident.id, "Pressed by mistake");
+                    setCancelling(false);
+                    if (res.ok) {
+                      toast.success("रोक दिया / Stopped");
+                    } else if (res.error === "patient_already_on_board") {
+                      toast.error("एम्बुलेंस में हैं — क्रू से बात करें / Speak to the crew");
+                    } else {
+                      toast.error(String(res.error ?? "Could not stop it"));
+                    }
+                  }}
+                >
+                  {cancelling ? "…" : <span lang="hi">हां, रोक दें</span>}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="text-muted-foreground hover:text-destructive text-xs underline"
+              onClick={() => setConfirming(true)}
+            >
+              <span lang="hi">गलती से दब गया?</span>
+              <span className="ml-1">Pressed by mistake?</span>
+            </button>
+          )}
+        </div>
       ) : null}
     </div>
   );

@@ -132,3 +132,80 @@ begin
   return new;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Taking it back
+-- ---------------------------------------------------------------------------
+-- A patient who pressed the button by mistake had no way out: no rpc, no button, and
+-- incident_status has carried 'cancelled' the whole time with nothing able to reach it.
+-- Fifteen hospitals get asked and the only exit was to find a dispatcher.
+--
+-- fleet_offer_state has no 'stood_down'; 'no_response' already means "this offer ended
+-- without the crew answering", which is what a cancellation leaves behind. A new enum
+-- value would be a state nothing else reads.
+create or replace function public.cancel_my_incident(p_incident uuid, p_reason text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  inc record;
+begin
+  select i.id, i.status, i.created_by, d.ambulance_state
+    into inc
+    from incidents i
+    left join incident_dispatch d on d.incident_id = i.id
+   where i.id = p_incident;
+
+  if inc.id is null then
+    return jsonb_build_object('ok', false, 'error', 'no_such_incident');
+  end if;
+
+  if inc.created_by is distinct from auth.uid()
+     and not current_user_has_role(array['admin','dispatcher']) then
+    return jsonb_build_object('ok', false, 'error', 'not_your_incident');
+  end if;
+
+  if inc.status in ('resolved','cancelled','expired','arrived') then
+    return jsonb_build_object('ok', false, 'error', 'already_closed', 'status', inc.status);
+  end if;
+
+  -- After loading, the call belongs to the crew, not to a phone tap.
+  if inc.ambulance_state = 'transporting' then
+    return jsonb_build_object('ok', false, 'error', 'patient_already_on_board');
+  end if;
+
+  update incidents
+     set status = 'cancelled',
+         resolved_at = now(),
+         resolution = coalesce(nullif(trim(p_reason), ''), 'Cancelled by the person who reported it')
+   where id = p_incident;
+
+  -- Same transaction as the status change, so no hospital can accept a case that no
+  -- longer exists.
+  update dispatch_offers set state = 'superseded'
+   where incident_id = p_incident and state = 'pending';
+
+  update fleet_assignments set state = 'no_response', responded_at = now()
+   where incident_id = p_incident and state = 'awaiting_response';
+
+  -- The vehicle goes back on the board before the dispatch row forgets which one it was.
+  update fleet_units set available = true, assigned_incident_id = null, updated_at = now()
+   where assigned_incident_id = p_incident
+      or id = (select assigned_unit_id from incident_dispatch where incident_id = p_incident);
+
+  update incident_dispatch
+     set state = 'stood_down', ambulance_state = null, assigned_unit_id = null
+   where incident_id = p_incident;
+
+  insert into incident_events (incident_id, actor_uid, action, to_status, detail)
+  values (p_incident, auth.uid(), 'cancelled_by_reporter', 'cancelled',
+          jsonb_build_object('reason', p_reason));
+
+  return jsonb_build_object('ok', true, 'at', now());
+end;
+$$;
+
+revoke all on function public.cancel_my_incident(uuid, text) from public;
+grant execute on function public.cancel_my_incident(uuid, text) to authenticated;

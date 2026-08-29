@@ -752,6 +752,11 @@ export const acceptFleetOffer = (assignmentId: string, etaSeconds?: number | nul
 export const rejectFleetOffer = (assignmentId: string, reason: string) =>
   rpc("reject_fleet_offer", { p_assignment: assignmentId, p_reason: reason });
 
+// The reporter taking it back. Refuses once the patient is in the vehicle: at that point
+// the decision belongs to the crew standing next to them, not to a phone.
+export const cancelMyIncident = (incidentId: string, reason?: string) =>
+  rpc("cancel_my_incident", { p_incident: incidentId, p_reason: reason ?? null });
+
 // No escalate here on purpose: escalate_dispatch is revoked from `authenticated`.
 // Waves advance from the cron sweep against an absolute deadline, or when every
 // member of the current wave has declined. A dispatcher button that skips a
