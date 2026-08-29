@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
 import { firstAidFor } from "@/components/patient/first-aid";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
+import { ScenePhoto } from "@/components/scene-photo";
 import { myDispatch, cancelMyIncident, type MyIncident } from "@/hooks/use-acute";
 
 // Leaflet reads window at module scope, so this cannot be server-rendered.
@@ -29,9 +30,20 @@ const PatientMap = dynamic(() => import("@/components/patient/patient-map"), {
   ),
 });
 
-function mmss(total: number) {
-  const s = Math.max(0, total);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+// Elapsed time, which is unbounded. This screen used an m:ss formatter for it, so an
+// incident open for an hour and a half read "89:00 ago" — which looks like a broken clock,
+// on the one screen where a person is deciding whether to trust us or dial 112.
+function ago(total: number) {
+  const s = Math.max(0, Math.round(total));
+  if (s < 60) return { hi: `${s} सेकंड`, en: `${s}s` };
+  const m = Math.floor(s / 60);
+  if (m < 60) return { hi: `${m} मिनट`, en: `${m} min` };
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return {
+    hi: rem === 0 ? `${h} घंटे` : `${h} घंटे ${rem} मिनट`,
+    en: rem === 0 ? `${h}h` : `${h}h ${rem}m`,
+  };
 }
 
 // Four states, in the order they happen. Anything the engine can report maps onto one of
@@ -111,7 +123,7 @@ export function SosStatus({
           </div>
 
           <p className="text-muted-foreground text-xs">
-            <span lang="hi">{mmss(elapsed)} पहले भेजा</span> · sent {mmss(elapsed)} ago
+            <span lang="hi">{ago(elapsed).hi} पहले भेजा</span> · sent {ago(elapsed).en} ago
           </p>
 
           {stalled ? (
@@ -142,12 +154,34 @@ export function SosStatus({
                 : null
             }
             heading={d.ambulance_state === "transporting" ? "hospital" : "scene"}
+            route={d.route_geometry}
           />
           <p className="text-muted-foreground px-1 text-xs">
-            <span lang="hi">सीधी रेखा, सड़क का रास्ता नहीं। एम्बुलेंस की जगह नकली है।</span>
-            <span className="block">
-              Straight line, not the road route. Ambulance position is simulated.
-            </span>
+            {d.route_geometry && d.route_geometry.length > 1 ? (
+              <>
+                <span lang="hi">
+                  सड़क का असली रास्ता
+                  {d.route_distance_m
+                    ? ` — ${(d.route_distance_m / 1000).toFixed(1)} किमी`
+                    : ""}
+                  । एम्बुलेंस की जगह नकली है।
+                </span>
+                <span className="block">
+                  The real road route
+                  {d.route_distance_m
+                    ? `, ${(d.route_distance_m / 1000).toFixed(1)} km by road`
+                    : ""}
+                  . The ambulance position is simulated.
+                </span>
+              </>
+            ) : (
+              <>
+                <span lang="hi">सीधी रेखा, सड़क का रास्ता नहीं। एम्बुलेंस की जगह नकली है।</span>
+                <span className="block">
+                  Straight line, not the road route. Ambulance position is simulated.
+                </span>
+              </>
+            )}
           </p>
         </div>
       ) : null}
@@ -211,6 +245,9 @@ export function SosStatus({
             <span lang="hi">उन्हें यह भेजा गया है</span> · Sent to them
           </p>
           <MedicalSnapshot snapshot={incident.medical_snapshot} />
+          {/* Renders only once the column is set, so this is the reporter's confirmation
+              that the photo reached the case and not merely the bucket. */}
+          <ScenePhoto path={incident.scene_photo_path} />
         </CardContent>
       </Card>
 

@@ -24,13 +24,20 @@ export default function PatientMap({
   // the hospital -- and a line to the scene while it drives away from you would show
   // the ambulance going the wrong way.
   heading = "scene",
+  // Real road geometry as [lat, lon] pairs, when we have it. Null falls back to the
+  // dashed straight line, which is what happens with no routing key, no quota, or a
+  // scene the router cannot reach. The caption below changes to match, so the map never
+  // claims a road route it is not drawing.
+  route = null,
 }: {
   scene: MapPoint;
   unit?: MapPoint | null;
   hospital?: MapPoint | null;
   heading?: "scene" | "hospital";
+  route?: [number, number][] | null;
 }) {
   const target = heading === "hospital" && hospital ? hospital : scene;
+  const onRoads = Array.isArray(route) && route.length > 1;
   const points = useMemo(
     () => [scene, unit, hospital].filter((p): p is MapPoint => Boolean(p)),
     [scene, unit, hospital],
@@ -62,7 +69,21 @@ export default function PatientMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {unit ? (
+        {onRoads ? (
+          // Solid, and drawn under the markers: this is the road the vehicle is on, not
+          // an estimate. Two strokes so it reads as a route on a busy OSM tile rather
+          // than as one more street.
+          <>
+            <Polyline
+              positions={route as [number, number][]}
+              pathOptions={{ color: "#ffffff", weight: 8, opacity: 0.9 }}
+            />
+            <Polyline
+              positions={route as [number, number][]}
+              pathOptions={{ color: "#0891b2", weight: 4, opacity: 1 }}
+            />
+          </>
+        ) : unit ? (
           <Polyline
             positions={[
               [unit.lat, unit.lon],

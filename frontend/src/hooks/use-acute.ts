@@ -60,6 +60,9 @@ export interface Incident {
   intake_source: string;
   is_simulated: boolean;
   rate_limit_flagged: boolean;
+  // Set once by the reporter after dispatch is already open. Null on most cases: it is
+  // optional by design, and a case without a photo is not a lesser case.
+  scene_photo_path: string | null;
   created_at: string;
   // Embedded so the board can show wave state without a query per row. PostgREST
   // returns a one-to-one embed as an object and a one-to-many as an array; this FK
@@ -162,6 +165,7 @@ export type AmbulanceState =
   | "on_scene"
   | "transporting"
   | "delivered"
+  | "returning"
   | "no_operator";
 
 export type FleetOfferState =
@@ -425,6 +429,7 @@ export interface MyIncident {
   // stranger you stopped for.
   reported_for_self: boolean;
   victim_name: string | null;
+  scene_photo_path: string | null;
   dispatch: MyDispatch | MyDispatch[] | null;
 }
 
@@ -436,6 +441,13 @@ export interface MyDispatch {
   eta_seconds: number | null;
   ambulance_state: AmbulanceState | null;
   ambulance_eta_seconds: number | null;
+  // Real road geometry as [lat, lon] pairs, filled by the route-leg function from
+  // OpenRouteService. Null means the vehicle is moving in a straight line -- no routing
+  // key, no quota left, or a scene the router cannot reach -- and the map says so rather
+  // than drawing a road that was not computed.
+  route_geometry: [number, number][] | null;
+  route_target: "scene" | "hospital" | null;
+  route_distance_m: number | null;
   hospital: { name: string; lat: number; lon: number } | null;
   unit: {
     call_sign: string;
@@ -467,8 +479,10 @@ export function useMyLiveIncident(pulse = 0) {
       .select(
         "id,ref,incident_type,description,severity,status,address,district,lat,lon," +
           "golden_hour_start,created_at,medical_snapshot,reported_for_self,victim_name," +
+          "scene_photo_path," +
           "dispatch:incident_dispatch(state,wave_index,max_waves,wave_timeout_at," +
           "eta_seconds,ambulance_state,ambulance_eta_seconds," +
+          "route_geometry,route_target,route_distance_m," +
           "hospital:facilities!incident_dispatch_accepted_facility_id_fkey(name,lat,lon)," +
           "unit:fleet_units(call_sign,driver_name,lat,lon,heading_deg))",
       )
@@ -595,7 +609,7 @@ export function useFacilityOffers(pulse = 0) {
           "winner:facilities!dispatch_offers_superseded_by_fkey(name)," +
           "incident:incidents(id,ref,incident_type,description,severity,triage_colour," +
           "victim_name,victim_age,address,district,lat,lon,vitals,required_services," +
-          "status,golden_hour_start,is_simulated,medical_snapshot)",
+          "status,golden_hour_start,is_simulated,medical_snapshot,scene_photo_path)",
       )
       .order("offered_at", { ascending: false })
       .limit(40)
@@ -633,13 +647,24 @@ export type FacilityOffer = DispatchOffer & {
     | "status"
     | "golden_hour_start"
     | "is_simulated"
+    | "scene_photo_path"
   > & { medical_snapshot?: Record<string, unknown> | null } | null;
 };
 
 export interface MyFacility {
   facility_id: string;
   can_accept: boolean;
-  facility: { name: string } | null;
+  facility: {
+    name: string;
+    beds_total: number | null;
+    beds_available: number | null;
+    doctors_on_duty: number | null;
+    has_blood_bank: boolean | null;
+    blood_units_available: number | null;
+    // Null means nobody at the facility has stood behind these numbers, and the
+    // dispatch engine labels the factor SEEDED rather than facility_declared.
+    capacity_declared_at: string | null;
+  } | null;
 }
 
 // Which facilities this account may answer for. Read from facility_staff, so the
@@ -652,7 +677,10 @@ export function useMyFacilities(pulse = 0) {
     let cancelled = false;
     void db()
       .from("facility_staff")
-      .select("facility_id, can_accept, facility:facilities(name)")
+      .select(
+        "facility_id, can_accept, facility:facilities(name,beds_total,beds_available," +
+          "doctors_on_duty,has_blood_bank,blood_units_available,capacity_declared_at)",
+      )
       .then(({ data: rows }) => {
         if (cancelled) return;
         setData((rows as unknown as MyFacility[]) ?? []);
@@ -744,6 +772,61 @@ export const declineOffer = (incidentId: string, facilityId: string, reason: str
     p_reason: reason,
   });
 
+// ------------------------------------------------------------------ scene photo
+// The bucket is private, so a path is not a URL. Every viewer mints their own signed
+// link and storage RLS decides whether they get one -- the facility that was offered
+// the case does, a facility that was not does not, and neither holds a URL that keeps
+// working after the link expires.
+export const SCENE_BUCKET = "incident-scene";
+export async function scenePhotoUrl(path: string, expiresIn = 600) {
+  const { data, error } = await db().storage.from(SCENE_BUCKET).createSignedUrl(path, expiresIn);
+  if (error) return { url: null as string | null, error: error.message };
+  return { url: data.signedUrl, error: null as string | null };
+}
+
+// Called AFTER intake returns, never before: the ambulance must not wait on a camera.
+// Fixed object name per incident, which is what makes "one photo, set once" structural
+// -- a second upload has no UPDATE policy to land on and storage refuses it.
+export async function uploadScenePhoto(incidentId: string, file: File) {
+  const path = `${incidentId}/scene`;
+  const { error: upErr } = await db()
+    .storage.from(SCENE_BUCKET)
+    .upload(path, file, { contentType: file.type || "image/jpeg", upsert: false });
+  if (upErr) return { ok: false, error: upErr.message };
+
+  // The object exists but nothing reads the bucket by listing, so until the column is
+  // set no screen shows it. Report this failure rather than swallowing it: a silent
+  // half-success here is exactly the written-but-never-read shape.
+  const { error: attachErr } = await db().rpc("attach_scene_photo", {
+    p_incident: incidentId,
+    p_path: path,
+  });
+  if (attachErr) return { ok: false, error: attachErr.message };
+  return { ok: true, error: null as string | null };
+}
+
+// -------------------------------------------------------------- declared capacity
+// The write path for beds, staffing and blood. A function rather than a table update
+// because `facilities` has no UPDATE policy at all: a facility declaring how many beds
+// it has free must not also be able to edit its own coordinates or speciality tags to
+// climb the ranking. Partial declarations are fine — omitted fields keep their value.
+export const declareCapacity = (
+  facilityId: string,
+  patch: {
+    bedsAvailable?: number | null;
+    doctorsOnDuty?: number | null;
+    hasBloodBank?: boolean | null;
+    bloodUnits?: number | null;
+  },
+) =>
+  rpc("declare_facility_capacity", {
+    p_facility: facilityId,
+    p_beds_available: patch.bedsAvailable ?? null,
+    p_doctors_on_duty: patch.doctorsOnDuty ?? null,
+    p_has_blood_bank: patch.hasBloodBank ?? null,
+    p_blood_units: patch.bloodUnits ?? null,
+  });
+
 // Vehicle leg. Both refuse a caller who is neither the unit's operator, nor ops,
 // nor staff of the dispatching facility — the same identity rule as the hospital
 // side, because a signed-in account answering for someone else's ambulance is the
@@ -787,6 +870,168 @@ export async function demoState(): Promise<DemoState | null> {
 }
 
 export const resetDemoState = () => rpc("reset_demo_state", {});
+
+// ---------------------------------------------------------------------------
+// FLEET OPERATOR (the crew in the vehicle)
+//
+// One RPC, not five queries. A fleet operator's only identity is
+// fleet_units.operator_uid, which grants no read on incidents or incident_dispatch,
+// so my_fleet_run() is security definer and returns exactly the crew's fields.
+// ---------------------------------------------------------------------------
+export interface FleetRunUnit {
+  id: string;
+  call_sign: string;
+  driver_name: string | null;
+  vehicle_type: string;
+  phone: string | null;
+  lat: number | null;
+  lon: number | null;
+  heading_deg: number | null;
+  available: boolean;
+  is_simulated: boolean;
+  assigned_incident_id: string | null;
+  stationed_facility_id: string | null;
+  updated_at: string;
+}
+
+export interface FleetRunOffer {
+  assignment_id: string;
+  incident_id: string;
+  distance_km: number | null;
+  response_deadline_at: string;
+  attempt: number;
+  ref: string;
+  incident_type: string;
+  severity: string;
+  triage_colour: string | null;
+  address: string | null;
+  district: string | null;
+  lat: number;
+  lon: number;
+  dispatching_facility: string | null;
+}
+
+export interface FleetRun {
+  incident_id: string;
+  ref: string;
+  victim_name: string | null;
+  victim_age: number | null;
+  incident_type: string;
+  severity: string;
+  triage_colour: string | null;
+  description: string | null;
+  address: string | null;
+  district: string | null;
+  lat: number;
+  lon: number;
+  status: IncidentStatus;
+  vitals: Record<string, unknown>;
+  medical_snapshot: Record<string, unknown>;
+  required_services: string[];
+  reporter_name: string | null;
+  reporter_phone: string | null;
+  golden_hour_start: string | null;
+  scene_photo_path: string | null;
+  phase: AmbulanceState | null;
+  eta_seconds: number | null;
+  ambulance_accepted_at: string | null;
+  destination_name: string | null;
+  destination_lat: number | null;
+  destination_lon: number | null;
+}
+
+export interface MyFleetRun {
+  unit: FleetRunUnit | null;
+  offer: FleetRunOffer | null;
+  run: FleetRun | null;
+}
+
+export function useMyFleetRun(pulse = 0) {
+  const [data, setData] = useState<MyFleetRun | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void db()
+      .rpc("my_fleet_run")
+      .then(({ data: row, error: e }) => {
+        if (cancelled) return;
+        if (e) setError(e.message);
+        else {
+          setError(null);
+          setData(row as MyFleetRun);
+        }
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pulse]);
+
+  return { data, loading, error };
+}
+
+// EMS phases. Strictly linear and asserted server-side against the current state, so
+// a stale button on a phone that lost signal cannot skip a step. The ladder itself and
+// its transition table live in lib/fleet-phases.ts, which has the test.
+export type { FleetPhase } from "@/lib/fleet-phases";
+import type { FleetPhase } from "@/lib/fleet-phases";
+
+export const setAmbulancePhase = (incidentId: string, phase: FleetPhase) =>
+  rpc("set_ambulance_phase", { p_incident: incidentId, p_phase: phase });
+
+export const recordFleetCare = (incidentId: string, entry: Record<string, unknown>) =>
+  rpc("fleet_record_care", { p_incident: incidentId, p_entry: entry });
+
+// Position goes straight to the table, not through an RPC: fleet_units_self_update
+// already allows an operator to update their own row, and it is the same column the
+// simulation writes — so the ops map, the ETA and realtime need no change to show a
+// real vehicle. tick_fleet_positions filters `where u.is_simulated`, so a real unit
+// is never also being moved by the cron.
+export async function pushMyPosition(
+  unitId: string,
+  lat: number,
+  lon: number,
+  headingDeg: number | null,
+): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from("fleet_units")
+    .update({
+      lat,
+      lon,
+      heading_deg:
+        headingDeg == null || Number.isNaN(headingDeg)
+          ? null
+          : Math.round(((headingDeg % 360) + 360) % 360),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", unitId);
+  return { error: error?.message ?? null };
+}
+
+// A crew signing on takes their vehicle off the simulation. Without this the cron
+// would keep teleporting the unit while the phone posts real coordinates, and the two
+// would fight every 20 seconds.
+//
+// `available` moves with the shift, but only when the unit is not mid-run: signing off
+// during a transport must not put the vehicle back in the candidate pool with a patient
+// still in it. The 90s heartbeat TTL would eventually drop a signed-off unit anyway;
+// this makes it immediate instead.
+export async function goOnShift(
+  unitId: string,
+  onShift: boolean,
+  onRun: boolean,
+): Promise<{ error: string | null }> {
+  const patch: Record<string, unknown> = {
+    is_simulated: !onShift,
+    updated_at: new Date().toISOString(),
+  };
+  if (!onRun) patch.available = onShift;
+
+  const { error } = await db().from("fleet_units").update(patch).eq("id", unitId);
+  return { error: error?.message ?? null };
+}
 
 export interface NewIncident {
   victim_name: string;
