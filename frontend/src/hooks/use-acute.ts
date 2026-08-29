@@ -509,41 +509,63 @@ export interface EmergencyProfile {
 export function useMyProfile(pulse = 0) {
   const [data, setData] = useState<EmergencyProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void db()
-      .from("patients")
-      .select(
-        "id,name,phone,language,abha_id,blood_group,allergies,chronic_conditions," +
-          "current_medications,emergency_contact_name,emergency_contact_phone," +
-          "emergency_profile_updated_at",
-      )
-      .limit(1)
-      .then(({ data: rows }) => {
-        if (cancelled) return;
-        setData((rows as unknown as EmergencyProfile[])?.[0] ?? null);
+    void (async () => {
+      // Named explicitly rather than trusting LIMIT 1 to mean "mine". RLS does restrict
+      // the rows, but LIMIT 1 with no ORDER BY is an arbitrary row, and the id it
+      // returns is the id the Save button writes to.
+      const { data: auth } = await db().auth.getUser();
+      const uid = auth.user?.id;
+      if (cancelled) return;
+      if (!uid) {
+        setError("Please sign in again.");
         setLoading(false);
-      });
+        return;
+      }
+      const { data: row, error: err } = await db()
+        .from("patients")
+        .select(
+          "id,name,phone,language,abha_id,blood_group,allergies,chronic_conditions," +
+            "current_medications,emergency_contact_name,emergency_contact_phone," +
+            "emergency_profile_updated_at",
+        )
+        .eq("auth_user_id", uid)
+        .maybeSingle();
+      if (cancelled) return;
+      // A dropped request must not read as "no record linked" -- that screen tells the
+      // patient their emergency card does not exist and sends them to an ASHA to fix
+      // nothing. Same defect useMyLiveIncident had.
+      if (err) setError(err.message);
+      else {
+        setError(null);
+        setData((row as unknown as EmergencyProfile) ?? null);
+      }
+      setLoading(false);
+    })();
     return () => {
       cancelled = true;
     };
   }, [pulse]);
 
-  return { data, loading };
+  return { data, loading, error };
 }
 
-// Writes go through the table, not an rpc: patients_update already restricts to
-// visible_patient_ids(), which for a patient is their own row and nobody else's.
+// An rpc, like every other mutation in this file. Not a table write: patients_update
+// has WITH CHECK (is_admin() or role in ('asha','doctor')), so a patient pressing Save
+// got 42501 every time -- invisible in SQL, because the MCP connects as postgres and
+// RLS does not apply to it. The rpc also fixes the shape of the problem: a row policy
+// wide enough to let a patient edit their blood group is wide enough to let them edit
+// assigned_doctor_id, because RLS is row-level. The rpc's argument list is the
+// writable surface.
 export async function saveMyProfile(
-  id: string,
   patch: Record<string, string[] | string | null>,
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await db()
-    .from("patients")
-    .update({ ...patch, emergency_profile_updated_at: new Date().toISOString() })
-    .eq("id", id);
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const res = await rpc("save_my_emergency_profile", { p_patch: patch });
+  if (!res.ok) return { ok: false, error: String(res.error ?? "Could not save") };
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

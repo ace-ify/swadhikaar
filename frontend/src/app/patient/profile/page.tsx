@@ -49,7 +49,7 @@ function Line({ label, hi, value }: { label: string; hi: string; value: string |
 
 export default function EmergencyProfilePage() {
   const [pulse, setPulse] = useState(0);
-  const { data: profile, loading } = useMyProfile(pulse);
+  const { data: profile, loading, error } = useMyProfile(pulse);
   const [busy, setBusy] = useState(false);
   // The edit buffer IS the editing state: null means "not editing". Seeded from the row
   // when Edit is pressed, so nothing has to sync server state into local state in an
@@ -67,10 +67,10 @@ export default function EmergencyProfilePage() {
       emergency_contact_phone: p.emergency_contact_phone ?? "",
     });
 
-  async function save(p: EmergencyProfile) {
+  async function save() {
     if (!form) return;
     setBusy(true);
-    const res = await saveMyProfile(p.id, {
+    const res = await saveMyProfile({
       blood_group: form.blood_group || null,
       allergies: toList(form.allergies ?? ""),
       chronic_conditions: toList(form.chronic_conditions ?? ""),
@@ -90,6 +90,19 @@ export default function EmergencyProfilePage() {
 
   if (loading) {
     return <p className="text-muted-foreground p-4 text-sm">Loading…</p>;
+  }
+
+  // A failed request is not the same thing as an unlinked record, and the two need
+  // different words: one says try again, the other says go and ask someone.
+  if (error) {
+    return (
+      <Card className="mx-auto max-w-xl border-destructive">
+        <CardContent className="space-y-1 py-8 text-center text-sm">
+          <p className="font-medium">Could not load your emergency card.</p>
+          <p className="text-muted-foreground">{error}</p>
+        </CardContent>
+      </Card>
+    );
   }
 
   // A login with no clinical record. Says which is missing rather than rendering an
@@ -195,7 +208,7 @@ export default function EmergencyProfilePage() {
               ))}
 
               <div className="flex gap-2 pt-1">
-                <Button className="flex-1" disabled={busy} onClick={() => void save(profile)}>
+                <Button className="flex-1" disabled={busy} onClick={() => void save()}>
                   {busy ? "Saving…" : "Save"}
                 </Button>
                 <Button variant="outline" disabled={busy} onClick={() => setForm(null)}>

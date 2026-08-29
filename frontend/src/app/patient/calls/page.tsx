@@ -135,7 +135,7 @@ export default function PatientCallsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Call History</h1>
         <p className="text-sm text-slate-500">
-          All voice AI interactions — ABHA ID: 91-1234-5678-9012
+          Every call this system has placed to you.
         </p>
       </div>
 

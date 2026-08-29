@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth-context";
 import { useAccessibility } from "@/context/accessibility-context";
 import {
-  Smartphone,
   Type,
   LayoutDashboard,
   ClipboardList,
@@ -202,11 +201,8 @@ export function DashboardHeader({
       <div className="flex items-center gap-3 sm:gap-5">
         {role === "patient" && (
           <div className="flex items-center gap-3 border-r border-border/50 pr-4 sm:pr-5">
-            <span className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-muted/30 text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">
-              <Smartphone className="h-3 w-3" />
-              <span>Caregiver Linked: Suresh</span>
-            </span>
-
+            {/* No "Caregiver Linked: Suresh" here. It was a literal with no row behind
+                it, telling the patient someone was receiving their alerts. */}
             <button
               onClick={() => setFontSize && setFontSize(fontSize === "normal" ? "large" : "normal")}
               className="flex items-center justify-center h-8 w-8 rounded-full border border-border/40 bg-muted/20 hover:bg-accent hover:text-accent-foreground text-foreground/80 transition-colors shadow-sm"

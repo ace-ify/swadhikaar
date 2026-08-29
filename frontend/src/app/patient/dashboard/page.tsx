@@ -282,7 +282,7 @@ export default function PatientDashboardPage() {
       <div className="flex flex-col gap-1.5 px-1">
         <h1 className={cn("font-bold text-foreground tracking-tight", titleScaling)}>{t.title}</h1>
         <p className={cn("text-muted-foreground font-medium", textScaling)}>
-          {t.abhaId}: <span className="font-mono">{primaryPatient?.abha_id ?? "91-1234-5678-9012"}</span>
+          {t.abhaId}: <span className="font-mono">{primaryPatient?.abha_id ?? "not linked"}</span>
         </p>
       </div>
 
@@ -303,7 +303,9 @@ export default function PatientDashboardPage() {
                 <CardTitle className={cn("tracking-tight text-foreground", fontSize === "large" ? "text-3xl" : "text-2xl")}>{bpDisplay}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={cn("font-medium text-muted-foreground", textScaling)}>Moderate</div>
+                {/* No "Moderate" here. It was a string literal unrelated to the reading
+                    above it, so a patient at 180/110 was told Moderate. A number with
+                    no label is honest; a wrong label is worse than none. */}
               </CardContent>
             </Card>
 
@@ -312,9 +314,7 @@ export default function PatientDashboardPage() {
                 <CardDescription className={cn("font-medium", textScaling)}>{t.glucose}</CardDescription>
                 <CardTitle className={cn("tracking-tight text-foreground", fontSize === "large" ? "text-3xl" : "text-2xl")}>{glucoseDisplay}</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className={cn("font-medium text-muted-foreground", textScaling)}>Normal</div>
-              </CardContent>
+              <CardContent />
             </Card>
 
             <Card className="shadow-sm">
@@ -422,13 +422,15 @@ export default function PatientDashboardPage() {
                 <div key={c.id} className="flex items-center justify-between p-5 border-b last:border-0 hover:bg-muted/20 transition-colors">
                   <div className="flex flex-col gap-1.5 pr-4">
                     <span className={cn("font-semibold text-foreground tracking-tight", textScaling)}>{c.purpose}</span>
-                    <span className={cn("text-muted-foreground font-medium text-xs", textScaling)}>Status: Active</span>
+                    <span className={cn("text-muted-foreground font-medium text-xs", textScaling)}>
+                      {c.is_active ? "Active" : "Revoked"}
+                    </span>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
                     className={cn("font-medium hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors", fontSize === "large" ? "text-base py-2 h-auto" : "")}
-                    disabled={revokingId === c.id}
+                    disabled={revokingId === c.id || !c.is_active}
                     onClick={() => handleRevoke(c.id)}
                   >
                     {revokingId === c.id ? t.revoking : t.revoke}

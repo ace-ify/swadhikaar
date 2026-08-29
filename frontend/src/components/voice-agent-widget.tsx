@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePatients } from "@/hooks/use-supabase";
+import { useAuth } from "@/context/auth-context";
 import {
   Sheet,
   SheetContent,
@@ -341,17 +342,27 @@ export default function VoiceAgentWidget() {
   const [lkToken, setLkToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Use first available patient profile for widget call context
+  // Matched on auth_user_id, not allPatients[0]. RLS happens to return one row for a
+  // patient login, so the old code was right by accident; it stopped being right the
+  // moment this widget rendered under any account that can see more than one patient.
   const { data: allPatients } = usePatients();
-  const primaryPatient = allPatients[0];
+  const { user } = useAuth();
+  const primaryPatient = allPatients.find((p) => p.auth_user_id === user?.id) ?? null;
 
   const connect = async () => {
     setPhase("connecting");
     setError(null);
     try {
-      const patientId =
-        primaryPatient?.id || "00000000-0000-0000-0000-000000000001";
-      const patientName = primaryPatient?.name || "Guest User";
+      // No fallback id. The old one filed the call and its transcript against a literal
+      // UUID belonging to no patient, so the call vanished from the caller's own
+      // history.
+      if (!primaryPatient) {
+        setError("No health record is linked to this account yet.");
+        setPhase("idle");
+        return;
+      }
+      const patientId = primaryPatient.id;
+      const patientName = primaryPatient.name;
 
       const data = await callStartVoiceCall({
         patient_id: patientId,

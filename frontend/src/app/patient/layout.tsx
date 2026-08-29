@@ -27,7 +27,7 @@ export default function PatientLayout({
       <SidebarProvider>
         <AppSidebar role="patient" />
         <SidebarInset className="flex flex-col bg-background h-screen overflow-hidden">
-          <DashboardHeader role="patient" userName={userName || "Ramesh Kumar"} />
+          <DashboardHeader role="patient" userName={userName} />
           <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-muted/20">
             {children}
           </main>

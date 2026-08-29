@@ -159,7 +159,7 @@ export default function PatientRecordsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">My Health Records</h1>
         <p className="text-sm text-slate-500">
-          ABHA ID: {primaryPatient?.abha_id ?? "91-1234-5678-9012"} · Last updated: {lastUpdated}
+          ABHA ID: {primaryPatient?.abha_id ?? "not linked"} · Last updated: {lastUpdated}
         </p>
       </div>
 

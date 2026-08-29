@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { usePatients, useConsents, revokeConsent } from "@/hooks/use-supabase";
+import { usePatients, useConsents, revokeConsent, createAuditLog } from "@/hooks/use-supabase";
 import type { Consent } from "@/hooks/use-supabase";
 import { toast } from "sonner";
 
@@ -54,6 +54,7 @@ export default function PatientConsentPage() {
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Handle revoke for Supabase-backed consents
   async function handleRevoke(id: string) {
@@ -285,13 +286,29 @@ export default function PatientConsentPage() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => {
+                  disabled={deleteBusy}
+                  onClick={async () => {
+                    // This used to set a flag and toast "recorded" without writing
+                    // anything, so the request existed only until the next refresh.
+                    setDeleteBusy(true);
+                    const res = await createAuditLog({
+                      user_role: "patient",
+                      action: "data_deletion_requested",
+                      resource_type: "patient",
+                      resource_id: primaryPatient?.id,
+                      details: { source: "patient_consent_screen" },
+                    });
+                    setDeleteBusy(false);
+                    if (res?.error) {
+                      toast.error("Could not submit the request. Please try again.");
+                      return;
+                    }
                     setDeleteConfirmed(true);
                     setShowDeleteDialog(false);
                     toast.success("Deletion request submitted");
                   }}
                 >
-                  Yes, Delete My Data
+                  {deleteBusy ? "Submitting…" : "Yes, Delete My Data"}
                 </Button>
                 <Button
                   size="sm"
