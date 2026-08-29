@@ -91,3 +91,6 @@ EOS-TEARDOWN.md
 pitchdeckuilive/
 *.pdf
 tmp.md
+# stray: a screenshot dropped in as .md, and a scratch bundle from an MCP deploy
+demoflow.md
+.intake_deploy.json

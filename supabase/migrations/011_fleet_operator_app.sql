@@ -33,3 +33,7 @@ alter type ambulance_dispatch_state add value if not exists 'returning';
 -- offered facilities, the reporter and incident_responders, and a vehicle operator is
 -- none of those). One security-definer read returning exactly the crew's fields is a
 -- smaller surface than widening four policies.
+--
+-- The three bodies below are the deployed definitions, dumped with
+-- pg_get_functiondef immediately after applying, so this file cannot drift from the
+-- project the way risk-predict did. See README.md in this directory.
