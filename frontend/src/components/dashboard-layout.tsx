@@ -26,6 +26,7 @@ import {
   Sprout,
   Ambulance,
   Siren,
+  BookOpen,
   Map as MapIcon,
 } from "lucide-react";
 import {
@@ -47,16 +48,20 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
+  // Items are shown under this heading. Only the patient side uses it: a victim should
+  // never have to scroll past follow-up screens to reach the SOS button, and the two
+  // halves of the patient app answer completely different questions.
+  group?: string;
 }
 
 const navByRole: Record<string, NavItem[]> = {
   patient: [
-    { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
-    { label: "Get Help Now", href: "/patient/sos", icon: Siren },
-    { label: "Emergency Card", href: "/patient/profile", icon: HeartPulse },
-    { label: "My Records", href: "/patient/records", icon: ClipboardList },
-    { label: "Call History", href: "/patient/calls", icon: PhoneCall },
-    { label: "Consent", href: "/patient/consent", icon: ShieldCheck },
+    { label: "Get Help Now", href: "/patient/sos", icon: Siren, group: "Emergency" },
+    { label: "Emergency Card", href: "/patient/profile", icon: HeartPulse, group: "Emergency" },
+    { label: "What To Do", href: "/patient/first-aid", icon: BookOpen, group: "Emergency" },
+    { label: "My Records", href: "/patient/records", icon: ClipboardList, group: "After care" },
+    { label: "Call History", href: "/patient/calls", icon: PhoneCall, group: "After care" },
+    { label: "Consent", href: "/patient/consent", icon: ShieldCheck, group: "After care" },
   ],
   doctor: [
     { label: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
@@ -115,32 +120,40 @@ export function AppSidebar({ role }: { role: string }) {
       </SidebarHeader>
 
       <SidebarContent className="px-3 mt-2 group-data-[collapsible=icon]:p-0">
-        <SidebarGroup className="group-data-[collapsible=icon]:p-2">
-          <SidebarGroupLabel className="text-xs uppercase tracking-widest text-muted-foreground/60 mb-2 group-data-[collapsible=icon]:hidden">Main Menu</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      tooltip={item.label}
-                      onClick={() => {
-                        setOpenMobile(false);
-                        router.push(item.href);
-                      }}
-                      className={cn("h-10 text-[13px] font-medium transition-colors", isActive ? "bg-accent/60 font-semibold" : "")}
-                    >
-                      <item.icon className="size-5! shrink-0 opacity-80" />
-                      <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* One group when nothing declares a group, so every other role renders exactly
+            as before. Grouped roles get a heading per group, in first-appearance order. */}
+        {Array.from(new Set(items.map((i) => i.group ?? "Main Menu"))).map((group) => (
+          <SidebarGroup key={group} className="group-data-[collapsible=icon]:p-2">
+            <SidebarGroupLabel className="text-xs uppercase tracking-widest text-muted-foreground/60 mb-2 group-data-[collapsible=icon]:hidden">
+              {group}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {items
+                  .filter((i) => (i.group ?? "Main Menu") === group)
+                  .map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          tooltip={item.label}
+                          onClick={() => {
+                            setOpenMobile(false);
+                            router.push(item.href);
+                          }}
+                          className={cn("h-10 text-[13px] font-medium transition-colors", isActive ? "bg-accent/60 font-semibold" : "")}
+                        >
+                          <item.icon className="size-5! shrink-0 opacity-80" />
+                          <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="p-4 border-t border-border/40 group-data-[collapsible=icon]:p-2">

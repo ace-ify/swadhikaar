@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 const ROLE_HOME: Record<UserRole, string> = {
-  patient: "/patient/dashboard",
+  patient: "/patient/sos",
   doctor: "/doctor/dashboard",
   admin: "/admin/dashboard",
   asha: "/asha/dashboard",

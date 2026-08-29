@@ -420,6 +420,11 @@ export interface MyIncident {
   golden_hour_start: string;
   created_at: string;
   medical_snapshot: Record<string, unknown>;
+  // False when the signed-in account reported this for somebody else. The status screen
+  // needs it: "help is coming" is the wrong sentence when the ambulance is going to a
+  // stranger you stopped for.
+  reported_for_self: boolean;
+  victim_name: string | null;
   dispatch: MyDispatch | MyDispatch[] | null;
 }
 
@@ -461,7 +466,7 @@ export function useMyLiveIncident(pulse = 0) {
       .from("incidents")
       .select(
         "id,ref,incident_type,description,severity,status,address,district,lat,lon," +
-          "golden_hour_start,created_at,medical_snapshot," +
+          "golden_hour_start,created_at,medical_snapshot,reported_for_self,victim_name," +
           "dispatch:incident_dispatch(state,wave_index,max_waves,wave_timeout_at," +
           "eta_seconds,ambulance_state,ambulance_eta_seconds," +
           "hospital:facilities!incident_dispatch_accepted_facility_id_fkey(name,lat,lon)," +

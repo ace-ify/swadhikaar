@@ -35,6 +35,9 @@ interface Parsed {
   district: string | null;
   vitals: Record<string, unknown>;
   required_services: string[];
+  // False when a bystander reports for someone else. The attach trigger uses it to
+  // decide whether the reporter's medical record is the victim's medical record.
+  reported_for_self: boolean;
 }
 
 // EOS's own format, with their trap preserved as a comment rather than as a bug:
@@ -104,6 +107,9 @@ function parse(channel: Channel, body: Record<string, unknown>): Parsed {
     required_services: Array.isArray(body.required_services)
       ? body.required_services.map(String).slice(0, 8)
       : [],
+    // Defaults to true so every existing caller keeps its current behaviour; only the
+    // "someone else" path has to say so.
+    reported_for_self: body.reported_for_self !== false,
   };
 }
 

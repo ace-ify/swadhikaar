@@ -55,3 +55,14 @@ const GUIDANCE: Record<string, FirstAid> = {
 export function firstAidFor(incidentType: string): FirstAid {
   return GUIDANCE[incidentType] ?? GUIDANCE.Emergency;
 }
+
+// For the browsable version of the same guidance. EOS puts a search box on theirs; six
+// entries do not need one, and a search box is a thing to fail at when you are shaking.
+export const FIRST_AID_TOPICS: { type: string; hi: string; en: string }[] = [
+  { type: "Road traffic accident", hi: "दुर्घटना", en: "Road accident" },
+  { type: "Cardiac emergency", hi: "सीने में दर्द", en: "Chest pain" },
+  { type: "Breathlessness", hi: "सांस लेने में तकलीफ", en: "Breathing trouble" },
+  { type: "Severe bleeding", hi: "बहुत खून बह रहा है", en: "Heavy bleeding" },
+  { type: "Fall", hi: "गिर गए / चोट", en: "Fall or injury" },
+  { type: "Emergency", hi: "कुछ और", en: "Anything else" },
+];

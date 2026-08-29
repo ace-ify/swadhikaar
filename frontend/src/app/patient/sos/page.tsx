@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Phone } from "lucide-react";
 import { SosStatus } from "@/components/patient/sos-status";
 import { useAcutePulse, useMyLiveIncident, myDispatch } from "@/hooks/use-acute";
@@ -57,6 +58,14 @@ export default function SosPage() {
   const [error, setError] = useState<string | null>(null);
   const now = useNow();
 
+  // The victim is very often not the person holding the phone. Somebody stops at a
+  // roadside accident for a stranger; a daughter presses it for her father. When the
+  // report is not about the reporter, the reporter's blood group and allergies must not
+  // travel with it -- so this flag goes to intake, and intake tells the trigger not to
+  // infer identity from the account.
+  const [forSelf, setForSelf] = useState(true);
+  const [victimName, setVictimName] = useState("");
+
   // Realtime, then a nudge for the moment right after sending, so the screen never
   // depends on a socket to be correct.
   const pulse = useAcutePulse();
@@ -98,9 +107,11 @@ export default function SosPage() {
             lon: pos.coords.longitude,
             incident_type: kind.type,
             triage_colour: kind.triage,
-            description: `Reported from the SOS button. Location accurate to about ${Math.round(
-              pos.coords.accuracy,
-            )} m.`,
+            reported_for_self: forSelf,
+            victim_name: forSelf ? null : victimName.trim() || null,
+            description: `Reported from the SOS button${
+              forSelf ? "" : " by someone else at the scene"
+            }. Location accurate to about ${Math.round(pos.coords.accuracy)} m.`,
           }),
         },
       );
@@ -129,10 +140,18 @@ export default function SosPage() {
     <div className="mx-auto max-w-xl space-y-5 pb-20">
       <div className="space-y-1 px-1">
         <h1 className="text-2xl font-bold tracking-tight" lang="hi">
-          {live ? "मदद आ रही है" : "मदद चाहिए?"}
+          {live
+            ? incident?.reported_for_self === false
+              ? "मदद भेज दी है"
+              : "मदद आ रही है"
+            : "मदद चाहिए?"}
         </h1>
         <p className="text-muted-foreground text-sm" lang="hi">
-          {live ? "बंद न करें।" : "जो हो रहा है उस पर दबाएं।"}
+          {live
+            ? incident?.reported_for_self === false
+              ? `${incident?.victim_name ?? "जिनके लिए भेजा"} — उनके पास रुकें।`
+              : "बंद न करें।"
+            : "जो हो रहा है उस पर दबाएं।"}
         </p>
 
       </div>
@@ -150,25 +169,71 @@ export default function SosPage() {
       {live && incident ? (
         <SosStatus incident={incident} now={now} />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {KINDS.map((k) => (
-            <Button
-              key={k.en}
-              size="lg"
-              variant={k.triage === "red" ? "destructive" : "default"}
-              className="h-16 text-base"
-              disabled={busy}
-              onClick={() => void send(k)}
-            >
-              <span className="flex flex-col items-center leading-tight">
-                <span lang="hi" className="text-base font-semibold">
-                  {k.hi}
+        <>
+          {/* Who is this for. Asked before the emergency buttons, not after: it changes
+              what gets sent, and a person who has already pressed a red button is not
+              going to read a follow-up question. */}
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { self: true, hi: "मेरे लिए", en: "For me" },
+              { self: false, hi: "किसी और के लिए", en: "For someone else" },
+            ].map((o) => (
+              <Button
+                key={o.en}
+                type="button"
+                variant={forSelf === o.self ? "secondary" : "outline"}
+                className="h-auto py-2.5"
+                onClick={() => setForSelf(o.self)}
+              >
+                <span className="flex flex-col leading-tight">
+                  <span lang="hi" className="text-sm font-semibold">
+                    {o.hi}
+                  </span>
+                  <span className="text-xs font-normal opacity-70">{o.en}</span>
                 </span>
-                <span className="text-xs font-normal opacity-80">{k.en}</span>
-              </span>
-            </Button>
-          ))}
-        </div>
+              </Button>
+            ))}
+          </div>
+
+          {!forSelf ? (
+            <div className="space-y-1.5">
+              <Input
+                value={victimName}
+                onChange={(e) => setVictimName(e.target.value)}
+                placeholder="Who is it? Leave blank if you don't know"
+                aria-label="Who the emergency is for"
+              />
+              <p className="text-muted-foreground text-xs">
+                <span lang="hi">
+                  आपका मेडिकल रिकॉर्ड इसमें नहीं जाएगा — यह आपके बारे में नहीं है।
+                </span>
+                <span className="block">
+                  Your own medical record is not attached — this is not about you.
+                </span>
+              </p>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {KINDS.map((k) => (
+              <Button
+                key={k.en}
+                size="lg"
+                variant={k.triage === "red" ? "destructive" : "default"}
+                className="h-16 text-base"
+                disabled={busy}
+                onClick={() => void send(k)}
+              >
+                <span className="flex flex-col items-center leading-tight">
+                  <span lang="hi" className="text-base font-semibold">
+                    {k.hi}
+                  </span>
+                  <span className="text-xs font-normal opacity-80">{k.en}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        </>
       )}
 
       {busy ? <p className="text-center text-sm font-medium">{stage}</p> : null}

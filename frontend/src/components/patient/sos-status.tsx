@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
 import { firstAidFor } from "@/components/patient/first-aid";
+import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
 import { myDispatch, cancelMyIncident, type MyIncident } from "@/hooks/use-acute";
 
 // Leaflet reads window at module scope, so this cannot be server-rendered.
@@ -199,6 +200,19 @@ export function SosStatus({
           </CardContent>
         </Card>
       ) : null}
+
+      {/* What the crew and the receiving hospital are being told about the patient. Shown
+          to the patient too, because "your card is already with them" is only reassuring
+          if you can see it -- and if it is thin, this is the screen that makes that
+          visible while there is still time to fix it. */}
+      <Card>
+        <CardContent className="space-y-2 py-4">
+          <p className="text-muted-foreground text-xs uppercase tracking-wider">
+            <span lang="hi">उन्हें यह भेजा गया है</span> · Sent to them
+          </p>
+          <MedicalSnapshot snapshot={incident.medical_snapshot} />
+        </CardContent>
+      </Card>
 
       {/* While waiting. Shown from the moment the case opens, because the useful minutes
           are the ones before anybody arrives. */}

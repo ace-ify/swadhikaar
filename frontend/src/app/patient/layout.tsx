@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { AppSidebar, DashboardHeader } from "@/components/dashboard-layout";
 import { AccessibilityProvider } from "@/context/accessibility-context";
@@ -15,12 +16,22 @@ const VoiceAgentWidget = dynamic(
   { ssr: false }
 );
 
+// The voice agent places and answers FOLLOW-UP calls -- the thirty days after a case
+// closes. It has no business floating over the SOS button: a second round thing to press
+// next to the one that matters, on the screen where a wrong tap costs the most. EOS uses
+// voice during an active SOS for a consciousness check every 60 seconds, which is a real
+// feature and a different one; we have not built that, so we do not imply it by leaving
+// a microphone on the emergency screens.
+const EMERGENCY_ROUTES = ["/patient/sos", "/patient/first-aid"];
+
 export default function PatientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const { userName } = useAuth();
+  const pathname = usePathname();
+  const duringEmergency = EMERGENCY_ROUTES.some((r) => pathname.startsWith(r));
 
   return (
     <AccessibilityProvider>
@@ -32,7 +43,7 @@ export default function PatientLayout({
             {children}
           </main>
         </SidebarInset>
-        <VoiceAgentWidget />
+        {duringEmergency ? null : <VoiceAgentWidget />}
       </SidebarProvider>
     </AccessibilityProvider>
   );
