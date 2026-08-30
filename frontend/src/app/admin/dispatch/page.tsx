@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
+import { ScenePhoto } from "@/components/scene-photo";
 import {
   useAcutePulse,
   useIncidents,
@@ -405,6 +406,11 @@ const ACTION_WORDS: Record<string, string> = {
   ambulance_rejected: "crew said no",
   ambulance_exhausted: "no ambulance available",
   ambulance_no_units: "no ambulance nearby",
+  // Written by the patient's own phone, every 60 seconds while they wait.
+  wellbeing_ok: "patient answered — still conscious",
+  wellbeing_missed: "patient did not answer",
+  wellbeing_unresponsive: "PATIENT STOPPED ANSWERING",
+  cancelled_by_reporter: "cancelled by the person who reported it",
 };
 
 // Append-only. Status transitions are written by trigger, so an actor cannot omit
@@ -972,6 +978,7 @@ Nothing open.
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 {selected.description ? <p>{selected.description}</p> : null}
+                <ScenePhoto path={selected.scene_photo_path} />
                 <MedicalSnapshot snapshot={selected.medical_snapshot} />
                 {Object.keys(selected.vitals ?? {}).length > 0 ? (
                   <p className="font-mono text-xs">

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Phone } from "lucide-react";
 import { firstAidFor } from "@/components/patient/first-aid";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
+import { WellbeingCheck } from "@/components/patient/wellbeing-check";
 import { ScenePhoto } from "@/components/scene-photo";
 import { myDispatch, cancelMyIncident, type MyIncident } from "@/hooks/use-acute";
 
@@ -233,6 +234,12 @@ export function SosStatus({
             ) : null}
           </CardContent>
         </Card>
+      ) : null}
+
+      {/* Asked while nobody is with them yet. Once the crew is on scene there is a trained
+          person looking at the patient, and a phone asking "are you there?" is noise. */}
+      {step < 3 && d?.ambulance_state !== "on_scene" ? (
+        <WellbeingCheck incidentId={incident.id} />
       ) : null}
 
       {/* What the crew and the receiving hospital are being told about the patient. Shown
