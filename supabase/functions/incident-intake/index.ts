@@ -217,9 +217,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "could not record the incident", detail: insertError?.message }, 500);
   }
 
+  // Capacity IS weighed. The parameter keeps its old "simulated" name because three
+  // other call sites pass it, but since 014 a facility can declare its own beds, blood
+  // and staffing from the inbox screen, so the numbers are operator-stated rather than
+  // invented. The factors JSON on every candidate says which of the two it was —
+  // `facility_declared` with a timestamp, or `SEEDED`.
   const { data: dispatch, error: dispatchError } = await admin.rpc("open_dispatch", {
     p_incident: incident.id,
-    p_use_simulated_capacity: false,
+    p_use_simulated_capacity: true,
   });
 
   await finish("accepted", { caller_uid: callerUid, incident_id: incident.id });

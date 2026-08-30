@@ -24,6 +24,13 @@ from the repo would have silently reverted the model.
 | `007_demo_readiness.sql` | `grant_app_role` for facility_staff, `incident_events.seq`, trail ordering |
 | `008_fleet_telemetry.sql` | simulated vehicle movement, `delivered` state, re-delivery guard, map wiring |
 | `009_close_the_loop.sql` | seam accepts a real incident ref; `reset_demo_state`, `demo_state` |
+| `010_patient_side_integrity.sql` | `save_my_emergency_profile`, `attach_patient_to_incident`, `cancel_my_incident` |
+| `011_fleet_operator_app.sql` | crew screen: `fleet_operator` role, EMS phase transitions the cron was doing for them |
+| `012_report_for_someone_else.sql` | `incidents.reported_for_self`; stops a bystander's medical record attaching to the victim |
+| `013_scene_photo.sql` | `incidents.scene_photo_path`, private `incident-scene` bucket, storage RLS, `attach_scene_photo` |
+| `014_blood_and_capacity.sql` | blood columns + the blood factor wired, bleeding keywords in `specialities_for_incident`, `declare_facility_capacity` |
+| `014_blood_and_capacity.sql` | blood/declared-capacity columns, `specialities_for_incident` matches bleeding, blood factor in `score_dispatch_candidates`. **Apply state unknown, and nothing in the repo passes `p_needs_blood` or writes the columns — run `../verify_pending_state.sql`** |
+| `015_crew_sees_the_scene.sql` | **NOT YET APPLIED** — widens `scene_photo_read` to the assigned crew, adds `scene_photo_path` to `my_fleet_run()` |
 
 ## What is NOT captured
 

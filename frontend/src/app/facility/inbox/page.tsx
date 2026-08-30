@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
+import { ScenePhoto } from "@/components/scene-photo";
+import { FacilityCapacity } from "@/components/facility/facility-capacity";
 import {
   useAcutePulse,
   useFacilityOffers,
@@ -156,6 +158,10 @@ function OfferCard({
 
       <CardContent className="space-y-3">
         {inc?.description ? <p className="text-sm">{inc.description}</p> : null}
+
+        {/* Above the medical snapshot: for a road accident the photograph tells a nurse
+            more about what to prepare than the words "Road traffic accident" do. */}
+        <ScenePhoto path={inc?.scene_photo_path} />
 
         {/* Before the vitals, not after: blood group and allergies change what the team
             prepares, and a nurse reading top-down should hit them first. */}
@@ -312,6 +318,19 @@ Nothing waiting.
           onDone={() => setNudge((n) => n + 1)}
         />
       ))}
+
+      {/* Below the live cases, above the history: a nurse opening this screen is looking
+          for the patient, not the form. One card per linked facility, because an account
+          covering two hospitals declares for each separately. */}
+      {linked
+        ? mine.map((m) => (
+            <FacilityCapacity
+              key={m.facility_id}
+              facility={m}
+              onSaved={() => setNudge((n) => n + 1)}
+            />
+          ))
+        : null}
 
       {past.length > 0 ? (
         <div className="space-y-3 pt-2">

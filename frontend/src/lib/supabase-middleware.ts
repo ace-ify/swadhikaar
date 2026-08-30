@@ -60,11 +60,20 @@ export async function updateSession(request: NextRequest) {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const allowed = ["patient", "doctor", "admin", "asha"];
-    const role = allowed.includes(data?.role) ? data!.role : "patient";
+    // Kept in step with ROLE_HOME in app/login/page.tsx. It drifted once already:
+    // facility_staff was missing here, so a signed-in hospital user hitting /login
+    // landed on the patient portal.
+    const HOME: Record<string, string> = {
+      patient: "/patient/sos",
+      doctor: "/doctor/dashboard",
+      admin: "/admin/dashboard",
+      asha: "/asha/dashboard",
+      facility_staff: "/facility/inbox",
+      fleet_operator: "/fleet",
+    };
 
     const url = request.nextUrl.clone();
-    url.pathname = `/${role}/dashboard`;
+    url.pathname = HOME[data?.role as string] ?? "/patient/sos";
     return NextResponse.redirect(url);
   }
 

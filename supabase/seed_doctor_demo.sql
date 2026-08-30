@@ -25,7 +25,8 @@
 -- ponytail: deterministic hashing via ('x'||substr(md5(key),1,7))::bit(28)::int —
 -- always non-negative, no abs(), no helper function left behind in the schema.
 
-begin;
+-- Sent as ONE multi-statement batch, which Postgres wraps in a single implicit
+-- transaction — so no explicit BEGIN/COMMIT, and a failure anywhere rolls back all of it.
 
 -- 1 -- Caseload: the 60-patient simulated flood cohort (already synthetic, and the only
 -- rows with a journey_status spread) plus 40 camp patients stratified by risk so the
@@ -92,7 +93,7 @@ select
   round((1.2 + (h % 30) / 10.0)::numeric, 1),
   now() - (n * 50 || ' days')::interval - ((h % 40) || ' hours')::interval
 from patients p
-cross join generate_series(0, 1) n
+cross join generate_series(0, 1) as g(n)
 cross join lateral (select (('x'||substr(md5(p.id::text||'v'||n),1,7))::bit(28)::int) h) r
 cross join lateral (select * from (values
     ('High',     150, 94, 90, 92, 205, 27.5),
@@ -183,12 +184,12 @@ select
   else jsonb_build_object('seed','doctor_demo') end,
   c.sev,
   case when c.h % 10 < 7 then 120 + (c.h % 260) else 0 end,
-  c.at, c.at + ((120 + c.h % 260) || ' seconds')::interval, c.at,
+  c.at_ts, c.at_ts + ((120 + c.h % 260) || ' seconds')::interval, c.at_ts,
   null, 1
 from patients p
-cross join generate_series(0, 1) n
+cross join generate_series(0, 1) as g(n)
 cross join lateral (
-  select q.h, q.at,
+  select q.h, q.at_ts,
     (array['screening_to_opd','follow_up','recovery_protocol','chronic_management',
            'elderly_checkin','opd_to_ipd'])[1 + q.h % 6] ctype,
     case coalesce(p.risk_level,'Unknown') when 'High' then 'high'
@@ -208,7 +209,7 @@ cross join lateral (
            jsonb_build_object('symptom','fatigue','duration','2 weeks','severity','mild')) end sx
   from (select (('x'||substr(md5(p.id::text||'call'||n),1,7))::bit(28)::int) h,
                now() - ((3 + n * 9 + (('x'||substr(md5(p.id::text||'when'||n),1,7))::bit(28)::int % 25))
-                        || ' days')::interval at) q
+                        || ' days')::interval at_ts) q
 ) c
 where p.assigned_doctor_id = (select d.id from doctors d
         join user_roles ur on ur.user_id = d.auth_user_id and ur.role = 'doctor' limit 1)
@@ -266,7 +267,8 @@ select
     'code', jsonb_build_object('text', f.display),
     'effectiveDateTime', to_char(vc.created_at, 'YYYY-MM-DD"T"HH24:MI:SSOF'),
     'valueString', vc.extracted_data->>'call_summary'),
-  f.snomed, f.loinc,
+  f.snomed_one || case when f.h % 3 = 0 then array['271649006'] else array[]::text[] end,
+  f.loinc,
   (array['pending','pending','pending','approved','corrected','rejected'])[1 + f.h % 6],
   vc.created_at + interval '12 minutes'
 from voice_calls vc
@@ -275,8 +277,9 @@ cross join lateral (
     case when h % 2 = 0 then 'Condition' else 'Observation' end rtype,
     (array['Essential hypertension','Type 2 diabetes mellitus','Dyspnoea on exertion',
            'Chest discomfort'])[1 + h % 4] display,
-    (array[array['38341003'], array['44054006'], array['267036007'], array['29857009']])[1 + h % 4] snomed,
-    (array[array['8480-6','8462-4'], array['2339-0'], array['9279-1'], array['8867-4']])[1 + h % 4] loinc
+    (array['38341003','44054006','267036007','29857009'])[1 + h % 4] snomed_one,
+    case h % 4 when 0 then array['8480-6','8462-4'] when 1 then array['2339-0']
+                when 2 then array['9279-1'] else array['8867-4'] end loinc
   from (select (('x'||substr(md5(vc.id::text||'fhir'),1,7))::bit(28)::int) h) q
 ) f
 where vc.status = 'completed'
@@ -290,25 +293,27 @@ on conflict (id) do nothing;
 insert into newborns (
   id, parent_patient_id, baby_name, date_of_birth, gender, birth_weight_kg,
   birth_hospital, phone, language, created_at)
+with picked as (
+  select p.id, p.name, p.phone, p.language,
+         (('x'||substr(md5(p.id::text||'nb'),1,7))::bit(28)::int) h,
+         row_number() over (order by md5(p.id::text||'nbpick')) rn
+  from patients p
+  where p.assigned_doctor_id = (select d.id from doctors d
+          join user_roles ur on ur.user_id = d.auth_user_id and ur.role = 'doctor' limit 1)
+    and p.phone is not null
+)
 select
-  md5('dd:newborn:'||p.id::text)::uuid, p.id,
-  'Baby of '||split_part(p.name, ' ', 1),
+  md5('dd:newborn:'||b.id::text)::uuid, b.id,
+  'Baby of '||split_part(b.name, ' ', 1),
   (current_date - ((30 + b.rn * 33) || ' days')::interval)::date,
   case when b.rn % 2 = 0 then 'female' else 'male' end,
   round((2.4 + (b.h % 14) / 10.0)::numeric, 2),
   (array['Patna Medical College Hospital','Guru Gobind Singh Hospital',
          'Gauhati Medical College','Nalanda Medical College Hospital'])[1 + b.h % 4],
-  p.phone, coalesce(p.language, 'hindi'),
+  b.phone, coalesce(b.language, 'hindi'),
   now() - interval '20 days'
-from patients p
-cross join lateral (
-  select (('x'||substr(md5(p.id::text||'nb'),1,7))::bit(28)::int) h,
-         row_number() over (order by md5(p.id::text||'nbpick')) rn
-) b
-where p.assigned_doctor_id = (select d.id from doctors d
-        join user_roles ur on ur.user_id = d.auth_user_id and ur.role = 'doctor' limit 1)
-  and p.phone is not null
-  and b.rn <= 9
+from picked b
+where b.rn <= 9
 on conflict (id) do nothing;
 
 -- 10 -- UIP schedule. status is derived from the due date, plus a deliberate ~1-in-5
@@ -352,4 +357,24 @@ where n.id in (select md5('dd:newborn:'||p.id::text)::uuid from patients p
                  join user_roles ur on ur.user_id = d.auth_user_id and ur.role = 'doctor' limit 1))
 on conflict (id) do nothing;
 
-commit;
+-- 11 -- The check. Last statement in the batch, so a failure here rolls back the whole
+-- seed rather than leaving a half-seeded database — and, crucially, rolls back any row
+-- that would have made the 5-minute cron place a real outbound call.
+do $$
+declare n int;
+begin
+  select count(*) into n
+    from voice_calls vc join patients p on p.id = vc.patient_id
+   where vc.status = 'scheduled' and vc.scheduled_for is not null
+     and vc.scheduled_for <= now() and p.phone is not null;
+  if n > 0 then
+    raise exception 'SEED ABORTED: % voice_calls row(s) are due for the live dialer', n;
+  end if;
+
+  select count(*) into n from patients
+   where assigned_doctor_id = (select d.id from doctors d
+           join user_roles ur on ur.user_id = d.auth_user_id and ur.role = 'doctor' limit 1);
+  if n < 50 then
+    raise exception 'SEED FAILED: doctor caseload is % patients, expected ~100', n;
+  end if;
+end $$;

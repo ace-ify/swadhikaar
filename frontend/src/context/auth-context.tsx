@@ -16,7 +16,8 @@ export type UserRole =
   | "doctor"
   | "admin"
   | "asha"
-  | "facility_staff";
+  | "facility_staff"
+  | "fleet_operator";
 
 const ROLES: readonly UserRole[] = [
   "patient",
@@ -24,6 +25,7 @@ const ROLES: readonly UserRole[] = [
   "admin",
   "asha",
   "facility_staff",
+  "fleet_operator",
 ];
 
 interface AuthState {

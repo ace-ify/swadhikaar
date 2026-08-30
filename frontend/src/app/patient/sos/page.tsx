@@ -9,14 +9,20 @@
 // Calling 112 is on this screen too, and always enabled. Whatever this app does or
 // fails to do, the phone network is the fallback that does not depend on us.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Phone } from "lucide-react";
+import { Camera, Phone, X } from "lucide-react";
 import { SosStatus } from "@/components/patient/sos-status";
-import { useAcutePulse, useMyLiveIncident, myDispatch } from "@/hooks/use-acute";
+import { AirQuality } from "@/components/patient/air-quality";
+import {
+  useAcutePulse,
+  useMyLiveIncident,
+  myDispatch,
+  uploadScenePhoto,
+} from "@/hooks/use-acute";
 
 // Hindi first, English under it. This is the one screen a person in a village holds
 // in an emergency; the admin screens are read by staff who work in English.
@@ -66,6 +72,27 @@ export default function SosPage() {
   const [forSelf, setForSelf] = useState(true);
   const [victimName, setVictimName] = useState("");
 
+  // A photo is chosen before the emergency button but uploaded after intake answers.
+  // Both halves of that matter: somebody who can see the scene has to be asked while
+  // they are still looking at it, and an ambulance must never wait on a camera or on a
+  // village upload. So the incident goes out first and the photo follows it.
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  // Revoking matters here: a phone photo held as an un-revoked blob URL is megabytes
+  // pinned for the life of the tab, on the device least able to spare them.
+  useEffect(() => {
+    if (!photo) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
   // Realtime, then a nudge for the moment right after sending, so the screen never
   // depends on a socket to be correct.
   const pulse = useAcutePulse();
@@ -73,12 +100,17 @@ export default function SosPage() {
   const { data: incident, error: loadError } = useMyLiveIncident(pulse + nudge);
 
   // "Live" means the case has not finished. A delivered or closed case drops back to the
-  // buttons, because the next emergency is a new one.
+  // buttons, because the next emergency is a new one. `returning` counts as finished too:
+  // the crew driving back to station is not this person's emergency any more, and without
+  // it the screen flipped back to "help is coming" after the handover.
   const d = myDispatch(incident);
   const live =
     incident !== null &&
     !["resolved", "cancelled", "expired"].includes(incident.status) &&
-    !(incident.status === "arrived" && d?.ambulance_state === "delivered");
+    !(
+      incident.status === "arrived" &&
+      (d?.ambulance_state === "delivered" || d?.ambulance_state === "returning")
+    );
 
   async function send(kind: (typeof KINDS)[number]) {
     setBusy(true);
@@ -115,11 +147,33 @@ export default function SosPage() {
           }),
         },
       );
-      const body = (await res.json()) as { ok?: boolean; error?: string; detail?: string };
+      const body = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        detail?: string;
+        incident_id?: string;
+      };
       if (!res.ok || !body.ok) {
         setError(body.detail ?? body.error ?? "Could not send.");
       } else {
         setNudge((n) => n + 1);
+
+        // Dispatch is already open at this point. The photo is a best-effort follow-up:
+        // if it fails, say so plainly and leave the case alone. Losing a photograph is
+        // not a reason to imply the ambulance did not go.
+        if (photo && body.incident_id) {
+          setStage("फोटो भेज रहे हैं… / Sending the photo…");
+          const up = await uploadScenePhoto(body.incident_id, photo);
+          if (up.ok) {
+            setPhoto(null);
+            setPhotoNote("फोटो भेज दी गई। / Photo sent to the hospital.");
+          } else {
+            setPhotoNote(
+              "मदद भेज दी गई है, लेकिन फोटो नहीं गई। / Help is on the way, but the photo did not send.",
+            );
+          }
+          setNudge((n) => n + 1);
+        }
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not send.";
@@ -170,6 +224,11 @@ export default function SosPage() {
         <SosStatus incident={incident} now={now} />
       ) : (
         <>
+          {/* Ambient, and only when there is no live case: during an emergency nobody
+              cares about PM2.5. Renders nothing at all without a location, so it can
+              never put a permission prompt in front of the emergency buttons. */}
+          <AirQuality />
+
           {/* Who is this for. Asked before the emergency buttons, not after: it changes
               what gets sent, and a person who has already pressed a red button is not
               going to read a follow-up question. */}
@@ -214,6 +273,80 @@ export default function SosPage() {
             </div>
           ) : null}
 
+          {/* Optional, and said so, in the smaller type: a person alone with chest pain
+              must not read this as a step they have to complete first. `capture` opens
+              the rear camera directly on a phone -- native, no picker library. */}
+          <div className="space-y-1.5">
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setPhotoNote(null);
+                // The bucket caps at 8 MB. Catching it here gives a sentence instead of
+                // a storage error string after the emergency has already gone out.
+                if (f && f.size > 8 * 1024 * 1024) {
+                  setPhotoNote("फोटो बहुत बड़ी है। / That photo is too large (8 MB max).");
+                  setPhoto(null);
+                } else {
+                  setPhoto(f);
+                }
+                e.target.value = "";
+              }}
+            />
+
+            {preview ? (
+              <div className="flex items-center gap-3 rounded-md border p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={preview}
+                  alt="The photo you are about to send"
+                  className="size-16 rounded object-cover"
+                />
+                <p className="flex-1 text-xs">
+                  <span lang="hi" className="block font-medium">
+                    यह फोटो अस्पताल को भेजी जाएगी।
+                  </span>
+                  <span className="text-muted-foreground">
+                    Goes to the hospital with the call.
+                  </span>
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Remove the photo"
+                  onClick={() => {
+                    setPhoto(null);
+                    setPhotoNote(null);
+                  }}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto w-full py-2.5"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Camera className="mr-2 size-4" />
+                <span className="flex flex-col items-start leading-tight">
+                  <span lang="hi" className="text-sm font-semibold">
+                    फोटो लें (ज़रूरी नहीं)
+                  </span>
+                  <span className="text-xs font-normal opacity-70">
+                    Photo of the scene — optional
+                  </span>
+                </span>
+              </Button>
+            )}
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
             {KINDS.map((k) => (
               <Button
@@ -237,6 +370,10 @@ export default function SosPage() {
       )}
 
       {busy ? <p className="text-center text-sm font-medium">{stage}</p> : null}
+
+      {photoNote && !busy ? (
+        <p className="text-muted-foreground text-center text-sm">{photoNote}</p>
+      ) : null}
 
       {/* Stated, not silent. The last known state stays on screen above; this says it
           may be stale rather than letting the screen quietly contradict itself. */}

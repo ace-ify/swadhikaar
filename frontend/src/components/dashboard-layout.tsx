@@ -87,12 +87,18 @@ const navByRole: Record<string, NavItem[]> = {
   facility_staff: [
     { label: "Incoming Cases", href: "/facility/inbox", icon: Siren },
   ],
+  // One item, and that is the design: a crew member is driving. Everything the run
+  // needs is on one screen, so there is nothing to navigate between.
+  fleet_operator: [
+    { label: "My Run", href: "/fleet", icon: Ambulance },
+  ],
 };
 
 // `facility_staff` would otherwise render as "facility_staff Portal" in the header.
 const ROLE_LABEL: Record<string, string> = {
   doctor: "coordinator",
   facility_staff: "facility",
+  fleet_operator: "crew",
 };
 
 const roleLabel = (role: string) => ROLE_LABEL[role] ?? role;

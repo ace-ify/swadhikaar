@@ -13,6 +13,7 @@ const ROLE_HOME: Record<UserRole, string> = {
   admin: "/admin/dashboard",
   asha: "/asha/dashboard",
   facility_staff: "/facility/inbox",
+  fleet_operator: "/fleet",
 };
 
 /**
