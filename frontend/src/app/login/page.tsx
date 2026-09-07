@@ -68,8 +68,22 @@ export default function LoginPage() {
     router.push(ROLE_HOME[result.role ?? "patient"]);
   }
 
+  async function handleQuickDemoLogin(demoEmail: string) {
+    setLoading(true);
+    setError("");
+    setEmail(demoEmail);
+    setPassword("DemoPassword123!");
+    const result = await signIn(demoEmail, "DemoPassword123!");
+    setLoading(false);
+    if (result.error) {
+      setError(humanError(result.error));
+      return;
+    }
+    router.push(ROLE_HOME[result.role ?? "patient"]);
+  }
+
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -84,46 +98,110 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleEmailLogin} className="space-y-4">
-          {error && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
-              {error}
+        {/* Login Card */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <form onSubmit={handleEmailLogin} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                {error}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter email"
+                required
+              />
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter email"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              required
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </Button>
-        </form>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                required
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
 
-        {/* slate-400 on white is 2.63:1 at 12px — below the 4.5:1 WCAG AA floor.
-            slate-600 clears it, and this app is read outdoors in sunlight. */}
-        <p className="text-xs text-slate-600 text-center mt-6">
-          Secure access for Swadhikaar care operations
+          {/* Quick Demo Logins */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div className="text-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                ⚡ 1-Click Demo Logins / त्वरित लॉगिन
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => handleQuickDemoLogin("acecodes21@gmail.com")}
+                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-emerald-50 hover:border-emerald-300"
+              >
+                <span className="text-xs font-bold text-slate-800">🧑‍⚕️ Doctor OPD</span>
+                <span className="text-[10px] text-slate-400">Queue & Triage</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => handleQuickDemoLogin("yashmonarch21@gmail.com")}
+                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-sky-50 hover:border-sky-300"
+              >
+                <span className="text-xs font-bold text-slate-800">👤 Patient</span>
+                <span className="text-[10px] text-slate-400">Records & ABHA</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => handleQuickDemoLogin("demoshow@swadhikaar.local")}
+                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-purple-50 hover:border-purple-300"
+              >
+                <span className="text-xs font-bold text-slate-800">🛠️ Admin Dispatch</span>
+                <span className="text-[10px] text-slate-400">Fleet & Live Map</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => handleQuickDemoLogin("21ace.ns21@gmail.com")}
+                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-amber-50 hover:border-amber-300"
+              >
+                <span className="text-xs font-bold text-slate-800">👩‍⚕️ ASHA Worker</span>
+                <span className="text-[10px] text-slate-400">Rural Tablet</span>
+              </Button>
+            </div>
+
+            {/* Direct MediKiosk Button */}
+            <div className="pt-1">
+              <Link href="/kiosk" className="block">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 py-2"
+                >
+                  <span>🏥 Open Walk-In MediKiosk (No Login Required)</span>
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 text-center mt-6">
+          Swadhikaar Clinical Operating System • DPDP Act 2023 Compliant
         </p>
       </div>
     </main>

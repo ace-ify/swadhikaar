@@ -30,7 +30,14 @@ from the repo would have silently reverted the model.
 | `013_scene_photo.sql` | `incidents.scene_photo_path`, private `incident-scene` bucket, storage RLS, `attach_scene_photo` |
 | `014_blood_and_capacity.sql` | blood columns + the blood factor wired, bleeding keywords in `specialities_for_incident`, `declare_facility_capacity` |
 | `014_blood_and_capacity.sql` | blood/declared-capacity columns, `specialities_for_incident` matches bleeding, blood factor in `score_dispatch_candidates`. **Apply state unknown, and nothing in the repo passes `p_needs_blood` or writes the columns — run `../verify_pending_state.sql`** |
-| `015_crew_sees_the_scene.sql` | **NOT YET APPLIED** — widens `scene_photo_read` to the assigned crew, adds `scene_photo_path` to `my_fleet_run()` |
+| `015_crew_sees_the_scene.sql` | widens `scene_photo_read` to the assigned crew, adds `scene_photo_path` to `my_fleet_run()`. **Applied** as `scene_photo_visible_to_crew` + `scene_photo_read_scope_to_current_run` |
+| `016_case_taking_schema.sql` | PS1 kiosk: `case_sessions`, `history_answers`, `dashavidha_assessments`, `case_documents`, `document_entities`, `case_summaries`, `drug_interactions` + seed, `consents` widened for ABDM artefacts, `case-documents` bucket. **Applied** as four MCP migrations named in the file header |
+| `017_case_taking_rls.sql` | RLS on all seven, `patient_owns_session`, `review_case_summary`, `case_document_session`, storage read policy. **Applied** as `case_taking_rls_and_grants` + `review_case_summary_and_storage_policies` |
+
+`list_migrations` is the authority on what is applied, not this table. As of
+2026-09-06 it shows 110 versions and every file above is among them — the "NOT YET
+APPLIED" notes on 014 and 015 in earlier revisions of this README were stale.
+
 
 ## What is NOT captured
 

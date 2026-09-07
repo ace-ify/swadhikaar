@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from agent import LANGUAGES, MURF_VOICES, SARVAM_LANGS, tts_candidates
+from agent import LANGUAGES, MURF_VOICES, RIME_VOICES, SARVAM_LANGS, tts_candidates
 
 # GET /v1/speech/voices?model=FALCON on 2026-08-25 — the streaming catalogue.
 # Hardcoded on purpose: a test that re-fetched would need a key and would pass on a
@@ -123,9 +123,10 @@ def test_every_patient_language_reaches_a_voice():
 
 # (name, plugin, builder, langs) — the plugin only has to be non-None to count as
 # installed, and tts_candidates never calls the builder.
-def _chain(murf=object(), sarvam=object(), google=object()):
+def _chain(murf=object(), rime=object(), sarvam=object(), google=object()):
     return [
         ("murf", murf, lambda: "murf-tts", frozenset(MURF_VOICES)),
+        ("rime", rime, lambda: "rime-tts", frozenset(RIME_VOICES)),
         ("sarvam", sarvam, lambda: "sarvam-tts", SARVAM_LANGS),
         ("google", google, lambda: "google-tts", None),
     ]
@@ -156,22 +157,88 @@ def test_language_murf_lacks_skips_to_sarvam():
 def test_preferred_can_fall_back_not_only_forward():
     """The ordering bug: slicing the chain at the preferred index meant
     FAST_TTS_PROVIDER=sarvam could never reach murf."""
-    assert _names(_chain(), "sarvam", "hi-IN") == ["sarvam", "murf", "google"]
-    assert _names(_chain(), "google", "hi-IN") == ["google", "murf", "sarvam"]
+    assert _names(_chain(), "sarvam", "hi-IN") == ["sarvam", "murf", "rime", "google"]
+    assert _names(_chain(), "google", "hi-IN") == ["google", "murf", "rime", "sarvam"]
 
 
 def test_uninstalled_plugin_is_skipped():
-    assert _names(_chain(murf=None), "murf", "hi-IN") == ["sarvam", "google"]
+    assert _names(_chain(murf=None), "murf", "hi-IN") == ["rime", "sarvam", "google"]
 
 
 def test_unknown_provider_falls_back_to_murf():
     assert _names(_chain(), "elevenlabs", "hi-IN")[0] == "murf"
 
 
+# --- Rime -------------------------------------------------------------------
+# Rime is the fourth spelling of these languages (Deepgram "hi", Murf "hi-IN",
+# Sarvam "od-IN"/Murf "or-IN", Rime "hin"), and the narrowest: two of our languages,
+# not twelve. These check the gate, not the audio — nothing here has been heard.
+
+
+def test_rime_only_claims_languages_the_installed_plugin_ships():
+    """Against the catalogue the code actually uses, not a docs page. docs.rime.ai
+    lists 9 Coda languages; the shipped TTSLangs enum has 5. Reading the docs
+    instead of the plugin is how en-IN-anisha got declared non-existent."""
+    try:
+        import typing
+
+        from livekit.plugins.rime.langs import TTSLangs
+    except Exception:
+        return  # plugin not installed; agent.py degrades to murf and so do we
+    shipped = set(typing.get_args(TTSLangs))
+    for bcp47, (_, rime_lang) in RIME_VOICES.items():
+        assert rime_lang in shipped, (
+            f"{bcp47} -> lang {rime_lang!r} is not in the installed plugin's "
+            f"TTSLangs {sorted(shipped)}"
+        )
+
+
+def test_hindi_never_uses_the_voice_named_hin():
+    """The live catalogue lists three Coda Hindi voices — hin, nadi, taru — and "hin"
+    is broken: it completes the WS handshake and dies with "ws closed unexpectedly",
+    reproducibly, alone in a fresh process. Rime's docs warn an invalid voice/language
+    pair "may not return an error", so anyone rebuilding this table from the catalogue
+    would pick the first entry and ship a voice that never speaks."""
+    speaker, lang = RIME_VOICES["hi-IN"]
+    assert speaker != "hin", "'hin' is listed but dies mid-stream; use nadi or taru"
+    assert speaker in {"nadi", "taru"}, f"{speaker!r} has not been rendered"
+    assert lang == "hin"
+
+
+def test_rime_speaker_is_never_left_to_the_plugin_default():
+    """Unset speaker resolves to "astra" or "lyra" depending on whether the model was
+    named — both English. On a Hindi call that is the en-US-matthew failure again."""
+    for bcp47, (speaker, _) in RIME_VOICES.items():
+        assert speaker, f"{bcp47} has no speaker"
+        if bcp47 != "en-IN":
+            assert speaker not in {"astra", "lyra"}, (
+                f"{bcp47} -> {speaker!r} is an English default voice"
+            )
+
+
+def test_rime_preferred_still_hands_indic_calls_to_murf():
+    """The disclosed fallback. FAST_TTS_PROVIDER=rime is the judged path, and it must
+    not mean an Assamese patient hears English — the language gate skips Rime and
+    Murf speaks. Same mechanism as Sarvam-has-no-Assamese, no new code."""
+    for bcp47 in ("as-IN", "bn-IN", "ta-IN", "gu-IN"):
+        assert bcp47 not in RIME_VOICES
+        assert _names(_chain(), "rime", bcp47)[0] == "murf"
+
+
+def test_rime_leads_for_english_when_preferred():
+    assert "en-IN" in RIME_VOICES
+    assert _names(_chain(), "rime", "en-IN")[0] == "rime"
+
+
+def test_rime_absent_plugin_changes_nothing():
+    assert _names(_chain(rime=None), "murf", "en-IN")[0] == "murf"
+
+
 def test_nothing_available_yields_nothing_rather_than_wrong_language():
     """Empty is the correct answer — entrypoint raises on it. A provider used with
     the wrong language logs as success and delivers nothing useful to the patient."""
-    assert _names(_chain(murf=None, sarvam=None, google=None), "murf", "hi-IN") == []
+    empty = _chain(murf=None, rime=None, sarvam=None, google=None)
+    assert _names(empty, "murf", "hi-IN") == []
 
 
 if __name__ == "__main__":

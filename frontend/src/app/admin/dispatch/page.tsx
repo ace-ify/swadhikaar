@@ -10,6 +10,19 @@
 // resulting 45-105s spread on a 45s fuse.
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+
+const LiveAmbulanceMap = dynamic(
+  () => import("@/components/ambulance/live-ambulance-map"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[420px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-400 text-sm">
+        Loading live emergency route and ambulance tracking…
+      </div>
+    ),
+  }
+);
 import {
   Card,
   CardContent,
@@ -994,6 +1007,65 @@ Nothing open.
                 ) : null}
               </CardContent>
             </Card>
+
+            {/* Live Moving Ambulance Telemetry & Route Map */}
+            {selected.lat != null && selected.lon != null ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-200">
+                    Live Emergency Route & Moving Ambulance Tracking
+                  </h3>
+                  <Badge variant="outline" className="border-sky-500/50 text-sky-600 dark:text-sky-400 font-mono text-[10px]">
+                    REALTIME TELEMETRY
+                  </Badge>
+                </div>
+                <LiveAmbulanceMap
+                  scene={{
+                    lat: selected.lat,
+                    lon: selected.lon,
+                    label: selected.address ?? selected.district ?? "Emergency Scene",
+                    victimName: selected.victim_name ?? "Emergency Victim",
+                    severity: selected.severity,
+                    triageColour: selected.triage_colour,
+                    address: selected.address,
+                  }}
+                  hospital={
+                    offers.find((o) => o.state === "accepted")?.facility
+                      ? {
+                          name: offers.find((o) => o.state === "accepted")!.facility!.name,
+                          lat: selected.lat - 0.018,
+                          lon: selected.lon + 0.022,
+                        }
+                      : null
+                  }
+                  unit={
+                    fleet.find((f) => f.state === "accepted")?.unit
+                      ? {
+                          callSign: fleet.find((f) => f.state === "accepted")!.unit!.call_sign,
+                          driverName: fleet.find((f) => f.state === "accepted")!.unit!.driver_name,
+                          vehicleType: fleet.find((f) => f.state === "accepted")!.unit!.vehicle_type,
+                        }
+                      : fleet[0]?.unit
+                      ? {
+                          callSign: fleet[0].unit.call_sign,
+                          driverName: fleet[0].unit.driver_name,
+                        }
+                      : { callSign: "AMB-108-KAMRUP", driverName: "Bhaben Kalita" }
+                  }
+                  routeGeometry={dispatch?.route_geometry ?? null}
+                  status={
+                    selected.status === "arrived"
+                      ? "arrived"
+                      : dispatch?.ambulance_state === "transporting"
+                      ? "transporting"
+                      : dispatch?.ambulance_state === "on_scene"
+                      ? "on_scene"
+                      : "en_route"
+                  }
+                  height="420px"
+                />
+              </div>
+            ) : null}
 
             {dispatch ? (
               <Card className="shadow-sm">

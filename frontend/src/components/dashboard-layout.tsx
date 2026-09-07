@@ -65,6 +65,7 @@ const navByRole: Record<string, NavItem[]> = {
   ],
   doctor: [
     { label: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
+    { label: "Walk-In Kiosk Queue", href: "/doctor/kiosk-queue", icon: ClipboardList },
     { label: "Escalation Queue", href: "/doctor/escalations", icon: HeartPulse },
     { label: "Health Camp Patients", href: "/doctor/patients", icon: Stethoscope },
     { label: "Vaccinations", href: "/doctor/vaccinations", icon: Syringe },

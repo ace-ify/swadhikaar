@@ -24,7 +24,7 @@ Verified against live systems on the date shown, not inferred from documentation
 | **Voice synthesis** | Murf FALCON. Every language in the database was synthesised end to end through the LiveKit plugin: Hindi 5.69s, Bhojpuri 5.85s, Maithili 5.25s, Urdu 5.33s, Assamese 6.01s, Gujarati 3.57s. |
 | **Telephony** | LiveKit SIP trunk. Outbound calls are placed by a live `pg_cron` job every five minutes. |
 | **Database, RLS, audit log** | Supabase Postgres 17.6. Row-level security is on; every advisory writes an `audit_log` row. |
-| **FHIR export** | Real resource generation, reviewable in the admin UI. |
+| **FHIR R4 Bundle assembly** | ABDM NRCES-compliant FHIR R4 Document Bundle generation (`export-abdm`). Assembles Composition, Patient, Encounter, Condition, Observation (history, vitals, Dashavidha, labs), AllergyIntolerance, and MedicationStatement resources, persisted to `fhir_resources` and downloadable as standard JSON. |
 
 ---
 
@@ -32,6 +32,10 @@ Verified against live systems on the date shown, not inferred from documentation
 
 Each of these is labelled in the UI wherever it appears. The label is the point:
 simulated data is normal in a prototype, unlabelled simulated data is a lie.
+
+### ABDM Gateway push
+
+`export-abdm` assembles genuine ABDM NRCES-compliant FHIR R4 document bundles rooted in a Composition resource and persists them to `fhir_resources`. However, live push to the National Health Authority (NHA) ABDM Gateway (M1/M2/M3 callback bridge) operates against simulated sandbox credentials because production ABDM Gateway integration requires registered Healthcare Facility (HFR) and Healthcare Professional (HPR) registry IDs from the National Health Authority.
 
 ### Patient identities — all 302
 

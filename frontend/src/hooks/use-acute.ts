@@ -157,6 +157,9 @@ export interface IncidentDispatch {
   // the next facility on the ranked list.
   ambulance_relay_facility_id: string | null;
   ambulance_exhausted_at: string | null;
+  route_geometry?: [number, number][] | null;
+  route_target?: "scene" | "hospital" | null;
+  route_distance_m?: number | null;
 }
 
 export type AmbulanceState =

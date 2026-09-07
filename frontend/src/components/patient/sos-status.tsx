@@ -22,11 +22,11 @@ import { ScenePhoto } from "@/components/scene-photo";
 import { myDispatch, cancelMyIncident, type MyIncident } from "@/hooks/use-acute";
 
 // Leaflet reads window at module scope, so this cannot be server-rendered.
-const PatientMap = dynamic(() => import("@/components/patient/patient-map"), {
+const LiveAmbulanceMap = dynamic(() => import("@/components/ambulance/live-ambulance-map"), {
   ssr: false,
   loading: () => (
-    <div className="bg-muted/30 flex h-[260px] items-center justify-center rounded-xl border">
-      <span className="text-muted-foreground text-sm">नक्शा आ रहा है… / Loading map…</span>
+    <div className="bg-muted/30 flex h-[280px] items-center justify-center rounded-xl border">
+      <span className="text-muted-foreground text-sm">नक्शा आ रहा है… / Loading live ambulance map…</span>
     </div>
   ),
 });
@@ -142,20 +142,37 @@ export function SosStatus({
           are still being asked adds nothing and implies something is moving. */}
       {d?.unit?.lat != null && d.unit.lon != null && step < 3 ? (
         <div className="space-y-1">
-          <PatientMap
-            scene={{ lat: incident.lat, lon: incident.lon, label: "आप यहां / You" }}
+          <LiveAmbulanceMap
+            scene={{
+              lat: incident.lat,
+              lon: incident.lon,
+              label: "आप यहां / You",
+              victimName: incident.victim_name || "Emergency Patient",
+              severity: incident.severity,
+              address: incident.address,
+            }}
             unit={{
+              callSign: d.unit.call_sign,
+              driverName: d.unit.driver_name,
               lat: d.unit.lat,
               lon: d.unit.lon,
-              label: d.unit.call_sign,
+              headingDeg: d.unit.heading_deg,
             }}
             hospital={
               d.hospital
-                ? { lat: d.hospital.lat, lon: d.hospital.lon, label: d.hospital.name }
+                ? { lat: d.hospital.lat, lon: d.hospital.lon, name: d.hospital.name }
                 : null
             }
-            heading={d.ambulance_state === "transporting" ? "hospital" : "scene"}
-            route={d.route_geometry}
+            status={
+              d.ambulance_state === "transporting"
+                ? "transporting"
+                : d.ambulance_state === "on_scene"
+                ? "on_scene"
+                : "en_route"
+            }
+            routeGeometry={d.route_geometry}
+            etaSeconds={d.ambulance_eta_seconds}
+            height="320px"
           />
           <p className="text-muted-foreground px-1 text-xs">
             {d.route_geometry && d.route_geometry.length > 1 ? (

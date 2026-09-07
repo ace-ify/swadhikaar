@@ -61,6 +61,11 @@ try:
 except Exception:  # pragma: no cover
     murf_plugin = None
 
+try:
+    from livekit.plugins import rime as rime_plugin
+except Exception:  # pragma: no cover
+    rime_plugin = None
+
 
 # Local imports
 from prompts.system_prompts import build_system_prompt, DEFAULT_CONTEXT
@@ -166,6 +171,72 @@ SARVAM_LANGS = frozenset({
 # why these stay two separate sets instead of one shared constant.
 
 
+# RIME — A FOURTH SPELLING OF THE SAME LANGUAGES
+# Deepgram says "hi", Murf says "hi-IN", Sarvam says "od-IN" where Murf says "or-IN",
+# and Rime says "hin". Rime takes ISO 639-3, so the bcp47 code this module passes
+# everywhere else has to be translated, not sliced.
+#
+# Everything below was read out of the installed plugin (livekit-plugins-rime 1.7.0)
+# and the live catalogue at https://users.rime.ai/data/voices/all-v2.json, because
+# three sources disagree about how many languages Coda has: docs.rime.ai says 9, the
+# live catalogue agrees (eng jpn spa por ger fra ara hin ita), and the plugin's
+# TTSLangs enum lists 5. The enum is a stale type hint — lang is typed
+# `TTSLangs | str`, so the catalogue is the real limit. Both of ours are in all three.
+# Of the nine, two are ours. There is no Assamese, Bengali, Tamil, Gujarati, Urdu,
+# Bhojpuri or Maithili, so on any of those calls tts_candidates() skips Rime and Murf
+# speaks. That gate is the disclosed fallback, not a workaround.
+#
+# THREE DEFAULTS THAT LIE, all the en-US-matthew mistake in a new costume:
+#   lang defaults to "eng" — a Hindi call that forgets it speaks English.
+#   speaker depends on whether you NAMED the model: implicit coda -> "astra",
+#     explicit model="coda" -> "lyra". So pass both or you cannot predict either.
+#   use_websocket defaults to False, and tts.py:183 gates BOTH streaming and
+#     aligned_transcript on it. HTTP means whole-utterance buffering and no word
+#     timestamps — unusable for barge-in. Always True.
+#
+# ONE FEATURE THAT IS NOT WHERE THE DOCS IMPLY: pause_between_brackets and
+# phonemize_between_brackets are wired into _MistOptions only, never _CodaOptions
+# (tts.py:229-243). Bracket phonemes — the obvious knob for drug names and dosages —
+# need a mist model, and no mist model has Hindi. So for Hindi that knob does not
+# exist, and pronunciation has to be controlled from the text side.
+#
+# TWO THINGS MEASURED, NOT READ: the HTTP endpoint answers 200 with audio/pcm on
+# coda/hin where the WS path 502s if you reconnect immediately, so a WS failure is
+# not evidence the voice is bad. And time-to-first-frame over WS from this machine is
+# 1.2-1.5s against an advertised sub-200ms end to end — cold connect, US endpoint,
+# bySentence segmentation. Do not repeat the 200ms figure as ours.
+#
+# bcp47 -> (speaker, Rime lang code)
+RIME_VOICES: dict[str, tuple[str, str]] = {
+    # "astra" is the plugin's own implicit default (tts.py:206) and is present in the
+    # live eng catalogue (162 Coda English voices). Rendered over HTTP, not yet over
+    # the WS path this builder uses.
+    "en-IN": ("astra", "eng"),
+    # Coda is the ONLY model with Hindi — mistv3 has eng/spa/ger/fra and nothing else,
+    # which is also why bracket phonemization is unavailable to us at all.
+    #
+    # The live catalogue lists three Hindi voices: hin, nadi, taru. Only two of them
+    # work. "hin" — a voice whose name is the language code — completes the WS
+    # handshake and then dies with "ws closed unexpectedly", reproducibly, in a fresh
+    # process. Rime's own docs warn an invalid voice/language pair "may not return an
+    # error"; this is that, and it is the whole reason this row could not be copied
+    # out of the catalogue.
+    #
+    # nadi and taru both rendered the Hinglish fixture: nadi 11.94s of audio at
+    # 1.46s TTFB, taru 12.98s at 1.23s. nadi is the tighter delivery of the two and
+    # is otherwise an arbitrary pick between two working voices.
+    #
+    # WHAT IS VERIFIED AND WHAT IS NOT: synthesis succeeded and the wav is on disk at
+    # tmp/rime/coda-hin-nadi.wav. NOBODY HAS LISTENED TO IT. Bytes are not
+    # intelligibility, and the fixture deliberately contains the two things most
+    # likely to come out wrong — "chest pain" and "Metformin" inside a Devanagari
+    # sentence. Listen before this goes in front of a patient or a judge.
+    "hi-IN": ("nadi", "hin"),
+    # No Assamese, Bengali, Tamil, Gujarati, Urdu, Bhojpuri or Maithili — see above.
+    # tts_candidates() skips Rime on those calls and Murf speaks.
+}
+
+
 def tts_candidates(chain, preferred, bcp47_code):
     """Viable TTS providers for one call, best first.
 
@@ -227,6 +298,15 @@ GREETINGS: dict[str, str] = {
         "Namaste {name} ji! Yeh Swadhikaar se call hai. "
         "Aapke bachche ka teekakaran ka samay aa raha hai. "
         "Hum aapko yaad dilana chahte hain."
+    ),
+    # The kiosk. Not a call — the patient is standing at a screen, so this does not
+    # open with "Swadhikaar se call hai", and it says up front why a machine is asking,
+    # because a stranger asked medical questions by a screen with no explanation stops
+    # answering. The last line is the one that matters: their words are enough.
+    "case_taking": (
+        "Namaste {name} ji. Doctor saheb se milne se pehle main aapki takleef "
+        "likh loonga, taaki andar aapka samay bachche. "
+        "Aaj aapko kya takleef hai? Apne shabdon mein bataiye."
     ),
 }
 
@@ -697,6 +777,20 @@ class SwadhikaarAgent(VoiceAgent):
         patient_name: str = metadata.get("patient_name", "Patient")
         call_type: str = metadata.get("call_type", "follow_up")
         language: str = metadata.get("language", "hindi").lower()
+        # Case taking (PS1 Module A). session_id is what every history_answers row hangs
+        # off, so a case_taking room without one is a room that will record nothing —
+        # checked and logged loudly below rather than discovered in an empty summary.
+        session_id: str | None = metadata.get("session_id")
+        interview_mode: str = str(metadata.get("mode", "allopathic")).lower()
+        if interview_mode not in ("allopathic", "ayush"):
+            logger.warning("Unknown interview mode %r — using allopathic", interview_mode)
+            interview_mode = "allopathic"
+        if call_type == "case_taking" and not session_id:
+            logger.error(
+                "case_taking room %s has no session_id in metadata. The interview will "
+                "run and NOTHING will be persisted.",
+                room.name,
+            )
 
         patient_context: dict[str, str] = {
             **DEFAULT_CONTEXT,
@@ -732,6 +826,15 @@ class SwadhikaarAgent(VoiceAgent):
             "vaccine_due_date": metadata.get("vaccine_due_date", "N/A"),
             "vaccine_dose": metadata.get("vaccine_dose", "1"),
             "birth_hospital": metadata.get("birth_hospital", "N/A"),
+            # Case taking. The three "already on record" lines exist so the agent does
+            # not spend a two-minute interview asking a diabetic whether they have
+            # diabetes; the kiosk resolves them from patients.chronic_conditions,
+            # current_medications and allergies before the room is created.
+            "language": language.capitalize(),
+            "interview_mode": interview_mode,
+            "known_conditions": metadata.get("known_conditions", "Nothing on record"),
+            "known_medications": metadata.get("known_medications", "Nothing on record"),
+            "known_allergies": metadata.get("known_allergies", "Nothing on record"),
         }
 
         logger.info(
@@ -752,6 +855,12 @@ class SwadhikaarAgent(VoiceAgent):
         self._patient_name = patient_name
         self._call_type = call_type
         self._language = language
+        self._session_id = session_id
+        self._interview_mode = interview_mode
+        # Counted so on_exit can log how much of the history actually landed. An
+        # interview that talked for four minutes and wrote three rows is a failure that
+        # looks like a success in the transcript.
+        self._answers_recorded = 0
         self._transcript = TranscriptAccumulator(
             on_severity=self._on_severity_detected
         )
@@ -1144,6 +1253,292 @@ class SwadhikaarAgent(VoiceAgent):
             logger.error("Tool confirm_vaccination_visit failed: %s", exc)
             return "Vaccination response recording failed."
 
+    # ------------------------------------------------------------------------
+    # Case taking — PS1 Module A. Four tools, and all four are no-ops without a
+    # session_id, so they say so out loud rather than dropping the answer silently.
+    # ------------------------------------------------------------------------
+
+    def _case_session(self) -> tuple[str | None, Any]:
+        """The two things every case-taking tool needs, or a reason it cannot work."""
+        session_id = getattr(self, "_session_id", None)
+        if not session_id:
+            return None, None
+        return session_id, _get_supabase_client()
+
+    @llm.function_tool
+    async def record_history_answer(
+        self,
+        item_code: Annotated[
+            str,
+            Field(
+                description=(
+                    "Ontology item code from the OUTLINE, e.g. cc.main, hpi.onset, "
+                    "ros.neurological. Must be one of the codes listed in the prompt."
+                )
+            ),
+        ],
+        section: Annotated[
+            str,
+            Field(
+                description=(
+                    "One of: chief_complaint, hpi, past_medical, drug_allergy, family, "
+                    "personal, ros, investigations"
+                )
+            ),
+        ],
+        answer_text: Annotated[
+            str,
+            Field(
+                description=(
+                    "What the patient actually said, in their own words and their own "
+                    "language. Do not translate, summarise or clean it up."
+                )
+            ),
+        ],
+    ) -> str:
+        """Record one answer in the patient's history. Call once per answer, immediately
+        after the patient gives it — the kiosk screen shows the patient what has been
+        captured, and the doctor's summary is built from these rows."""
+        session_id, sb = self._case_session()
+        if not session_id:
+            return "Not a kiosk session — answer noted in the transcript only."
+        if not sb:
+            return "Answer noted but database unavailable."
+
+        # Sections are a closed set in the database (history_answers_section_check), so
+        # a model that invents one would raise and lose the answer. Falling back to the
+        # code's own prefix recovers most mistakes: "hpi.onset" -> "hpi".
+        valid = {
+            "chief_complaint", "hpi", "past_medical", "drug_allergy",
+            "family", "personal", "ros", "investigations",
+        }
+        section_clean = (section or "").strip().lower()
+        if section_clean not in valid:
+            prefix = {
+                "cc": "chief_complaint", "hpi": "hpi", "pm": "past_medical",
+                "da": "drug_allergy", "fam": "family", "per": "personal",
+                "ros": "ros", "inv": "investigations",
+            }.get(item_code.split(".")[0], None)
+            if prefix is None:
+                logger.warning(
+                    "record_history_answer: unusable section=%r item_code=%r, dropping",
+                    section, item_code,
+                )
+                return "Could not file that answer — ask the question again differently."
+            logger.info("Repaired section %r -> %r from item_code", section, prefix)
+            section_clean = prefix
+
+        try:
+            # Upsert on the unique (session_id, item_code): a patient who corrects
+            # themselves during the read-back overwrites rather than creating a second
+            # contradictory row for the doctor to choose between.
+            sb.table("history_answers").upsert(
+                {
+                    "session_id": session_id,
+                    "section": section_clean,
+                    "item_code": item_code.strip(),
+                    "answer_text": answer_text,
+                    "source": "voice",
+                },
+                on_conflict="session_id,item_code",
+            ).execute()
+            self._answers_recorded = getattr(self, "_answers_recorded", 0) + 1
+            self._realtime_actions.add("history_answer")
+            return "Recorded. Ask the next question."
+        except Exception as exc:
+            logger.error("Tool record_history_answer failed (%s): %s", item_code, exc)
+            return "That did not save — continue, it will be in the transcript."
+
+    @llm.function_tool
+    async def record_dashavidha(
+        self,
+        factor: Annotated[
+            str,
+            Field(
+                description=(
+                    "One of: prakriti, vikriti, sara, samhanana, pramana, satmya, "
+                    "sattva, ahara_shakti, vyayama_shakti, vaya"
+                )
+            ),
+        ],
+        value: Annotated[
+            str,
+            Field(
+                description=(
+                    "The graded answer. For sara, samhanana, sattva, ahara_shakti and "
+                    "vyayama_shakti use pravara, madhyama or avara. For prakriti and "
+                    "vikriti use vata, pitta, kapha or a pair like vata_pitta. For "
+                    "pramana and vaya give the number the patient stated."
+                )
+            ),
+        ],
+        detail: Annotated[
+            str,
+            Field(description="The patient's own words that led to this value."),
+        ],
+    ) -> str:
+        """AYUSH MODE ONLY. Record one of the ten factors of Dashavidha Pariksha.
+        You are recording what the patient reported, not determining their constitution —
+        say nothing to them about what any answer means."""
+        session_id, sb = self._case_session()
+        if not session_id:
+            return "Not a kiosk session — noted in the transcript only."
+        if getattr(self, "_interview_mode", "allopathic") != "ayush":
+            # Refused rather than stored. A Dashavidha row on an allopathic session would
+            # print an Ayurvedic assessment on a summary nobody asked for it on.
+            logger.warning("record_dashavidha called on a %s session", self._interview_mode)
+            return "This is not an Ayush consultation — skip the ten-fold examination."
+        if not sb:
+            return "Noted but database unavailable."
+
+        factor_clean = (factor or "").strip().lower()
+        if factor_clean not in {
+            "prakriti", "vikriti", "sara", "samhanana", "pramana",
+            "satmya", "sattva", "ahara_shakti", "vyayama_shakti", "vaya",
+        }:
+            logger.warning("record_dashavidha: unknown factor %r", factor)
+            return f"{factor} is not one of the ten factors — check the list and retry."
+
+        try:
+            sb.table("dashavidha_assessments").upsert(
+                {
+                    "session_id": session_id,
+                    "factor": factor_clean,
+                    "value": (value or "").strip() or None,
+                    "detail": {"patient_words": detail} if detail else None,
+                    "source": "voice",
+                },
+                on_conflict="session_id,factor",
+            ).execute()
+            self._realtime_actions.add("dashavidha")
+            return "Recorded. Next factor."
+        except Exception as exc:
+            logger.error("Tool record_dashavidha failed (%s): %s", factor_clean, exc)
+            return "That did not save — continue."
+
+    @llm.function_tool
+    async def raise_red_flag(
+        self,
+        reason: Annotated[
+            str,
+            Field(
+                description=(
+                    "What the patient reported, in English, specific enough for a triage "
+                    "nurse to act on. E.g. 'chest pain 3 days, worse on walking, with "
+                    "breathlessness' — not 'possible cardiac event'."
+                )
+            ),
+        ],
+        severity: Annotated[str, Field(description="CRITICAL or HIGH")],
+    ) -> str:
+        """Raise an immediate triage alert. Call the INSTANT a danger sign appears —
+        before finishing your sentence, without a confirming question, without asking
+        permission. Then keep the patient calm and carry on if they can answer."""
+        session_id, sb = self._case_session()
+        if not sb:
+            # No early return on a missing session: a red flag from a non-kiosk call is
+            # still a red flag, and escalate_patient's path handles it.
+            logger.error("RED FLAG with no database: %s", reason)
+            return "Alert noted. Tell the patient to stay seated and that staff are coming."
+
+        severity_upper = (severity or "").upper()
+        # Same fail-safe as escalate_patient and for the same reason: over-escalating is
+        # recoverable, losing the alert is not.
+        if severity_upper not in ("CRITICAL", "HIGH"):
+            logger.warning("Unrecognised red flag severity %r — treating as CRITICAL", severity)
+            severity_upper = "CRITICAL"
+
+        escalation_id = None
+        try:
+            if getattr(self, "_patient_id", "unknown") != "unknown":
+                res = (
+                    sb.table("escalations")
+                    .insert(
+                        {
+                            "patient_id": self._patient_id,
+                            "severity_level": "3" if severity_upper == "CRITICAL" else "2",
+                            "severity": severity_upper,
+                            "reason": f"[kiosk] {reason}",
+                            "status": "open",
+                        }
+                    )
+                    .execute()
+                )
+                if res.data:
+                    escalation_id = res.data[0].get("id")
+        except Exception as exc:
+            logger.error("Red flag escalation insert failed: %s", exc)
+
+        # The session flag is written even if the escalation insert failed. The kiosk
+        # screen and the doctor's queue both read case_sessions.red_flag, so this is the
+        # write that changes what a human sees.
+        if session_id:
+            try:
+                sb.table("case_sessions").update(
+                    {
+                        "red_flag": True,
+                        "red_flag_reason": f"{severity_upper}: {reason}",
+                        **({"escalation_id": escalation_id} if escalation_id else {}),
+                    }
+                ).eq("id", session_id).execute()
+            except Exception as exc:
+                logger.error("Red flag session update failed: %s", exc)
+
+        self._realtime_actions.add("red_flag")
+        logger.warning(
+            "KIOSK RED FLAG: session=%s severity=%s reason=%s",
+            (session_id or "none")[:8],
+            severity_upper,
+            reason,
+        )
+        return (
+            "Alert raised, the triage desk has it. Tell the patient staff are coming and "
+            "to stay seated. Do not name a diagnosis. Continue the history if they can answer."
+        )
+
+    @llm.function_tool
+    async def finish_history(self) -> str:
+        """Call when every section is done, or when the patient wants to stop. This moves
+        the session on so the summary can be generated and the doctor's screen updated."""
+        session_id, sb = self._case_session()
+        if not session_id or not sb:
+            return "Interview finished."
+
+        recorded = getattr(self, "_answers_recorded", 0)
+        try:
+            # 'summarising', not 'ready': the summary does not exist yet, and a session
+            # marked ready with no summary is a doctor opening an empty screen.
+            #
+            # An ISO timestamp, not the string "now()". PostgREST sends this value as
+            # text for Postgres to cast, and casting 'now()' to timestamptz raises —
+            # the update would have failed and left the session stuck in 'interviewing'.
+            sb.table("case_sessions").update(
+                {
+                    "status": "summarising",
+                    "ended_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ).eq("id", session_id).execute()
+        except Exception as exc:
+            logger.error("finish_history could not close session %s: %s", session_id, exc)
+
+        logger.info(
+            "Case taking finished: session=%s answers=%d mode=%s",
+            session_id[:8],
+            recorded,
+            getattr(self, "_interview_mode", "?"),
+        )
+        if recorded == 0:
+            # Worth shouting about. A four-minute interview that wrote nothing looks
+            # perfectly healthy in the transcript and produces an empty summary.
+            logger.error(
+                "Session %s finished with ZERO recorded answers — the tool was never "
+                "called successfully. Check history_answers writes.",
+                session_id[:8],
+            )
+        return f"History complete, {recorded} answers recorded. Tell the patient they can go in."
+
+
+
     # -----------------------------------------------------------------------
     # Lifecycle hooks (continued)
     # -----------------------------------------------------------------------
@@ -1306,10 +1701,10 @@ async def entrypoint(ctx: JobContext) -> None:
     # livekit.agents.tts.FallbackAdapter once a second Indic provider is funded; the
     # list is already in the right order for it.
     #
-    # Providers are murf / sarvam / google, chosen with FAST_TTS_PROVIDER. Cartesia
-    # and Deepgram TTS were removed: neither has a key, and Deepgram's configured
-    # voice was aura-asteria-en, so leaving it in the chain meant one failed Indic
-    # lookup away from reading a Bhojpuri advisory in English.
+    # Providers are murf / rime / sarvam / google, chosen with FAST_TTS_PROVIDER.
+    # Cartesia and Deepgram TTS were removed: neither has a key, and Deepgram's
+    # configured voice was aura-asteria-en, so leaving it in the chain meant one
+    # failed Indic lookup away from reading a Bhojpuri advisory in English.
     def _murf_tts():
         # Voice, locale and style all travel together from MURF_VOICES, because they
         # are one fact about the language, not three settings. A global MURF_STYLE is
@@ -1354,6 +1749,32 @@ async def entrypoint(ctx: JobContext) -> None:
             enable_preprocessing=True,
         )
 
+    def _rime_tts():
+        # Speaker and lang travel together from RIME_VOICES for the same reason
+        # Murf's do: they are one fact about the caller's language. A miss KeyErrors
+        # here instead of quietly becoming "astra" speaking English.
+        speaker, rime_lang = RIME_VOICES[bcp47_code]
+        kwargs: dict[str, object] = {
+            # Named explicitly because the speaker default silently changes with it.
+            "model": os.getenv("RIME_MODEL", "coda"),
+            "speaker": speaker,
+            "lang": rime_lang,
+            # Not a tuning knob. False routes to https://users.rime.ai/v1/rime-tts and
+            # turns off streaming AND aligned_transcript, so the agent buffers whole
+            # utterances and has no word timestamps to cut against on barge-in.
+            # True routes to wss://users-ws.rime.ai, which is the only path this
+            # project can interrupt cleanly.
+            "use_websocket": True,
+        }
+        # speed_alpha, not time_scale_factor: tts.py:161 says it is the only speed
+        # param that survives the WebSocket path, and mistv2 rejects the other one.
+        raw = os.getenv("RIME_SPEED_ALPHA")
+        if raw:
+            kwargs["speed_alpha"] = float(raw)
+        # Auth is env-only: the plugin reads RIME_API_KEY and raises without it, so an
+        # unset key fails init and the loop moves to the next provider.
+        return rime_plugin.TTS(**kwargs)  # type: ignore[arg-type]
+
     def _google_tts():
         # Cloud TTS rejects API keys outright — "API keys are not supported by this
         # API", a verified 401 on 2026-08-25. GOOGLE_API_KEY here is a Gemini key and
@@ -1367,6 +1788,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # ourselves, so try it and let the provider reject what it cannot say.
     tts_chain = [
         ("murf", murf_plugin, _murf_tts, frozenset(MURF_VOICES)),
+        ("rime", rime_plugin, _rime_tts, frozenset(RIME_VOICES)),
         ("sarvam", sarvam_plugin, _sarvam_tts, SARVAM_LANGS),
         ("google", google_plugin, _google_tts, None),
     ]
