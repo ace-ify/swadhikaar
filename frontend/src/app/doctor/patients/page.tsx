@@ -623,17 +623,17 @@ export default function DoctorPatientsPage() {
       {/* Patients Table */}
       <Card>
         <CardContent className="p-0">
-          <Table className="table-fixed">
+          <Table className="min-w-[960px]">
             <TableHeader>
-              <TableRow>
-                <TableHead className="pl-5 w-[160px]">Patient</TableHead>
-                <TableHead className="w-[140px]">ABHA ID</TableHead>
-                <TableHead>Camp</TableHead>
-                <TableHead className="w-[100px]">Risk Level</TableHead>
-                <TableHead className="w-[70px]">Score</TableHead>
-                <TableHead className="w-[90px]">Last Call</TableHead>
-                <TableHead className="w-[120px]">Next Call</TableHead>
-                <TableHead className="text-right pr-5 w-[70px]">Action</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-6 min-w-[220px]">Patient</TableHead>
+                <TableHead className="min-w-[170px]">ABHA ID</TableHead>
+                <TableHead className="min-w-[140px]">Camp</TableHead>
+                <TableHead className="min-w-[110px]">Risk Level</TableHead>
+                <TableHead className="min-w-[80px]">Score</TableHead>
+                <TableHead className="min-w-[100px]">Last Call</TableHead>
+                <TableHead className="min-w-[160px]">Next Call</TableHead>
+                <TableHead className="text-right pr-6 min-w-[80px]">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -649,15 +649,21 @@ export default function DoctorPatientsPage() {
                 const rec = recommendations.get(p.id);
                 return (
                 <TableRow key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                  <TableCell className="pl-5 py-3.5">
-                    <div className="font-medium text-sm text-slate-900">{p.name}</div>
-                    <div className="text-xs text-slate-400">
+                  <TableCell className="pl-6 py-3.5">
+                    <div className="font-semibold text-sm text-slate-900 truncate max-w-[220px]" title={p.name}>
+                      {p.name}
+                    </div>
+                    <div className="text-xs text-slate-400 truncate max-w-[220px]">
                       {p.age}y · {p.gender === "M" ? "Male" : "Female"}
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-500 truncate">{p.abha_id}</TableCell>
-                  <TableCell className="text-sm text-slate-600 truncate">{p.health_camp}</TableCell>
-                  <TableCell>
+                  <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">
+                    {p.abha_id || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-600 truncate max-w-[160px]" title={p.health_camp || ""}>
+                    {p.health_camp || "—"}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <Badge
                       variant="outline"
                       className={`text-[10px] font-bold uppercase tracking-wider ${
@@ -671,35 +677,37 @@ export default function DoctorPatientsPage() {
                       {p.risk_level}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="whitespace-nowrap">
                     <span
                       className={`font-mono text-sm font-semibold ${
-                        p.overall_risk_score >= 50
+                        (p.overall_risk_score ?? 0) >= 50
                           ? "text-slate-900"
-                          : p.overall_risk_score >= 35
+                          : (p.overall_risk_score ?? 0) >= 35
                           ? "text-slate-600"
                           : "text-slate-400"
                       }`}
                     >
-                      {p.overall_risk_score}
+                      {p.overall_risk_score ?? "—"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-slate-500">
+                  <TableCell className="text-xs text-slate-500 whitespace-nowrap">
                     {lastCall ? timeAgo(lastCall) : (
                       <span className="text-slate-300 italic">Never</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    {rec && (
+                  <TableCell className="whitespace-nowrap">
+                    {rec ? (
                       <Badge
                         variant="outline"
                         className="text-[10px] font-bold uppercase tracking-wider bg-slate-50 text-slate-600 border-slate-200"
                       >
                         {rec.label}
                       </Badge>
+                    ) : (
+                      <span className="text-slate-300 text-xs italic">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right pr-5">
+                  <TableCell className="text-right pr-6 whitespace-nowrap">
                     <Button
                       size="sm"
                       variant="ghost"
