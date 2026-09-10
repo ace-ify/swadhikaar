@@ -142,25 +142,25 @@ LANGUAGES: dict[str, tuple[str, str]] = {
 # Hindi one week and Assamese the next should sound like the same organisation.
 # Gujarati is the only gap and gets a native voice.
 #
-# Style is per-voice, not global. anisha advertises "Conversation" while most FALCON
-# voices advertise "Conversational", and a single MURF_STYLE env var applied to all
-# of them is a config value pretending to be a property of the data.
+# Style is per-voice and per-locale. anisha advertises "Conversation" for native
+# en-IN, while under supportedLocales all Indic multi-native locales (hi-IN, bn-IN,
+# ta-IN, etc.) advertise "Conversational".
 #
 # bcp47 -> (voice, multiNativeLocale or None if the voice is native, style or None)
 MURF_VOICES: dict[str, tuple[str, str | None, str | None]] = {
     "en-IN": ("en-IN-anisha", None, "Conversation"),
     # anisha reaching each of these was measured, one synthesis per locale:
     # as 6.37s, hi 6.01s, bn 3.45s, ta 2.77s, te 2.85s, or 2.89s.
-    "as-IN": ("en-IN-anisha", "as-IN", "Conversation"),
-    "hi-IN": ("en-IN-anisha", "hi-IN", "Conversation"),
-    "bn-IN": ("en-IN-anisha", "bn-IN", "Conversation"),
-    "ta-IN": ("en-IN-anisha", "ta-IN", "Conversation"),
-    "te-IN": ("en-IN-anisha", "te-IN", "Conversation"),
-    "or-IN": ("en-IN-anisha", "or-IN", "Conversation"),
-    "kn-IN": ("en-IN-anisha", "kn-IN", "Conversation"),
-    "ml-IN": ("en-IN-anisha", "ml-IN", "Conversation"),
-    "mr-IN": ("en-IN-anisha", "mr-IN", "Conversation"),
-    "pa-IN": ("en-IN-anisha", "pa-IN", "Conversation"),
+    "as-IN": ("en-IN-anisha", "as-IN", "Conversational"),
+    "hi-IN": ("en-IN-anisha", "hi-IN", "Conversational"),
+    "bn-IN": ("en-IN-anisha", "bn-IN", "Conversational"),
+    "ta-IN": ("en-IN-anisha", "ta-IN", "Conversational"),
+    "te-IN": ("en-IN-anisha", "te-IN", "Conversational"),
+    "or-IN": ("en-IN-anisha", "or-IN", "Conversational"),
+    "kn-IN": ("en-IN-anisha", "kn-IN", "Conversational"),
+    "ml-IN": ("en-IN-anisha", "ml-IN", "Conversational"),
+    "mr-IN": ("en-IN-anisha", "mr-IN", "Conversational"),
+    "pa-IN": ("en-IN-anisha", "pa-IN", "Conversational"),
     # The one locale anisha does not carry. Native voice, verified 3.57s.
     "gu-IN": ("gu-IN-diya", None, "Conversational"),
 }
@@ -1699,9 +1699,26 @@ async def entrypoint(ctx: JobContext) -> None:
         "FAST PIPELINE: Deepgram STT + Groq primary LLM + fallback + configurable TTS"
     )
 
+    # Multilingual STT & mid-convo language switching:
+    # 1. If DEEPGRAM_STT_LANGUAGE is configured (e.g. "multi" or "hi"), use it so callers
+    #    can switch freely between Hindi, English, and regional words.
+    # 2. If language is Assamese: Deepgram Nova-3 has no native "as" model. Falling back
+    #    to "bn" forcefully converts Hindi/Hinglish speech into mangled Bengali script.
+    #    Default to "multi" so Hindi and English speech are accurately transcribed.
+    # 3. Otherwise use the language's mapped STT code.
+    configured_stt_lang = os.getenv("DEEPGRAM_STT_LANGUAGE", "").strip().lower()
+    if configured_stt_lang:
+        effective_stt_language = configured_stt_lang
+    elif language == "assamese":
+        effective_stt_language = "multi"
+    else:
+        effective_stt_language = stt_language
+
+    logger.info("Deepgram STT configured with language: %s (caller language: %s)", effective_stt_language, language)
+
     stt = deepgram_plugin.STT(
-        model="nova-3",
-        language=stt_language,
+        model=os.getenv("DEEPGRAM_STT_MODEL", "nova-3"),
+        language=effective_stt_language,
         interim_results=True,
         smart_format=True,
         no_delay=True,
@@ -1771,10 +1788,15 @@ async def entrypoint(ctx: JobContext) -> None:
             # FALCON is the streaming catalogue this map was verified against.
             # Changing the model changes which voice ids exist.
             "model": os.getenv("MURF_MODEL", "FALCON"),
+            # Buffer whole words rather than 3-char fragments to avoid choppy streaming
+            "min_buffer_size": int(os.getenv("MURF_MIN_BUFFER_SIZE", "15")),
         }
         # Set only for a voice that is not native to this language: a native voice
         # infers its locale from the id and rejects a conflicting one with a 400.
-        if locale:
+        locale_override = os.getenv("MURF_LOCALE", "").strip()
+        if locale_override:
+            kwargs["locale"] = locale_override
+        elif locale:
             kwargs["locale"] = locale
         if style:
             kwargs["style"] = style

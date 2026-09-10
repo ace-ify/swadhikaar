@@ -85,9 +85,10 @@ def test_multi_locale_voices_actually_carry_the_locale():
 
 
 def test_style_is_per_voice_not_global():
-    """anisha advertises "Conversation"; most FALCON voices say "Conversational".
+    """anisha advertises "Conversation" for native en-IN, and "Conversational" for Indic locales.
     One global MURF_STYLE applied to every voice is the bug this replaced."""
-    assert MURF_VOICES["hi-IN"][2] == "Conversation"      # via anisha
+    assert MURF_VOICES["hi-IN"][2] == "Conversational"    # via anisha multi-native
+    assert MURF_VOICES["en-IN"][2] == "Conversation"      # native en voice
     assert MURF_VOICES["gu-IN"][2] == "Conversational"    # native gu voice
     styles = {s for _, _, s in MURF_VOICES.values()}
     assert len(styles) > 1, "a single style for every voice is the old mistake"
