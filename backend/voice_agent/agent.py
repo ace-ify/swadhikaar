@@ -79,6 +79,11 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 logger = logging.getLogger("swadhikaar.agent")
 
+# Suppress noisy HTTP/2 and low-level connection debug logging that floods
+# the console and blocks the asyncio event loop during Supabase calls.
+for _noisy_logger in ("hpack", "httpcore", "httpx"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -609,22 +614,14 @@ class TranscriptAccumulator:
 # ---------------------------------------------------------------------------
 
 
-async def _persist_call_data(
+def _sync_persist_call_data(
     patient_id: str,
     call_type: str,
     language: str,
     transcript: TranscriptAccumulator,
-    realtime_actions: set[str] | None = None,
+    realtime_actions: set[str],
 ) -> None:
-    """Write transcript + detected severity to Supabase `voice_calls` table.
-
-    Args:
-        realtime_actions: Set of actions already taken by tools during the call
-                          (e.g. "escalation", "risk_update", "journey_update").
-                          These will be skipped to avoid duplication.
-    """
-    if realtime_actions is None:
-        realtime_actions = set()
+    """Synchronously write transcript + detected severity to Supabase tables."""
     supabase = _get_supabase_client()
     if supabase is None:
         logger.info("Skipping Supabase persist (no client).")
@@ -739,6 +736,30 @@ async def _persist_call_data(
 
     except Exception as exc:
         logger.error("Supabase persist failed: %s", exc)
+
+
+async def _persist_call_data(
+    patient_id: str,
+    call_type: str,
+    language: str,
+    transcript: TranscriptAccumulator,
+    realtime_actions: set[str] | None = None,
+) -> None:
+    """Write transcript + detected severity to Supabase `voice_calls` table asynchronously.
+
+    Runs database operations in a background worker thread via `asyncio.to_thread`
+    to prevent blocking the asyncio event loop and keep VAD and audio streaming realtime.
+    """
+    if realtime_actions is None:
+        realtime_actions = set()
+    await asyncio.to_thread(
+        _sync_persist_call_data,
+        patient_id=patient_id,
+        call_type=call_type,
+        language=language,
+        transcript=transcript,
+        realtime_actions=realtime_actions,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -927,7 +948,8 @@ class SwadhikaarAgent(VoiceAgent):
             severity,
             patient_id[:8],
         )
-        try:
+
+        def _sync_insert():
             sb = _get_supabase_client()
             if sb is None:
                 return
@@ -943,6 +965,9 @@ class SwadhikaarAgent(VoiceAgent):
             sb.table("patients").update(
                 {"risk_level": "High", "overall_risk_score": score}
             ).eq("id", patient_id).execute()
+
+        try:
+            await asyncio.to_thread(_sync_insert)
             self._realtime_actions.add("escalation")
             self._realtime_actions.add("risk_update")
             logger.warning(
@@ -990,15 +1015,17 @@ class SwadhikaarAgent(VoiceAgent):
             severity_upper = "HIGH"
 
         try:
-            sb.table("escalations").insert(
-                {
-                    "patient_id": self._patient_id,
-                    "severity_level": "3" if severity_upper == "CRITICAL" else "2",
-                    "severity": severity_upper,
-                    "reason": reason,
-                    "status": "open",
-                }
-            ).execute()
+            await asyncio.to_thread(
+                lambda: sb.table("escalations").insert(
+                    {
+                        "patient_id": self._patient_id,
+                        "severity_level": "3" if severity_upper == "CRITICAL" else "2",
+                        "severity": severity_upper,
+                        "reason": reason,
+                        "status": "open",
+                    }
+                ).execute()
+            )
             self._realtime_actions.add("escalation")
             logger.warning(
                 "REAL-TIME ESCALATION: patient=%s severity=%s reason=%s",
@@ -1043,12 +1070,14 @@ class SwadhikaarAgent(VoiceAgent):
         score = {"High": 80, "Moderate": 50, "Low": 20}[level]
 
         try:
-            sb.table("patients").update(
-                {
-                    "risk_level": level,
-                    "overall_risk_score": score,
-                }
-            ).eq("id", self._patient_id).execute()
+            await asyncio.to_thread(
+                lambda: sb.table("patients").update(
+                    {
+                        "risk_level": level,
+                        "overall_risk_score": score,
+                    }
+                ).eq("id", self._patient_id).execute()
+            )
             self._realtime_actions.add("risk_update")
             logger.info(
                 "REAL-TIME RISK UPDATE: patient=%s → %s (score=%d)",
@@ -1093,11 +1122,13 @@ class SwadhikaarAgent(VoiceAgent):
             return "Journey noted but database unavailable."
 
         try:
-            sb.table("patients").update(
-                {
-                    "journey_status": new_status,
-                }
-            ).eq("id", self._patient_id).execute()
+            await asyncio.to_thread(
+                lambda: sb.table("patients").update(
+                    {
+                        "journey_status": new_status,
+                    }
+                ).eq("id", self._patient_id).execute()
+            )
             self._realtime_actions.add("journey_update")
             logger.info(
                 "REAL-TIME JOURNEY: patient=%s → %s",
@@ -1157,7 +1188,9 @@ class SwadhikaarAgent(VoiceAgent):
             return "No vitals provided."
 
         try:
-            sb.table("health_vitals").insert(record).execute()
+            await asyncio.to_thread(
+                lambda: sb.table("health_vitals").insert(record).execute()
+            )
             self._realtime_actions.add("vitals_recorded")
             parts = []
             if systolic_bp:
@@ -1207,7 +1240,7 @@ class SwadhikaarAgent(VoiceAgent):
         if not sb:
             return "Response noted but database unavailable."
 
-        try:
+        def _sync_vaccination_update():
             # Find the next pending vaccination schedule for this patient's baby
             # First get the newborn linked to this parent
             nr = (
@@ -1238,6 +1271,12 @@ class SwadhikaarAgent(VoiceAgent):
                         "status": new_status,
                     }
                 ).eq("id", vsr.data[0]["id"]).execute()
+            return None
+
+        try:
+            err = await asyncio.to_thread(_sync_vaccination_update)
+            if err:
+                return err
 
             self._realtime_actions.add("vaccination_confirmed")
             logger.info(
@@ -1616,6 +1655,10 @@ async def entrypoint(ctx: JobContext) -> None:
     # Connect to the room first — REQUIRED before accessing room data
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
+    # Keep console clean and unblocked during live calls
+    for _noisy_logger in ("hpack", "httpcore", "httpx"):
+        logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
+
     logger.info("Agent connected to room: %s", ctx.room.name)
 
     # Parse room metadata for language
@@ -1857,6 +1900,9 @@ if __name__ == "__main__":
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
+    for _noisy_logger in ("hpack", "httpcore", "httpx"):
+        logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
+
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
