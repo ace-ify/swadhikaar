@@ -1675,10 +1675,22 @@ async def entrypoint(ctx: JobContext) -> None:
     stt_language, bcp47_code = LANGUAGES.get(language, ("hi", "hi-IN"))
 
     session_kwargs: dict[str, Any] = {
-        "allow_interruptions": True,
-        "min_endpointing_delay": 0.3,  # was 0.5 — respond faster
-        "max_endpointing_delay": 0.8,  # was 1.5 — cap wait shorter
-        "min_interruption_duration": 0.5,
+        "turn_handling": {
+            "turn_detection": "vad",
+            "endpointing": {
+                "min_delay": 0.3,  # respond quickly when user stops speaking
+                "max_delay": 0.8,
+            },
+            "interruption": {
+                "enabled": True,
+                "mode": "vad",  # local VAD only: avoids remote inference timeout (408) and false-interruption stutter
+                "min_duration": 0.5,
+                "resume_false_interruption": False,
+            },
+            "preemptive_generation": {
+                "enabled": True,
+            },
+        },
     }
 
     # ── FAST PIPELINE ───────────────────────────────────────────────
@@ -1866,8 +1878,6 @@ async def entrypoint(ctx: JobContext) -> None:
             "llm": llm_model,
             "tts": tts,
             "vad": vad,
-            "turn_detection": "vad",  # fastest turn detection
-            "preemptive_generation": True,  # only works with split pipeline
         }
     )
 
