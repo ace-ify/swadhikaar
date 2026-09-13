@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -30,6 +31,8 @@ import {
   MessageSquare,
   Target,
   ArrowRight,
+  AlertTriangle,
+  Flame,
 } from "lucide-react";
 import {
   usePatients,
@@ -152,11 +155,49 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">System Operations Center</h1>
-        <p className="text-sm text-slate-500 font-medium mt-1">
-          District-level view of AI pipeline performance, population health, and automated tele-triage.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">System Operations Center</h1>
+          <p className="text-sm text-slate-500 font-medium mt-1">
+            District-level view of AI pipeline performance, population health, and automated tele-triage.
+          </p>
+        </div>
+        <Link
+          href="/admin/trends"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition shadow-sm self-start md:self-auto"
+        >
+          <Activity className="h-4 w-4" />
+          Community Health Trends & Outbreak Surveillance →
+        </Link>
+      </div>
+
+      {/* Lenovo LEAP / IndiaAI Outbreak Alert Banner */}
+      <div className="p-3.5 bg-gradient-to-r from-rose-950/90 to-slate-900 border border-rose-500/40 rounded-xl text-rose-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-rose-600/30 text-rose-400 rounded-lg shrink-0">
+            <Flame className="h-5 w-5 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-400">
+                Lenovo LEAP 2026 • AI Public Health Alert (Theme 3.3)
+              </span>
+              <span className="text-[10px] bg-rose-600 text-white px-2 py-0.2 rounded-full font-bold">
+                2 HOTSPOTS ACTIVE
+              </span>
+            </div>
+            <p className="text-xs text-rose-200 mt-0.5">
+              Epidemiological anomaly detected: <strong>+38.4% surge in Febrile Pyrexia</strong> across Mohanlalganj (Lucknow) &amp; pediatric respiratory wheezing in Barabanki CHC catchment.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/admin/trends"
+          className="text-xs bg-rose-600 hover:bg-rose-500 text-white font-semibold px-3 py-1.5 rounded-md transition shrink-0 inline-flex items-center gap-1.5"
+        >
+          Inspect Outbreak Map &amp; Report
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
       {/* KPI Cards (System Impact & ROI) */}

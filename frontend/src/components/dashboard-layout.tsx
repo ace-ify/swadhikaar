@@ -77,6 +77,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "Patients", href: "/admin/patients", icon: Users },
     { label: "Workflows", href: "/admin/workflows", icon: Workflow },
     { label: "Coordination", href: "/admin/coordination", icon: Network },
+    { label: "Community Health Trends", href: "/admin/trends", icon: Activity },
     { label: "Operations Map", href: "/admin/map", icon: MapIcon },
     { label: "Dispatch Console", href: "/admin/dispatch", icon: Siren },
     { label: "Finance", href: "/admin/finance", icon: IndianRupee },
