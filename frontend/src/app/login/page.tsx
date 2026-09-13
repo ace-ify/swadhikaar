@@ -6,6 +6,15 @@ import Link from "next/link";
 import { useAuth, type UserRole } from "@/context/auth-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Stethoscope,
+  User,
+  ShieldAlert,
+  HeartHandshake,
+  Laptop,
+  ArrowRight,
+  ShieldCheck,
+} from "lucide-react";
 
 const ROLE_HOME: Record<UserRole, string> = {
   patient: "/patient/sos",
@@ -39,7 +48,6 @@ function humanError(raw: string): string {
   if (m.includes("rate limit") || m.includes("too many")) {
     return "Too many attempts. Please wait a minute and try again.";
   }
-  // Unrecognised: show it rather than swallow it, but say what it is.
   return `Could not sign in: ${raw}`;
 }
 
@@ -61,10 +69,6 @@ export default function LoginPage() {
       setError(humanError(result.error));
       return;
     }
-    // signIn resolves the role from user_roles, the same table RLS consults.
-    // This used to guess from substrings in the email address, which sent every
-    // address without "admin" or "coordinator" in it to the patient portal
-    // regardless of its actual role.
     router.push(ROLE_HOME[result.role ?? "patient"]);
   }
 
@@ -83,125 +87,160 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-8">
+    <main className="min-h-screen bg-slate-50/70 dark:bg-slate-950 flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        {/* Logo */}
+        {/* Header Logo */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-sm">
-              <span className="text-white font-bold text-lg">S</span>
+          <Link href="/" className="inline-flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg flex items-center justify-center font-bold text-sm shadow-xs">
+              S
             </div>
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">Swadhikaar</span>
+            <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+              Swadhikaar
+            </span>
           </Link>
-          <p className="text-sm text-slate-500 mt-2">
-            Indic Voice AI Patient Engagement Platform
+          <p className="text-xs text-slate-500 max-w-xs mx-auto">
+            Clinical Operating System • Role-Based Authentication
           </p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-6">
           <form onSubmit={handleEmailLogin} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
                 {error}
               </div>
             )}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                Email Address
+              </label>
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email"
+                placeholder="name@hospital.gov.in"
                 required
+                className="h-9 text-xs"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                Password
+              </label>
               <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="••••••••••••"
                 required
+                className="h-9 text-xs"
               />
             </div>
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs h-9 shadow-xs"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Verifying Credentials..." : "Sign In to Portal"}
             </Button>
           </form>
 
-          {/* Quick Demo Logins */}
-          <div className="pt-2 border-t border-slate-100 space-y-3">
-            <div className="text-center">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                ⚡ 1-Click Demo Logins / त्वरित लॉगिन
+          {/* Quick Demo Access Roles */}
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono font-medium text-slate-500 uppercase tracking-wider">
+                1-Click Role Presets
               </span>
+              <span className="text-[10px] text-slate-400">Demo Environment</span>
             </div>
+
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
                 variant="outline"
                 disabled={loading}
                 onClick={() => handleQuickDemoLogin("acecodes21@gmail.com")}
-                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-emerald-50 hover:border-emerald-300"
+                className="flex items-start gap-2.5 p-3 h-auto text-left border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-colors"
               >
-                <span className="text-xs font-bold text-slate-800">🧑‍⚕️ Doctor OPD</span>
-                <span className="text-[10px] text-slate-400">Queue & Triage</span>
+                <div className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
+                  <Stethoscope className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white">Doctor OPD</div>
+                  <div className="text-[10px] text-slate-500">Queue &amp; Triage</div>
+                </div>
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
                 disabled={loading}
                 onClick={() => handleQuickDemoLogin("yashmonarch21@gmail.com")}
-                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-sky-50 hover:border-sky-300"
+                className="flex items-start gap-2.5 p-3 h-auto text-left border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-colors"
               >
-                <span className="text-xs font-bold text-slate-800">👤 Patient</span>
-                <span className="text-[10px] text-slate-400">Records & ABHA</span>
+                <div className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white">Patient</div>
+                  <div className="text-[10px] text-slate-500">Records &amp; ABHA</div>
+                </div>
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
                 disabled={loading}
                 onClick={() => handleQuickDemoLogin("demoshow@swadhikaar.local")}
-                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-purple-50 hover:border-purple-300"
+                className="flex items-start gap-2.5 p-3 h-auto text-left border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-colors"
               >
-                <span className="text-xs font-bold text-slate-800">🛠️ Admin Dispatch</span>
-                <span className="text-[10px] text-slate-400">Fleet & Live Map</span>
+                <div className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white">Admin / Fleet</div>
+                  <div className="text-[10px] text-slate-500">Surveillance &amp; Ops</div>
+                </div>
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
                 disabled={loading}
                 onClick={() => handleQuickDemoLogin("21ace.ns21@gmail.com")}
-                className="flex flex-col items-start p-2.5 h-auto text-left border-slate-200 hover:bg-amber-50 hover:border-amber-300"
+                className="flex items-start gap-2.5 p-3 h-auto text-left border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-colors"
               >
-                <span className="text-xs font-bold text-slate-800">👩‍⚕️ ASHA Worker</span>
-                <span className="text-[10px] text-slate-400">Rural Tablet</span>
+                <div className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
+                  <HeartHandshake className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-900 dark:text-white">ASHA Worker</div>
+                  <div className="text-[10px] text-slate-500">Rural Tablet</div>
+                </div>
               </Button>
             </div>
 
             {/* Direct MediKiosk Button */}
-            <div className="pt-1">
+            <div className="pt-2">
               <Link href="/kiosk" className="block">
                 <Button
                   type="button"
-                  variant="secondary"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 py-2"
+                  variant="outline"
+                  className="w-full border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium h-9 gap-2 shadow-2xs"
                 >
-                  <span>🏥 Open Walk-In MediKiosk (No Login Required)</span>
+                  <Laptop className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                  <span>Open Public MediKiosk (No Auth Required)</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-auto text-slate-400" />
                 </Button>
               </Link>
             </div>
           </div>
         </div>
 
-        <p className="text-xs text-slate-500 text-center mt-6">
-          Swadhikaar Clinical Operating System • DPDP Act 2023 Compliant
+        <p className="text-[11px] text-slate-400 text-center mt-6">
+          DPDP Act 2023 Compliant • ABDM NRCES Encrypted Session
         </p>
       </div>
     </main>

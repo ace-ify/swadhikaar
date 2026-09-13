@@ -105,6 +105,11 @@
 | **Kiosk Step 4 (Gemini Vision OCR Extraction)** | `/kiosk` | [11_kiosk_step4_gemini_vision_ocr.png](file:///c:/ace/products/swadhikaar/docs/screenshots/11_kiosk_step4_gemini_vision_ocr.png) | ✅ Verified & Captured |
 | **Kiosk Step 4 (24-Point Drug Safety Checked)** | `/kiosk` | [12_kiosk_step4_drug_interactions_checked.png](file:///c:/ace/products/swadhikaar/docs/screenshots/12_kiosk_step4_drug_interactions_checked.png) | ✅ Verified & Captured |
 | **Kiosk Step 5 (ABDM FHIR R4 Bundle Export)** | `/kiosk` | [13_kiosk_step5_abdm_fhir_export.png](file:///c:/ace/products/swadhikaar/docs/screenshots/13_kiosk_step5_abdm_fhir_export.png) | ✅ Verified & Captured |
+| **Official Tricolor ABHA Health Card** | `/patient/records` | [14_patient_records_abha_card.png](file:///c:/ace/products/swadhikaar/docs/screenshots/14_patient_records_abha_card.png) | ✅ Verified & Captured |
+| **Doctor OPD Queue & Triage Console** | `/doctor/kiosk-queue` | [15_doctor_kiosk_queue.png](file:///c:/ace/products/swadhikaar/docs/screenshots/15_doctor_kiosk_queue.png) | ✅ Verified & Captured |
+| **MediKiosk Check-In & Stepper** | `/kiosk` | [16_kiosk_terminal_checkin.png](file:///c:/ace/products/swadhikaar/docs/screenshots/16_kiosk_terminal_checkin.png) | ✅ Verified & Captured |
+| **Portal Sign In & Role Presets** | `/login` | [17_login_portal_presets.png](file:///c:/ace/products/swadhikaar/docs/screenshots/17_login_portal_presets.png) | ✅ Verified & Captured |
+| **Live Moving Ambulance Telemetry & Route Map** | `/doctor/kiosk-queue` | [18_live_moving_ambulance_telemetry.png](file:///c:/ace/products/swadhikaar/docs/screenshots/18_live_moving_ambulance_telemetry.png) | ✅ Verified & Captured |
 
 ---
 *End of Master Log. Keep this document updated whenever requirements or hackathon themes expand.*

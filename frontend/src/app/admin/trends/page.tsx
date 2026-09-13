@@ -40,6 +40,9 @@ import {
   Clock,
   CheckCircle2,
   BellRing,
+  ChevronRight,
+  Stethoscope,
+  Info,
 } from "lucide-react";
 import { usePatients, useCallLogs, useFHIRResources } from "@/hooks/use-supabase";
 import { toast } from "sonner";
@@ -58,6 +61,7 @@ interface DistrictSurveillance {
   ncdRiskIndex: number;
   voiceAdoptionRate: number;
   coordinates: [number, number];
+  primaryIntervention: string;
 }
 
 const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
@@ -71,10 +75,11 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     riskLevel: "critical",
     velocityChange: 38.4,
     anomalyDetected: true,
-    anomalyDescription: "Spike in high-grade fever with thrombocytopenia symptoms in Mohanlalganj & Chinhat clusters",
+    anomalyDescription: "Spike in high-grade pyrexia with thrombocytopenia symptoms in Mohanlalganj & Chinhat clusters",
     ncdRiskIndex: 41.2,
     voiceAdoptionRate: 78.5,
     coordinates: [26.8467, 80.9462],
+    primaryIntervention: "Deploy mobile larvicide fogging vans to Mohanlalganj; pre-position 2,500 ORS & IV fluids at CHC.",
   },
   {
     district: "Barabanki",
@@ -90,6 +95,7 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     ncdRiskIndex: 32.5,
     voiceAdoptionRate: 84.2,
     coordinates: [26.9269, 81.1834],
+    primaryIntervention: "Mobilize 48 ASHA workers with pulse oximeters; reserve 15 oxygen-supported pediatric beds at District Hospital.",
   },
   {
     district: "Kanpur Nagar",
@@ -105,6 +111,7 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     ncdRiskIndex: 47.8,
     voiceAdoptionRate: 69.4,
     coordinates: [26.4499, 80.3319],
+    primaryIntervention: "Issue industrial pollution advisory to tannery belt; stock salbutamol inhalers at Ghatampur PHC.",
   },
   {
     district: "Varanasi",
@@ -120,6 +127,7 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     ncdRiskIndex: 36.9,
     voiceAdoptionRate: 76.1,
     coordinates: [25.3176, 82.9739],
+    primaryIntervention: "Test rural borewell water samples in Shivpur block; distribute chlorine tablets via Jal Sansthan.",
   },
   {
     district: "Gorakhpur",
@@ -135,6 +143,7 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     ncdRiskIndex: 34.1,
     voiceAdoptionRate: 81.7,
     coordinates: [26.7606, 83.3732],
+    primaryIntervention: "Coordinate with BRD Medical College catchment for vector surveillance and rapid fever clinics.",
   },
   {
     district: "Prayagraj",
@@ -150,6 +159,7 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     ncdRiskIndex: 44.5,
     voiceAdoptionRate: 73.0,
     coordinates: [25.4358, 81.8463],
+    primaryIntervention: "Schedule weekly Ayush lifestyle and dietary counselling workshops at Soraon & Naini PHCs.",
   },
   {
     district: "Ayodhya",
@@ -161,10 +171,11 @@ const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
     riskLevel: "stable",
     velocityChange: -3.2,
     anomalyDetected: false,
-    anomalyDescription: "Baseline clinical health distribution within expected demographic parameters",
+    anomalyDescription: "Baseline clinical health distribution within expected seasonal demographic parameters",
     ncdRiskIndex: 31.0,
     voiceAdoptionRate: 86.4,
     coordinates: [26.7922, 82.1998],
+    primaryIntervention: "Maintain standard primary care baseline surveillance; no emergency vector surge observed.",
   },
 ];
 
@@ -174,8 +185,10 @@ export default function CommunityHealthTrendsPage() {
   const { data: fhirResources } = useFHIRResources();
 
   const [selectedDistrict, setSelectedDistrict] = useState<string>("All");
+  const [inspectedDistrict, setInspectedDistrict] = useState<DistrictSurveillance>(UP_DISTRICTS_DATA[0]);
   const [timeRange, setTimeRange] = useState<"7d" | "14d" | "30d">("7d");
   const [simulationSurge, setSimulationSurge] = useState<boolean>(false);
+  const [activeDayHover, setActiveDayHover] = useState<number | null>(null);
 
   // Compute live aggregates combining database patients and the UP district surveillance grid
   const filteredDistricts = useMemo(() => {
@@ -243,73 +256,86 @@ export default function CommunityHealthTrendsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Breadcrumb & Hackathon Alignment Banner */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-indigo-950/80 border border-emerald-500/30 p-4 rounded-xl text-slate-100 shadow-md">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-emerald-400/50 text-emerald-300 bg-emerald-950/40 text-xs font-semibold px-2 py-0.5">
-              Lenovo LEAP 2026 • Theme 3: Healthcare & Wellness Tech
-            </Badge>
-            <Badge variant="outline" className="border-indigo-400/50 text-indigo-300 bg-indigo-950/40 text-xs font-semibold px-2 py-0.5">
-              IndiaAI Mission Aligned
-            </Badge>
-            <Badge variant="outline" className="border-amber-400/50 text-amber-300 bg-amber-950/40 text-xs font-semibold px-2 py-0.5">
-              AKTU Lucknow Campus Catchment
-            </Badge>
+    <div className="space-y-8 pb-16">
+      {/* ========================================================================= HERO COMMAND DECK */}
+      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/80 p-6 md:p-8 text-white shadow-2xl">
+        {/* Subtle Ambient Glow Background Orbs */}
+        <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-emerald-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3 max-w-3xl">
+            {/* Pill Tags */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-emerald-300 backdrop-blur-md">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Lenovo LEAP 2026 • Theme 3: Healthcare Tech
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-400/30 bg-indigo-950/50 px-3 py-1 text-[11px] font-medium text-indigo-300 backdrop-blur-md">
+                <Sparkles className="h-3 w-3 text-indigo-400" />
+                IndiaAI Mission Engine
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-950/50 px-3 py-1 text-[11px] font-medium text-amber-300 backdrop-blur-md">
+                <MapPin className="h-3 w-3 text-amber-400" />
+                AKTU Lucknow Catchment
+              </span>
+            </div>
+
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
+              Community Health Trends &amp; Outbreak Surveillance
+            </h1>
+            <p className="text-sm md:text-base text-slate-300 leading-relaxed">
+              Synthesizing real-time epidemiological intelligence from walk-in MediKiosks, doctor consultations, and vernacular Hindi voice intakes across Uttar Pradesh districts.
+            </p>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Activity className="h-7 w-7 text-emerald-400 animate-pulse" />
-            Community Health Trends & Epidemiological Surveillance
-          </h1>
-          <p className="text-xs md:text-sm text-slate-300 max-w-3xl">
-            Real-time disease intelligence and lifestyle habit analytics synthesized from rural walk-in MediKiosks, doctor queues, and vernacular voice intakes across Uttar Pradesh.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
-          <Button
-            variant={simulationSurge ? "destructive" : "outline"}
-            size="sm"
-            onClick={() => {
-              setSimulationSurge(!simulationSurge);
-              if (!simulationSurge) {
-                toast.error("🚨 Simulated Outbreak Triggered: +38% Febrile Spike in Mohanlalganj, Lucknow!");
-              } else {
-                toast.info("Surge simulation reset to live baseline telemetry.");
-              }
-            }}
-            className="text-xs font-medium gap-1.5"
-          >
-            <Flame className="h-4 w-4" />
-            {simulationSurge ? "Reset Outbreak Simulation" : "Simulate Outbreak Surge"}
-          </Button>
+          {/* Action CTAs */}
+          <div className="flex flex-wrap items-center gap-3 self-start lg:self-center shrink-0">
+            <Button
+              variant={simulationSurge ? "destructive" : "outline"}
+              onClick={() => {
+                setSimulationSurge(!simulationSurge);
+                if (!simulationSurge) {
+                  toast.error("Simulated Outbreak Triggered: +38.4% Febrile Pyrexia Surge in Mohanlalganj, Lucknow!");
+                } else {
+                  toast.info("Surge simulation reset to baseline telemetry.");
+                }
+              }}
+              className="rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all shadow-xs gap-2"
+            >
+              <Flame className="h-4 w-4" />
+              {simulationSurge ? "Reset Surge Demo" : "Simulate Outbreak Surge"}
+            </Button>
 
-          <Button
-            onClick={handleExportReport}
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium gap-1.5 shadow"
-          >
-            <Download className="h-4 w-4" />
-            Export IDSP/NHA Report
-          </Button>
+            <Button
+              onClick={handleExportReport}
+              className="rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 text-xs tracking-wide transition-all shadow-lg hover:shadow-emerald-500/25 gap-2"
+            >
+              <Download className="h-4 w-4 text-slate-950" />
+              Export IDSP / NHA FHIR Report
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Control Bar: Timeframe & District Filter */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-card border rounded-lg p-3 shadow-sm">
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Focus District:</span>
-          <div className="flex flex-wrap gap-1.5">
+      {/* ========================================================================= FILTER & CONTROL BAR */}
+      <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 md:p-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 shrink-0">
+            <Filter className="h-3.5 w-3.5" /> District Focus:
+          </span>
+          <div className="flex gap-1.5 shrink-0">
             {["All", "Lucknow", "Barabanki", "Kanpur Nagar", "Varanasi", "Gorakhpur", "Prayagraj", "Ayodhya"].map((d) => (
               <button
                 key={d}
                 onClick={() => setSelectedDistrict(d)}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
                   selectedDistrict === d
-                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                    : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
+                    : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 {d}
@@ -319,15 +345,18 @@ export default function CommunityHealthTrendsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Window:</span>
-          <div className="flex border rounded-md p-0.5 bg-muted/40">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" /> Window:
+          </span>
+          <div className="flex rounded-full border border-slate-200/80 dark:border-slate-800 bg-muted/50 p-0.5">
             {(["7d", "14d", "30d"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setTimeRange(r)}
-                className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                  timeRange === r ? "bg-background font-semibold shadow-xs" : "text-muted-foreground hover:text-foreground"
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                  timeRange === r
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {r === "7d" ? "7 Days" : r === "14d" ? "14 Days" : "30 Days"}
@@ -337,519 +366,611 @@ export default function CommunityHealthTrendsPage() {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Analyzed Consultations */}
-        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs font-medium uppercase text-muted-foreground flex items-center justify-between">
-              <span>Analyzed Consultations</span>
-              <FileText className="h-4 w-4 text-emerald-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tracking-tight">
+      {/* ========================================================================= KPI CARDS GRID */}
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Card 1 */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Analyzed Intakes</span>
+            <div className="h-9 w-9 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <FileText className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
               {totalAnalyzedConsultations.toLocaleString()}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground pt-0">
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 inline-flex">
-              <ArrowUpRight className="h-3.5 w-3.5" /> +18.4%
-            </span>{" "}
-            vs previous {timeRange} cycle across 58 active rural MediKiosks.
-          </CardContent>
-        </Card>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold inline-flex items-center">
+                <ArrowUpRight className="h-3.5 w-3.5" /> +18.4%
+              </span>{" "}
+              intake acceleration across 58 rural MediKiosks
+            </p>
+          </div>
+        </div>
 
-        {/* Card 2: Active Outbreak Clusters */}
-        <Card className={`border-l-4 ${activeAlertsCount > 2 ? "border-l-red-600 bg-red-950/10" : "border-l-rose-500"} shadow-sm`}>
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs font-medium uppercase text-muted-foreground flex items-center justify-between">
-              <span>Active Outbreak Alerts</span>
-              <AlertTriangle className="h-4 w-4 text-rose-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tracking-tight flex items-center gap-2 text-rose-600 dark:text-rose-400">
+        {/* Card 2 */}
+        <div className={`rounded-xl border p-5 space-y-3 shadow-xs hover:shadow-sm transition-all ${
+          activeAlertsCount > 2
+            ? "border-rose-300 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20"
+            : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Outbreak Alerts</span>
+            <div className="h-9 w-9 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400 font-mono flex items-center gap-2">
               {activeAlertsCount} Hotspots
               {simulationSurge && (
-                <Badge variant="destructive" className="text-[10px] animate-pulse">SURGE ACTIVE</Badge>
+                <span className="text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
+                  SURGE ACTIVE
+                </span>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground pt-0">
-            High-clustering in <strong>Mohanlalganj (Lucknow)</strong> and <strong>Fatehpur (Barabanki)</strong>.
-          </CardContent>
-        </Card>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Clustered in <strong>Mohanlalganj (Lucknow)</strong> &amp; <strong>Fatehpur (Barabanki)</strong>
+            </p>
+          </div>
+        </div>
 
-        {/* Card 3: Lifestyle & NCD Risk Index */}
-        <Card className="border-l-4 border-l-amber-500 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs font-medium uppercase text-muted-foreground flex items-center justify-between">
-              <span>Lifestyle Habit Vulnerability</span>
-              <HeartPulse className="h-4 w-4 text-amber-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+        {/* Card 3 */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Lifestyle Vulnerability</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+              <HeartPulse className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold tracking-tight text-foreground font-mono">
               {avgNcdRisk}%
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground pt-0">
-            Pre-hypertension & metabolic irregularity captured via <em>Dashavidha Pariksha</em> prior to acute onset.
-          </CardContent>
-        </Card>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Early Stage-1 NCD propensity identified via <em>Dashavidha Pariksha</em>
+            </p>
+          </div>
+        </div>
 
-        {/* Card 4: Vernacular Voice Adoption */}
-        <Card className="border-l-4 border-l-indigo-500 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs font-medium uppercase text-muted-foreground flex items-center justify-between">
-              <span>Vernacular Voice Adoption</span>
-              <Radio className="h-4 w-4 text-indigo-500" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
+        {/* Card 4 */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vernacular Voice Share</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+              <Radio className="h-4 w-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold tracking-tight text-foreground font-mono">
               {avgVoiceAdoption}%
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground pt-0">
-            Elderly & low-literacy walk-in patients completing intake zero-touch in Hindi & Awadhi.
-          </CardContent>
-        </Card>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Zero-touch hands-free voice intakes in Hindi &amp; Awadhi (Low-literacy access)
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Main Tabs: Surveillance Grid vs Syndromic Curves vs Lifestyle Habit Profiling */}
-      <Tabs defaultValue="matrix" className="space-y-4">
-        <TabsList className="bg-muted/70 p-1 border">
-          <TabsTrigger value="matrix" className="gap-2 text-xs md:text-sm">
-            <MapPin className="h-4 w-4" />
-            UP District Surveillance Matrix
+      {/* ========================================================================= MAIN TABULAR & ANALYTIC VIEWS */}
+      <Tabs defaultValue="matrix" className="space-y-6">
+        <TabsList className="inline-flex h-9 items-center justify-start rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-slate-500 border border-slate-200 dark:border-slate-700">
+          <TabsTrigger value="matrix" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+            <MapPin className="h-3.5 w-3.5" />
+            UP District Matrix
           </TabsTrigger>
-          <TabsTrigger value="curves" className="gap-2 text-xs md:text-sm">
-            <TrendingUp className="h-4 w-4" />
-            Syndromic Epidemic Curves
+          <TabsTrigger value="curves" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+            <TrendingUp className="h-3.5 w-3.5" />
+            Epidemic Curves
           </TabsTrigger>
-          <TabsTrigger value="lifestyle" className="gap-2 text-xs md:text-sm">
-            <HeartPulse className="h-4 w-4" />
-            Lifestyle & Habit Profiling (PS 2)
+          <TabsTrigger value="lifestyle" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+            <HeartPulse className="h-3.5 w-3.5" />
+            Lifestyle &amp; Habits (PS 2)
           </TabsTrigger>
-          <TabsTrigger value="advisory" className="gap-2 text-xs md:text-sm">
-            <BrainCircuit className="h-4 w-4" />
-            AI Public Health Advisory (CMO)
+          <TabsTrigger value="advisory" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
+            <BrainCircuit className="h-3.5 w-3.5" />
+            AI Advisory (CMO)
           </TabsTrigger>
         </TabsList>
 
-        {/* TAB 1: District Surveillance Matrix */}
-        <TabsContent value="matrix" className="space-y-4">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div>
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-emerald-600" />
-                    District-Level Disease Cluster Surveillance (Uttar Pradesh)
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Continuous syndromic anomaly detection across government PHCs, CHCs, and Ayush MediKiosks.
-                  </CardDescription>
+        {/* ========================================== TAB 1: UP DISTRICT MATRIX */}
+        <TabsContent value="matrix" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Table Column */}
+            <div className="lg:col-span-8 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-emerald-500" />
+                      District Surveillance Registry
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Click any row to inspect real-time clinical telemetry &amp; recommended containment protocol.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="rounded-full px-3 py-0.5 text-xs font-semibold bg-muted">
+                    {filteredDistricts.length} Monitored Districts
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="text-xs self-start md:self-auto bg-muted">
-                  Showing {filteredDistricts.length} Surveillance Hubs
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40">
-                      <TableHead className="font-semibold text-xs">District & Division</TableHead>
-                      <TableHead className="font-semibold text-xs">Active Kiosks</TableHead>
-                      <TableHead className="font-semibold text-xs">Dominant Syndrome Cluster</TableHead>
-                      <TableHead className="font-semibold text-xs">7-Day Velocity</TableHead>
-                      <TableHead className="font-semibold text-xs">Surveillance Status</TableHead>
-                      <TableHead className="font-semibold text-xs">NCD Lifestyle Risk</TableHead>
-                      <TableHead className="font-semibold text-xs">Voice Intake %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDistricts.map((item) => (
-                      <TableRow
-                        key={item.district}
-                        className={`hover:bg-muted/30 transition-colors ${
-                          item.riskLevel === "critical" ? "bg-rose-950/5" : ""
-                        }`}
-                      >
-                        <TableCell className="font-medium text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-foreground">{item.district}</span>
-                            <span className="text-[10px] text-muted-foreground">({item.division} Div.)</span>
-                          </div>
-                          {item.anomalyDetected && (
-                            <span className="text-[10px] text-rose-600 dark:text-rose-400 flex items-center gap-1 mt-0.5">
-                              <BellRing className="h-2.5 w-2.5 animate-bounce" /> {item.anomalyDescription}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">
-                          {item.activeKiosks} Units ({item.totalConsultations} visits)
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <div className="flex items-center gap-1.5">
-                            {item.syndromeCategory === "febrile" && (
-                              <Flame className="h-3.5 w-3.5 text-rose-500" />
-                            )}
-                            {item.syndromeCategory === "respiratory" && (
-                              <Wind className="h-3.5 w-3.5 text-sky-500" />
-                            )}
-                            {item.syndromeCategory === "gastro" && (
-                              <Droplets className="h-3.5 w-3.5 text-amber-500" />
-                            )}
-                            {item.syndromeCategory === "metabolic" && (
-                              <HeartPulse className="h-3.5 w-3.5 text-purple-500" />
-                            )}
-                            <span className="truncate max-w-[220px] font-medium">
-                              {item.dominantSyndrome}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-semibold">
-                          <span
-                            className={`flex items-center gap-0.5 ${
-                              item.velocityChange > 20
-                                ? "text-rose-600 dark:text-rose-400"
-                                : item.velocityChange > 0
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-emerald-600 dark:text-emerald-400"
-                            }`}
-                          >
-                            {item.velocityChange > 0 ? (
-                              <ArrowUpRight className="h-3.5 w-3.5" />
-                            ) : (
-                              <ArrowDownRight className="h-3.5 w-3.5" />
-                            )}
-                            {item.velocityChange > 0 ? `+${item.velocityChange}%` : `${item.velocityChange}%`}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {item.riskLevel === "critical" && (
-                            <Badge className="bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-semibold tracking-wide uppercase">
-                              CRITICAL OUTBREAK
-                            </Badge>
-                          )}
-                          {item.riskLevel === "elevated" && (
-                            <Badge className="bg-amber-500/90 hover:bg-amber-500 text-white text-[10px] font-semibold tracking-wide uppercase">
-                              ELEVATED WATCH
-                            </Badge>
-                          )}
-                          {item.riskLevel === "moderate" && (
-                            <Badge variant="outline" className="text-[10px] border-blue-400 text-blue-600 dark:text-blue-400">
-                              MODERATE
-                            </Badge>
-                          )}
-                          {item.riskLevel === "stable" && (
-                            <Badge variant="outline" className="text-[10px] border-emerald-500 text-emerald-600 dark:text-emerald-400">
-                              STABLE
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
-                              <div
-                                className={`h-full ${
-                                  item.ncdRiskIndex > 40 ? "bg-amber-500" : "bg-emerald-500"
-                                }`}
-                                style={{ width: `${item.ncdRiskIndex}%` }}
-                              />
-                            </div>
-                            <span className="font-mono text-[11px]">{item.ncdRiskIndex}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-xs font-mono font-medium text-indigo-600 dark:text-indigo-400">
-                          {item.voiceAdoptionRate}%
-                        </TableCell>
+
+                <div className="overflow-x-auto rounded-xl border">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="text-xs font-bold">District</TableHead>
+                        <TableHead className="text-xs font-bold">Kiosks &amp; Visits</TableHead>
+                        <TableHead className="text-xs font-bold">Dominant Syndrome</TableHead>
+                        <TableHead className="text-xs font-bold">7D Velocity</TableHead>
+                        <TableHead className="text-xs font-bold">Status</TableHead>
+                        <TableHead className="text-xs font-bold">Action</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredDistricts.map((item) => (
+                        <TableRow
+                          key={item.district}
+                          onClick={() => setInspectedDistrict(item)}
+                          className={`cursor-pointer transition-colors ${
+                            inspectedDistrict.district === item.district
+                              ? "bg-emerald-500/10 border-l-4 border-l-emerald-500"
+                              : "hover:bg-muted/40"
+                          }`}
+                        >
+                          <TableCell className="font-medium text-xs">
+                            <div className="font-bold text-foreground">{item.district}</div>
+                            <div className="text-[10px] text-muted-foreground font-mono">{item.division} Division</div>
+                            {item.anomalyDetected && (
+                              <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 mt-0.5">
+                                <BellRing className="h-3 w-3 animate-bounce" /> Hotspot Anomaly
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs font-mono">
+                            <span className="font-bold">{item.activeKiosks}</span> Kiosks
+                            <div className="text-[10px] text-muted-foreground">{item.totalConsultations} consultations</div>
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              {item.syndromeCategory === "febrile" && <Flame className="h-3.5 w-3.5 text-rose-500 shrink-0" />}
+                              {item.syndromeCategory === "respiratory" && <Wind className="h-3.5 w-3.5 text-sky-500 shrink-0" />}
+                              {item.syndromeCategory === "gastro" && <Droplets className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                              {item.syndromeCategory === "metabolic" && <HeartPulse className="h-3.5 w-3.5 text-purple-500 shrink-0" />}
+                              <span className="truncate max-w-[200px]">{item.dominantSyndrome}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-bold font-mono">
+                            <span
+                              className={`inline-flex items-center gap-0.5 ${
+                                item.velocityChange > 20
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : item.velocityChange > 0
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {item.velocityChange > 0 ? (
+                                <ArrowUpRight className="h-3.5 w-3.5" />
+                              ) : (
+                                <ArrowDownRight className="h-3.5 w-3.5" />
+                              )}
+                              {item.velocityChange > 0 ? `+${item.velocityChange}%` : `${item.velocityChange}%`}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {item.riskLevel === "critical" && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-600/90 text-white px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-xs">
+                                <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
+                                CRITICAL
+                              </span>
+                            )}
+                            {item.riskLevel === "elevated" && (
+                              <span className="inline-flex items-center rounded-full bg-amber-500/90 text-white px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase shadow-xs">
+                                ELEVATED
+                              </span>
+                            )}
+                            {item.riskLevel === "moderate" && (
+                              <span className="inline-flex items-center rounded-full border border-blue-400 text-blue-600 dark:text-blue-400 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                                MODERATE
+                              </span>
+                            )}
+                            {item.riskLevel === "stable" && (
+                              <span className="inline-flex items-center rounded-full border border-emerald-500 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                                STABLE
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+
+            {/* District Dossier Card */}
+            <div className="lg:col-span-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Selected Surveillance Target
+                    </div>
+                    <h3 className="text-xl font-extrabold text-foreground">{inspectedDistrict.district} District</h3>
+                  </div>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {inspectedDistrict.division} Div.
+                  </Badge>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="rounded-xl bg-muted/40 p-3 space-y-1">
+                    <div className="font-bold text-foreground">Dominant Syndrome Cluster</div>
+                    <div className="text-muted-foreground font-medium">{inspectedDistrict.dominantSyndrome}</div>
+                  </div>
+
+                  <div className="rounded-xl bg-muted/40 p-3 space-y-2">
+                    <div className="font-bold text-foreground flex items-center justify-between">
+                      <span>Lifestyle NCD Risk Propensity</span>
+                      <span className="font-mono text-amber-600 font-bold">{inspectedDistrict.ncdRiskIndex}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500 rounded-full transition-all"
+                        style={{ width: `${inspectedDistrict.ncdRiskIndex}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>Low Risk</span>
+                      <span>Cardiovascular Stress</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-muted/40 p-3 space-y-2">
+                    <div className="font-bold text-foreground flex items-center justify-between">
+                      <span>Vernacular Voice Adoption</span>
+                      <span className="font-mono text-indigo-600 font-bold">{inspectedDistrict.voiceAdoptionRate}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all"
+                        style={{ width: `${inspectedDistrict.voiceAdoptionRate}%` }}
+                      />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Patients self-navigating kiosk hands-free in Hindi/Awadhi
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/10 p-3 space-y-1">
+                    <div className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4" /> Recommended Clinical Directive
+                    </div>
+                    <div className="text-muted-foreground leading-relaxed">
+                      {inspectedDistrict.primaryIntervention}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
         </TabsContent>
 
-        {/* TAB 2: Syndromic Epidemic Curves */}
-        <TabsContent value="curves" className="space-y-4">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg font-bold flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-indigo-500" />
-                  Syndromic Trajectory & Moving Influx (Past 7 Days)
-                </span>
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
-                    <span>Febrile / Pyrexia</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-sky-500 inline-block" />
-                    <span>Acute Respiratory</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
-                    <span>Gastrointestinal</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-purple-500 inline-block" />
-                    <span>Metabolic / NCD</span>
-                  </div>
+        {/* ========================================== TAB 2: EPIDEMIC CURVES */}
+        <TabsContent value="curves" className="space-y-6">
+          <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5 shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-indigo-500" />
+                    Multi-Syndrome Trajectory &amp; Epidemic Velocity (Past 7 Days)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Aggregated symptom wave curve synthesized across 58 rural walk-in MediKiosks. Hover to inspect day telemetry.
+                  </p>
                 </div>
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Comparative time-series tracking symptoms reported at self-service kiosks. Notice the acute rise in febrile cases starting Day 4.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Custom High-Quality SVG Data Visualization */}
-              <div className="relative w-full h-64 bg-muted/20 border rounded-lg p-4 flex flex-col justify-between">
-                {/* SVG Line Graph */}
-                <svg className="w-full h-44 overflow-visible" viewBox="0 0 700 150">
-                  {/* Grid Lines */}
-                  <line x1="0" y1="30" x2="700" y2="30" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4 4" />
-                  <line x1="0" y1="75" x2="700" y2="75" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4 4" />
-                  <line x1="0" y1="120" x2="700" y2="120" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4 4" />
 
-                  {/* Febrile Curve (Rose) - Spiking steeply */}
+                {/* Legend Pills */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 font-semibold text-rose-600 dark:text-rose-400">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" /> Febrile Illness
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 font-semibold text-sky-600 dark:text-sky-400">
+                    <span className="h-2 w-2 rounded-full bg-sky-500" /> Acute Respiratory
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 font-semibold text-amber-600 dark:text-amber-400">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" /> Gastrointestinal
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-semibold text-purple-600 dark:text-purple-400">
+                    <span className="h-2 w-2 rounded-full bg-purple-500" /> Metabolic / NCD
+                  </span>
+                </div>
+              </div>
+
+              {/* High-Resolution SVG Area Chart */}
+              <div className="relative w-full rounded-2xl border bg-slate-950/90 p-5 text-white overflow-hidden shadow-inner">
+                <svg className="w-full h-64 overflow-visible" viewBox="0 0 700 180">
+                  <defs>
+                    <linearGradient id="febrileGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
+                    </linearGradient>
+                    <linearGradient id="respiratoryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#0284c7" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#0284c7" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Grid Lines */}
+                  <line x1="0" y1="35" x2="700" y2="35" stroke="#334155" strokeWidth="1" strokeDasharray="4 4" />
+                  <line x1="0" y1="85" x2="700" y2="85" stroke="#334155" strokeWidth="1" strokeDasharray="4 4" />
+                  <line x1="0" y1="135" x2="700" y2="135" stroke="#334155" strokeWidth="1" strokeDasharray="4 4" />
+
+                  {/* Area Fill - Febrile */}
+                  <polygon
+                    fill="url(#febrileGradient)"
+                    points="0,130 116,120 233,105 350,75 466,42 583,25 700,15 700,180 0,180"
+                  />
+
+                  {/* Lines */}
+                  {/* Febrile Pyrexia (Rose) */}
                   <polyline
                     fill="none"
                     stroke="#f43f5e"
                     strokeWidth="3.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    points="0,110 116,105 233,95 350,65 466,35 583,20 700,12"
+                    points="0,130 116,120 233,105 350,75 466,42 583,25 700,15"
                   />
-                  {/* Respiratory Curve (Sky) */}
+                  {/* Respiratory (Sky) */}
                   <polyline
                     fill="none"
-                    stroke="#0284c7"
+                    stroke="#38bdf8"
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    points="0,85 116,80 233,88 350,75 466,60 583,55 700,50"
+                    points="0,95 116,92 233,98 350,85 466,70 583,64 700,58"
                   />
-                  {/* Gastro Curve (Amber) */}
+                  {/* Gastrointestinal (Amber) */}
                   <polyline
                     fill="none"
-                    stroke="#d97706"
+                    stroke="#fbbf24"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeDasharray="2 2"
-                    points="0,120 116,122 233,115 350,110 466,118 583,112 700,115"
+                    strokeDasharray="3 3"
+                    points="0,140 116,142 233,138 350,132 466,136 583,130 700,134"
                   />
-                  {/* Metabolic / NCD (Purple) - Steady steady */}
+                  {/* Metabolic / NCD (Purple) */}
                   <polyline
                     fill="none"
-                    stroke="#a855f7"
+                    stroke="#c084fc"
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points="0,135 116,132 233,130 350,128 466,125 583,124 700,122"
+                    points="0,155 116,152 233,150 350,148 466,146 583,144 700,142"
                   />
 
-                  {/* Data Points on Febrile Spike */}
-                  <circle cx="466" cy="35" r="4.5" fill="#f43f5e" className="animate-ping opacity-75" />
-                  <circle cx="466" cy="35" r="4.5" fill="#f43f5e" />
-                  <circle cx="700" cy="12" r="5" fill="#f43f5e" />
+                  {/* Interactive Day Focus Nodes */}
+                  <circle cx="466" cy="42" r="5" fill="#f43f5e" className="animate-ping" />
+                  <circle cx="466" cy="42" r="5" fill="#f43f5e" />
+                  <circle cx="700" cy="15" r="6" fill="#f43f5e" />
                 </svg>
 
                 {/* Day Labels */}
-                <div className="flex justify-between text-[11px] font-mono text-muted-foreground border-t pt-2">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400 border-t border-slate-800 pt-3 mt-1">
                   <span>Day -6 (Mon)</span>
                   <span>Day -5 (Tue)</span>
                   <span>Day -4 (Wed)</span>
                   <span>Day -3 (Thu)</span>
                   <span>Day -2 (Fri)</span>
                   <span>Day -1 (Sat)</span>
-                  <span className="font-bold text-foreground">Today (Sun)</span>
+                  <span className="font-bold text-emerald-400">Today (Sun)</span>
                 </div>
               </div>
 
-              {/* Anomaly Insight Banner */}
-              <div className="mt-4 p-3 rounded-lg bg-rose-950/20 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
-                <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-rose-200">Epidemiological Anomaly Detected:</span>{" "}
-                  Febrile pyrexia reports experienced a <strong>+38.4% acceleration</strong> over 72 hours, concentrated in eastern Lucknow district. Cross-referencing 28 digitized CBC blood tests from MediKiosk Step 4 reveals an average platelet drop of 24,000 / μL, matching vector-borne viral dengue pathology.
+              {/* Anomaly Insight Callout */}
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-950/20 p-4 text-xs text-rose-300 flex items-start gap-3 shadow-sm">
+                <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-rose-200">
+                    Syndromic Outbreak Warning (Integrated Disease Surveillance Programme):
+                  </div>
+                  <p className="leading-relaxed">
+                    Febrile pyrexia cases surged <strong>+38.4% over 72 hours</strong>. Cross-referencing 28 scanned prescriptions and lab slips from MediKiosk Step 4 reveals an average thrombocytopenia drop of 24,000 / μL, confirming seasonal viral dengue pathology in Lucknow East and Mohanlalganj catchment.
+                  </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
         </TabsContent>
 
-        {/* TAB 3: Lifestyle & Habit Profiling (Theme 3, PS 2) */}
-        <TabsContent value="lifestyle" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Dashavidha Pariksha Intake Breakdown */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <HeartPulse className="h-4 w-4 text-purple-500" />
-                  Ayush Dashavidha Lifestyle Factor Capture
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Proactive lifestyle evaluation captured in MediKiosk Step 3 before symptoms progress into irreversible chronic disease.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs">
+        {/* ========================================== TAB 3: LIFESTYLE & HABIT PROFILING (PS 2) */}
+        <TabsContent value="lifestyle" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Dashavidha Lifestyle Dimensions */}
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+              <div className="flex items-center gap-2">
+                <HeartPulse className="h-5 w-5 text-purple-500" />
                 <div>
-                  <div className="flex justify-between font-medium mb-1">
-                    <span>Ahara-shakti (Dietary Regularity & Quality)</span>
-                    <span className="text-amber-600 dark:text-amber-400 font-semibold">46.8% Irregular</span>
+                  <h3 className="text-lg font-bold text-foreground">Ayush Dashavidha Lifestyle Factor Profiling</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Structured preventive evaluation captured during walk-in kiosk triage (Lenovo LEAP PS 2).
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2 text-xs">
+                {/* Ahara */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between font-semibold">
+                    <span>Ahara-shakti (Dietary Regularity &amp; Refined Fats)</span>
+                    <span className="font-mono text-amber-600 font-bold">46.8% Irregular</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div className="bg-amber-500 h-2 rounded-full" style={{ width: "46.8%" }} />
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 rounded-full" style={{ width: "46.8%" }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">High refined starch, deep-fried mustard oil, and delayed night dinners common in peri-urban walk-ins.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    High fried starch and late night dinners identified as primary trigger for chronic dyspepsia.
+                  </p>
                 </div>
 
-                <div>
-                  <div className="flex justify-between font-medium mb-1">
-                    <span>Vyayama-shakti (Physical Exertion Balance)</span>
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">54.2% Sedentary</span>
+                {/* Vyayama */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between font-semibold">
+                    <span>Vyayama-shakti (Sedentary vs Exertion Balance)</span>
+                    <span className="font-mono text-rose-600 font-bold">54.2% Sedentary</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div className="bg-rose-500 h-2 rounded-full" style={{ width: "54.2%" }} />
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-500 rounded-full" style={{ width: "54.2%" }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">&lt;20 min daily walking among shopkeepers and clerical walk-ins; contrasting with over-exertion in agrarian laborers.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    &lt;20 minutes daily walking recorded in 68% of peri-urban shopkeepers and office workers.
+                  </p>
                 </div>
 
-                <div>
-                  <div className="flex justify-between font-medium mb-1">
-                    <span>Satmya & Satva (Circadian Sleep & Psychological Stress)</span>
-                    <span className="text-sky-600 dark:text-sky-400 font-semibold">39.5% Disrupted</span>
+                {/* Satmya */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between font-semibold">
+                    <span>Satmya &amp; Satva (Circadian Rhythm &amp; Sleep Stress)</span>
+                    <span className="font-mono text-sky-600 font-bold">39.5% Disrupted</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div className="bg-sky-500 h-2 rounded-full" style={{ width: "39.5%" }} />
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-sky-500 rounded-full" style={{ width: "39.5%" }} />
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Sleep debt &lt;6 hours closely correlated with recorded systolic BP &gt;135 mmHg.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Chronic sleep disruption closely tracks with detected systolic blood pressure &gt;135 mmHg.
+                  </p>
                 </div>
 
-                <div>
-                  <div className="flex justify-between font-medium mb-1">
-                    <span>Prakriti Baseline Distribution</span>
-                    <span className="text-purple-600 dark:text-purple-400 font-semibold">Vata-Pitta Dominant</span>
+                {/* Prakriti */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between font-semibold">
+                    <span>Prakriti Biological Baseline Distribution</span>
+                    <span className="font-mono text-purple-600 font-bold">Vata-Pitta Dominant</span>
                   </div>
-                  <div className="flex gap-1 h-2 rounded-full overflow-hidden">
-                    <div className="bg-blue-400" style={{ width: "42%" }} title="Vata" />
-                    <div className="bg-rose-400" style={{ width: "36%" }} title="Pitta" />
-                    <div className="bg-emerald-400" style={{ width: "22%" }} title="Kapha" />
+                  <div className="flex h-2.5 rounded-full overflow-hidden gap-1">
+                    <div className="bg-sky-500 h-full" style={{ width: "42%" }} title="Vata" />
+                    <div className="bg-rose-500 h-full" style={{ width: "36%" }} title="Pitta" />
+                    <div className="bg-emerald-500 h-full" style={{ width: "22%" }} title="Kapha" />
                   </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>42% Vata (Dry/Nerve)</span>
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
+                    <span>42% Vata (Nerve/Dry)</span>
                     <span>36% Pitta (Metabolic/Heat)</span>
-                    <span>22% Kapha (Mucus/Fluid)</span>
+                    <span>22% Kapha (Fluid)</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Early NCD Detection Matrix */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                  Pre-Symptomatic Chronic Disease Interception
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Patients with no prior medical record identified with asymptomatic Stage-1 biomarkers during kiosk check-ins.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 text-xs">
-                <div className="border rounded-lg p-3 bg-muted/20 flex items-start gap-3">
-                  <div className="p-2 rounded-md bg-amber-500/10 text-amber-500">
+            {/* Pre-Symptomatic NCD Interception */}
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-xs">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Pre-Symptomatic Chronic Disease Interception</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Asymptomatic walk-ins identified with Stage-1 markers prior to clinical manifestation.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 text-xs">
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40 flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 shrink-0">
                     <HeartPulse className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-foreground">Pre-Hypertension Intercepted</h4>
-                    <p className="text-muted-foreground text-[11px] mt-0.5">
-                      <strong>184 walk-in patients</strong> exhibited systolic BP between 130–145 mmHg without knowing they had cardiovascular stress. Automated Ayush lifestyle advisory (reduction in salty pickles, *Mukta Vati*, morning *Pranayama*) appended to record.
+                    <div className="font-bold text-foreground text-sm">184 Pre-Hypertensive Patients Intercepted</div>
+                    <p className="text-muted-foreground text-[11px] mt-1 leading-relaxed">
+                      Exhibited systolic BP between 130–145 mmHg without knowing they had cardiovascular stress. Automated dietary salt reduction and *Mukta Vati* lifestyle regimen added to their digital health record.
                     </p>
                   </div>
                 </div>
 
-                <div className="border rounded-lg p-3 bg-muted/20 flex items-start gap-3">
-                  <div className="p-2 rounded-md bg-purple-500/10 text-purple-500">
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40 flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 shrink-0">
                     <Sparkles className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-foreground">Early Glycemic & Metabolic Warning</h4>
-                    <p className="text-muted-foreground text-[11px] mt-0.5">
-                      <strong>92 patients</strong> flagged with BMI &gt;27.5 and fasting glucose &gt;115 mg/dL from OCR-scanned lab slips. Automatically scheduled for ASHA follow-up home visit within 14 days.
+                    <div className="font-bold text-foreground text-sm">92 Early Glycemic Alerts</div>
+                    <p className="text-muted-foreground text-[11px] mt-1 leading-relaxed">
+                      Fasting glucose &gt;115 mg/dL flagged from OCR-scanned lab slips in patients who had no previous diabetic diagnosis. Auto-scheduled for an ASHA community health visit.
                     </p>
                   </div>
                 </div>
 
-                <div className="border rounded-lg p-3 bg-muted/20 flex items-start gap-3">
-                  <div className="p-2 rounded-md bg-emerald-500/10 text-emerald-500">
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-800/40 flex items-start gap-3">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 shrink-0">
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-foreground">Doctor OPD Time Saved</h4>
-                    <p className="text-muted-foreground text-[11px] mt-0.5">
-                      Average of <strong>4.2 minutes saved per patient consultation</strong>, allowing physicians to focus directly on prescribing rather than taking routine history from scratch.
+                    <div className="font-bold text-foreground text-sm">4.2 Minutes Saved per Doctor Consultation</div>
+                    <p className="text-muted-foreground text-[11px] mt-1 leading-relaxed">
+                      Attending OPD physicians receive a pre-formatted SOAP summary with *Dashavidha* lifestyle parameters already completed, freeing up time for high-value patient interaction.
                     </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
-        {/* TAB 4: AI Public Health Advisory for CMO */}
-        <TabsContent value="advisory" className="space-y-4">
-          <Card className="border-indigo-500/30 shadow-sm">
-            <CardHeader className="pb-3 bg-indigo-950/10 border-b border-indigo-500/20">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <BrainCircuit className="h-5 w-5 text-indigo-500" />
-                  <div>
-                    <CardTitle className="text-base font-bold">
-                      Automated Public Health Advisory for District Authorities
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Responsible AI synthesis generated in accordance with Integrated Disease Surveillance Programme (IDSP) protocols.
-                    </CardDescription>
-                  </div>
+        {/* ========================================== TAB 4: AI ADVISORY FOR CMO */}
+        <TabsContent value="advisory" className="space-y-6">
+          <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-5 shadow-xs">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <BrainCircuit className="h-5 w-5" />
                 </div>
-                <Badge variant="outline" className="text-[11px] border-indigo-400 text-indigo-400">
-                  Confidence Score: 94.6%
-                </Badge>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">
+                    Automated Public Health Advisory for District Health Authorities
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Synthesized under National Integrated Disease Surveillance Programme (IDSP) clinical criteria.
+                  </p>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="pt-4 space-y-4 text-xs">
-              <div className="space-y-2">
-                <h4 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-rose-500" />
-                  Urgent Clinical Containment Directives (Lucknow & Barabanki)
+              <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-mono border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30">
+                Confidence Score: 94.6% (Zero Hallucination DAG)
+              </Badge>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/30 dark:bg-indigo-950/20 p-4 space-y-3">
+                <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                  Immediate Containment Directives (Lucknow &amp; Barabanki)
                 </h4>
-                <div className="p-3 bg-muted/40 rounded-lg space-y-2">
-                  <p>
-                    <strong>1. Vector Control & Larva Abatement:</strong> Deploy municipal fogging and standing water larvicide in Mohanlalganj wards 3 & 7 within 24 hours. Dengue ELISA test kits should be prioritized to CHC Mohanlalganj.
-                  </p>
-                  <p>
-                    <strong>2. Medicine Warehouse Rebalancing:</strong> Dispatch 2,500 units of IV Normal Saline, ORS packets, and Paracetamol 650mg from the Lucknow central drug store to rural CHCs showing high pyrexia velocity.
-                  </p>
-                  <p>
-                    <strong>3. ASHA Community Mobilization:</strong> Alert 48 accredited ASHA workers in Barabanki to conduct door-to-door temperature and respiratory rate checks using the Swadhikaar Vernacular Voice App.
-                  </p>
+                <div className="space-y-2 text-muted-foreground leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <strong>1. Vector Control &amp; Larva Abatement:</strong> Deploy municipal fogging and standing water larvicide in Mohanlalganj wards 3 &amp; 7 within 24 hours. Prioritize Dengue ELISA rapid test kits to CHC Mohanlalganj.
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <strong>2. Medicine Warehouse Rebalancing:</strong> Dispatch 2,500 units of IV Normal Saline, ORS packets, and Paracetamol 650mg from the Lucknow central drug depot to rural CHCs showing high pyrexia velocity.
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                    <strong>3. ASHA Field Mobilization:</strong> Alert 48 accredited ASHA workers in Barabanki to conduct door-to-door temperature and respiratory rate checks using the Swadhikaar Vernacular Voice App.
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h4 className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  Responsible AI & Explainability Verification
+              <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 space-y-2">
+                <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  Responsible AI &amp; Clinical Grounding
                 </h4>
-                <p className="text-muted-foreground">
-                  This advisory is synthesized deterministically from <strong>1,428 verified patient intake DAGs</strong>, cross-verified with <strong>Gemini Vision prescription extractions</strong> and <strong>ICMR standard treatment guidelines</strong>. No ungrounded generative hallucinations are permitted in the clinical warning pipeline.
+                <p className="text-muted-foreground leading-relaxed">
+                  This advisory is deterministically generated from <strong>1,428 verified intake decision trees</strong>, cross-referenced against <strong>Gemini Vision prescription extractions</strong> and <strong>ICMR standard treatment guidelines</strong>. Black-box generative hallucinations are strictly blocked by the Swadhikaar Clinical Safety Gate.
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

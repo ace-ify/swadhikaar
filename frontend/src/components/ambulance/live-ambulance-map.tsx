@@ -294,7 +294,7 @@ export default function LiveAmbulanceMap({
           <div style="position: relative; width: 38px; height: 38px; border-radius: 9999px; background: #0f172a; border: 2.5px solid #38bdf8; box-shadow: 0 0 16px rgba(56, 189, 248, 0.6); display: flex; align-items: center; justify-content: center; transform: rotate(${heading}deg); transition: transform 0.2s ease;">
             <!-- Rotating Direction Indicator Arrow -->
             <div style="position: absolute; top: 2px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 6px solid #f87171;"></div>
-            <span style="font-size: 19px; line-height: 1; user-select: none;">🚑</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
           </div>
           <!-- Emergency Strobe Dot -->
           <div style="position: absolute; top: -2px; right: -2px; width: 12px; height: 12px; border-radius: 9999px; background: #ef4444; border: 2px solid #ffffff; box-shadow: 0 0 8px #ef4444; animation: pulse 0.6s infinite;"></div>
@@ -311,8 +311,8 @@ export default function LiveAmbulanceMap({
       html: `
         <div style="position: relative; width: 36px; height: 36px; display: flex; flex-direction: column; align-items: center;">
           <div style="position: absolute; bottom: 0; width: 14px; height: 14px; background: rgba(239, 68, 68, 0.4); border-radius: 9999px; animation: ping 1.4s infinite;"></div>
-          <div style="width: 32px; height: 32px; border-radius: 9999px; background: #dc2626; border: 2.5px solid #ffffff; box-shadow: 0 4px 10px rgba(220, 38, 38, 0.5); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 15px;">
-            🚨
+          <div style="width: 32px; height: 32px; border-radius: 9999px; background: #dc2626; border: 2.5px solid #ffffff; box-shadow: 0 4px 10px rgba(220, 38, 38, 0.5); display: flex; align-items: center; justify-content: center; color: white;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
         </div>
       `,
@@ -326,8 +326,8 @@ export default function LiveAmbulanceMap({
       iconAnchor: [18, 36],
       html: `
         <div style="position: relative; width: 36px; height: 36px; display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 32px; height: 32px; border-radius: 8px; background: #2563eb; border: 2.5px solid #ffffff; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 16px;">
-            🏥
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: #2563eb; border: 2.5px solid #ffffff; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 13px; font-family: monospace;">
+            H
           </div>
         </div>
       `,
@@ -453,7 +453,7 @@ export default function LiveAmbulanceMap({
         <Marker position={[scene.lat, scene.lon]} icon={sceneIcon}>
           <Tooltip direction="top" offset={[0, -28]} permanent>
             <div className="text-xs font-sans">
-              <p className="font-bold text-red-600">🚨 Patient Location</p>
+              <p className="font-bold text-rose-600">Patient Location</p>
               <p className="text-slate-700 font-medium">{scene.victimName || "Emergency Scene"}</p>
               {scene.address && <p className="text-slate-500 text-[10px]">{scene.address}</p>}
             </div>
@@ -465,7 +465,7 @@ export default function LiveAmbulanceMap({
           <Marker position={[hospital.lat, hospital.lon]} icon={hospitalIcon}>
             <Tooltip direction="top" offset={[0, -28]}>
               <div className="text-xs font-sans">
-                <p className="font-bold text-blue-600">🏥 Receiving Hospital</p>
+                <p className="font-bold text-sky-600">Receiving Hospital</p>
                 <p className="text-slate-800 font-medium">{hospital.name}</p>
                 {hospital.bedsAvailable != null && (
                   <p className="text-emerald-600 text-[10px]">

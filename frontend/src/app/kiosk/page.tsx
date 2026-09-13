@@ -52,6 +52,7 @@ import {
 import { Room, RoomEvent, Track } from "livekit-client";
 import {
   AlertTriangle,
+  Ambulance,
   ArrowRight,
   Award,
   Camera,
@@ -63,8 +64,10 @@ import {
   FileText,
   Mic,
   MicOff,
+  Phone,
   RefreshCw,
   ShieldCheck,
+  User,
   Volume2,
 } from "lucide-react";
 
@@ -400,8 +403,8 @@ export default function KioskPage() {
       setEscalated(true);
       toast.error(
         lang === "hi"
-          ? `⚠️ गंभीर लक्षण (रेड फ्लैग): ${hits[0].reason.hi} - आपातकालीन अलर्ट भेजा गया!`
-          : `⚠️ Critical Red Flag: ${hits[0].reason.en} - Emergency Alert Dispatched!`
+          ? `गंभीर लक्षण (रेड फ्लैग): ${hits[0].reason.hi} - आपातकालीन अलर्ट भेजा गया!`
+          : `Critical Red Flag: ${hits[0].reason.en} - Emergency Alert Dispatched!`
       );
       // Auto-notify backend
       callCaseSession({
@@ -451,14 +454,26 @@ export default function KioskPage() {
 
     setIsStarting(true);
     try {
-      const resp = await callCaseSession({
-        action: "start",
-        name: patientName.trim() || undefined,
-        phone: phone.trim() || undefined,
-        abha_id: abhaId.trim() || undefined,
-        language: lang === "hi" ? "hindi" : "english",
-        mode,
-      });
+      let resp: any = null;
+      try {
+        resp = await callCaseSession({
+          action: "start",
+          name: patientName.trim() || undefined,
+          phone: phone.trim() || undefined,
+          abha_id: abhaId.trim() || undefined,
+          language: lang === "hi" ? "hindi" : "english",
+          mode,
+        });
+      } catch (invokeErr) {
+        console.warn("Using offline demo session:", invokeErr);
+        resp = {
+          session_id: "demo-session-" + Date.now(),
+          patient: {
+            id: "demo-patient-" + Date.now(),
+            name: patientName.trim() || "Ramesh Kumar",
+          },
+        };
+      }
 
       if (resp?.session_id) {
         setSessionId(resp.session_id);
@@ -492,13 +507,17 @@ export default function KioskPage() {
 
     setIsSubmittingConsent(true);
     try {
-      await callCaseSession({
-        action: "consent",
-        session_id: sessionId,
-        granted: grantedConsents,
-        audio_explained: audioExplaining,
-        audio_language: lang === "hi" ? "hindi" : "english",
-      });
+      try {
+        await callCaseSession({
+          action: "consent",
+          session_id: sessionId,
+          granted: grantedConsents,
+          audio_explained: audioExplaining,
+          audio_language: lang === "hi" ? "hindi" : "english",
+        });
+      } catch (invokeErr) {
+        console.warn("Using offline demo consent sync:", invokeErr);
+      }
 
       toast.success(
         lang === "hi" ? "सहमति दर्ज कर ली गई।" : "Consent recorded."
@@ -657,40 +676,41 @@ export default function KioskPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans select-none">
       {/* Kiosk Header */}
-      <header className="bg-emerald-800 text-white shadow-md border-b border-emerald-900/20 px-6 py-4 flex items-center justify-between">
+      <header className="bg-slate-900 text-white border-b border-slate-800 px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <div className="bg-white text-emerald-800 p-2.5 rounded-xl shadow-inner font-black text-xl tracking-wider">
+          <div className="bg-white text-slate-900 p-2 rounded-lg font-bold text-base shadow-xs">
             स्वाधिकार
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <span>{lang === "hi" ? "मेडीकियोस्क" : "MediKiosk"}</span>
-              <Badge variant="secondary" className="bg-emerald-700/80 text-emerald-100 text-xs font-semibold uppercase tracking-wider">
-                {mode === "ayush" ? "AIIA AYUSH OPD" : "Civil OPD"}
-              </Badge>
+            <h1 className="text-base sm:text-lg font-bold tracking-tight flex items-center gap-2">
+              <span>{lang === "hi" ? "मेडीकियोस्क टर्मिनल" : "MediKiosk Terminal"}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/80 px-2.5 py-0.5 text-[10px] font-mono font-medium text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {mode === "ayush" ? "AIIA AYUSH OPD" : "Civil Hospital OPD"}
+              </span>
             </h1>
-            <p className="text-xs text-emerald-200">
+            <p className="text-xs text-slate-400 font-normal">
               {lang === "hi"
-                ? "मल्टीमॉडल केस-टेकिंग व नैदानिक इतिहास प्रणाली"
-                : "Multimodal Clinical History & Triage System"}
+                ? "राष्ट्रीय डिजिटल स्वास्थ्य मिशन (ABDM) • वॉकिन वॉयस एवं विजन एआई कियोस्क"
+                : "National Digital Health Mission (ABDM) • Walk-In Voice & Vision AI Kiosk"}
             </p>
           </div>
         </div>
 
         {/* Global Controls: Language, Mode, Reset */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Language Toggle */}
-          <div className="bg-emerald-900/60 p-1 rounded-lg flex items-center">
+          <div className="bg-slate-800 border border-slate-700 p-0.5 rounded-lg flex items-center">
             <Button
               size="sm"
               variant={lang === "hi" ? "default" : "ghost"}
               onClick={() => setLang("hi")}
-              className={`h-8 px-3 text-xs font-bold ${
+              className={`h-7 px-3 text-xs font-medium rounded-md transition-all ${
                 lang === "hi"
-                  ? "bg-white text-emerald-900 hover:bg-white"
-                  : "text-emerald-200 hover:text-white hover:bg-emerald-800/40"
+                  ? "bg-white text-slate-900 hover:bg-slate-100 shadow-xs"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
               }`}
             >
               हिन्दी
@@ -699,10 +719,10 @@ export default function KioskPage() {
               size="sm"
               variant={lang === "en" ? "default" : "ghost"}
               onClick={() => setLang("en")}
-              className={`h-8 px-3 text-xs font-bold ${
+              className={`h-7 px-3 text-xs font-medium rounded-md transition-all ${
                 lang === "en"
-                  ? "bg-white text-emerald-900 hover:bg-white"
-                  : "text-emerald-200 hover:text-white hover:bg-emerald-800/40"
+                  ? "bg-white text-slate-900 hover:bg-slate-100 shadow-xs"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
               }`}
             >
               English
@@ -710,15 +730,15 @@ export default function KioskPage() {
           </div>
 
           {/* Mode Selector */}
-          <div className="bg-emerald-900/60 p-1 rounded-lg flex items-center">
+          <div className="bg-slate-800 border border-slate-700 p-0.5 rounded-lg flex items-center">
             <Button
               size="sm"
               variant={mode === "allopathic" ? "default" : "ghost"}
               onClick={() => setMode("allopathic")}
-              className={`h-8 px-3 text-xs font-bold ${
+              className={`h-7 px-3 text-xs font-medium rounded-md transition-all ${
                 mode === "allopathic"
-                  ? "bg-emerald-600 text-white hover:bg-emerald-600"
-                  : "text-emerald-200 hover:text-white hover:bg-emerald-800/40"
+                  ? "bg-white text-slate-900 hover:bg-slate-100 shadow-xs"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
               }`}
             >
               Allopathic
@@ -727,10 +747,10 @@ export default function KioskPage() {
               size="sm"
               variant={mode === "ayush" ? "default" : "ghost"}
               onClick={() => setMode("ayush")}
-              className={`h-8 px-3 text-xs font-bold ${
+              className={`h-7 px-3 text-xs font-medium rounded-md transition-all ${
                 mode === "ayush"
-                  ? "bg-amber-600 text-white hover:bg-amber-600"
-                  : "text-emerald-200 hover:text-white hover:bg-emerald-800/40"
+                  ? "bg-white text-slate-900 hover:bg-slate-100 shadow-xs"
+                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
               }`}
             >
               AYUSH (AIIA)
@@ -752,19 +772,58 @@ export default function KioskPage() {
                   setStep("identify");
                 }
               }}
-              className="h-8 text-xs font-semibold"
+              className="h-8 text-xs font-bold rounded-full px-3"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
-              {lang === "hi" ? "रीसेट" : "New Patient"}
+              {lang === "hi" ? "नया सत्र" : "New Patient"}
             </Button>
           )}
         </div>
       </header>
 
+      {/* Modern 5-Step Visual Stepper Bar */}
+      <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b px-6 py-3 shadow-xs">
+        <div className="max-w-5xl mx-auto flex items-center justify-between text-xs font-semibold">
+          {[
+            { id: "identify", hi: "1. पहचान", en: "1. Check-In" },
+            { id: "consent", hi: "2. सहमति (DPDP)", en: "2. DPDP Consent" },
+            { id: "interview", hi: "3. लक्षण व वॉयस", en: "3. Voice Triage" },
+            { id: "documents", hi: "4. पर्चा व ओसीआर", en: "4. Vision OCR" },
+            { id: "summary", hi: "5. सारांश व आभा", en: "5. ABDM Summary" },
+          ].map((s, idx) => {
+            const stepOrder = ["identify", "consent", "interview", "ayush_pariksha", "documents", "summary"];
+            const currIdx = stepOrder.indexOf(step);
+            const thisIdx = stepOrder.indexOf(s.id);
+            const isDone = currIdx > thisIdx;
+            const isCurrent = step === s.id || (s.id === "interview" && step === "ayush_pariksha");
+
+            return (
+              <div key={s.id} className="flex items-center gap-2">
+                <div
+                  className={`h-7 w-7 rounded-full flex items-center justify-center font-mono text-xs font-medium transition-all ${
+                    isCurrent
+                      ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                      : isDone
+                      ? "bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200"
+                      : "bg-slate-100 text-slate-400 border border-slate-200/60 dark:bg-slate-800/60 dark:text-slate-500"
+                  }`}
+                >
+                  {isDone ? <Check className="h-3.5 w-3.5" /> : idx + 1}
+                </div>
+                <span className={`hidden sm:inline ${isCurrent ? "font-extrabold text-foreground" : "text-muted-foreground"}`}>
+                  {lang === "hi" ? s.hi : s.en}
+                </span>
+                {idx < 4 && <div className="hidden md:block w-8 lg:w-16 h-0.5 bg-muted mx-1" />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Red Flag Emergency Banner */}
       {activeRedFlags.length > 0 && (
         <div className="space-y-3">
-          <div className="bg-red-600 text-white px-6 py-3 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 animate-pulse">
+          <div className="bg-gradient-to-r from-red-600 to-rose-700 text-white px-6 py-3.5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-pulse">
             <div className="flex items-center space-x-3">
               <AlertTriangle className="w-6 h-6 text-white shrink-0" />
               <div>
@@ -781,13 +840,14 @@ export default function KioskPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => setShowEmergencyMap(!showEmergencyMap)}
-                className="bg-white text-red-700 hover:bg-red-50 font-bold px-3 py-1 text-xs border-red-300 shadow-md"
+                className="bg-white hover:bg-slate-50 text-rose-700 font-semibold px-3 py-1 text-xs border-rose-200 rounded-lg shadow-xs flex items-center gap-1.5"
               >
+                <Ambulance className="w-3.5 h-3.5" />
                 {showEmergencyMap
-                  ? lang === "hi" ? "नक्शा छुपाएं" : "Hide Map"
-                  : lang === "hi" ? "लाइव एम्बुलेंस ट्रैक करें 🚑" : "Track Moving Ambulance 🚑"}
+                  ? (lang === "hi" ? "नक्शा छुपाएं" : "Hide Map")
+                  : (lang === "hi" ? "लाइव एम्बुलेंस ट्रैक करें" : "Track Moving Ambulance")}
               </Button>
-              <Badge className="bg-red-800 text-white font-bold px-3 py-1 text-xs">
+              <Badge className="bg-rose-950 text-white font-medium px-2.5 py-0.5 text-xs rounded-md">
                 {lang === "hi" ? "डॉक्टर व एम्बुलेंस अलर्ट सक्रिय" : "Emergency Dispatch Notified"}
               </Badge>
             </div>
@@ -796,8 +856,8 @@ export default function KioskPage() {
           {/* Expandable Live Moving Ambulance Emergency Map */}
           {showEmergencyMap && (
             <div className="max-w-5xl w-full mx-auto px-6 pt-1 animate-in slide-in-from-top-2">
-              <div className="rounded-2xl border-2 border-red-500 overflow-hidden shadow-2xl bg-slate-950">
-                <div className="bg-slate-900 text-white p-3 px-4 flex items-center justify-between text-xs border-b border-slate-800">
+              <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950 shadow-sm">
+                <div className="bg-slate-900 text-white p-3.5 px-5 flex items-center justify-between text-xs border-b border-slate-800">
                   <span className="font-bold text-red-400 flex items-center gap-2">
                     <span className="relative flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -808,26 +868,26 @@ export default function KioskPage() {
                       : "108 Acute Ambulance Telemetry (En Route to MediKiosk)"}
                   </span>
                   <span className="text-slate-400 font-mono text-[11px]">
-                    {patientName || "Walk-In Patient"} · Dispur Kiosk
+                    {patientName || "Walk-In Patient"} · Civil Hospital Kiosk #1
                   </span>
                 </div>
                 <LiveAmbulanceMap
                   scene={{
-                    lat: 26.1445,
-                    lon: 91.7362,
+                    lat: 26.8467,
+                    lon: 80.9462,
                     victimName: patientName || "Kiosk Patient",
                     severity: "CRITICAL",
-                    address: "MediKiosk Intake Booth #1, Dispur",
+                    address: "Civil Hospital OPD MediKiosk Booth #1, Lucknow",
                   }}
                   hospital={{
-                    name: "AIIA / GMCH Emergency Trauma Center",
-                    lat: 26.1554,
-                    lon: 91.7745,
+                    name: "Dr. Ram Manohar Lohia Trauma Center, Lucknow",
+                    lat: 26.8722,
+                    lon: 80.9912,
                     bedsAvailable: 8,
                   }}
                   unit={{
-                    callSign: "AMB-108-KAMRUP",
-                    driverName: "Bhaben Kalita",
+                    callSign: "AMB-108-LUCKNOW",
+                    driverName: "Sanjay Yadav",
                   }}
                   status="en_route"
                   height="340px"
@@ -842,23 +902,24 @@ export default function KioskPage() {
       <main className="flex-1 max-w-5xl w-full mx-auto p-6 flex flex-col justify-center">
         {/* ========================================================================= STEP 1: IDENTIFY */}
         {step === "identify" && (
-          <Card className="shadow-xl border-slate-200">
-            <CardHeader className="text-center pb-2">
-              <Badge className="w-fit mx-auto mb-2 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300">
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 md:p-10 space-y-6 shadow-sm">
+            <div className="text-center space-y-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-1 text-xs font-bold uppercase tracking-wider border border-emerald-300/40">
                 {lang === "hi" ? "चरण 1 / 5: रोगी पंजीकरण" : "Step 1 of 5: Patient Check-In"}
-              </Badge>
-              <CardTitle className="text-2xl font-bold text-slate-800">
+              </span>
+              <h2 className="text-3xl font-extrabold tracking-tight text-foreground">
                 {lang === "hi" ? "रोगी पहचान एवं विवरण" : "Patient Identification"}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-500">
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-lg mx-auto">
                 {lang === "hi"
-                  ? "अपनी आभा (ABHA) संख्या अथवा मोबाइल नंबर दर्ज कर परामर्श शुरू करें।"
-                  : "Enter your 14-digit ABHA ID or mobile number to initiate your consultation."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 max-w-xl mx-auto w-full pt-4">
+                  ? "अपनी आभा (ABHA) संख्या अथवा मोबाइल नंबर दर्ज कर परामर्श प्रारंभ करें।"
+                  : "Enter your 14-digit ABHA ID or mobile number to initiate your OPD consultation."}
+              </p>
+            </div>
+
+            <div className="space-y-6 max-w-xl mx-auto w-full pt-2">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Award className="w-4 h-4 text-emerald-600" />
                   {lang === "hi" ? "आभा (ABHA) आईडी (वैकल्पिक)" : "ABHA Health ID (Optional)"}
                 </label>
@@ -866,105 +927,98 @@ export default function KioskPage() {
                   placeholder="e.g. 91-1234-5678-9012"
                   value={abhaId}
                   onChange={(e) => setAbhaId(e.target.value)}
-                  className="h-12 text-lg font-mono tracking-wider border-slate-300"
+                  className="h-13 text-lg font-mono tracking-wider rounded-xl border-slate-300 dark:border-slate-700 bg-background"
                 />
-                <span className="text-xs text-slate-400">
+                <span className="text-[11px] text-muted-foreground">
                   {lang === "hi"
                     ? "यदि आपके पास 14-अंकों का आभा कार्ड है तो यहाँ दर्ज करें।"
-                    : "If you have a 14-digit ABHA card, enter it here."}
+                    : "If you have a 14-digit national ABHA card, enter it here."}
                 </span>
               </div>
 
-              <div className="flex items-center gap-4">
-                <Separator className="flex-1" />
-                <span className="text-xs uppercase text-slate-400 font-bold">
-                  {lang === "hi" ? "अथवा" : "OR"}
-                </span>
-                <Separator className="flex-1" />
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Phone className="w-4 h-4 text-emerald-600" />
+                  {lang === "hi" ? "मोबाइल नंबर (अनिवार्य)" : "Mobile Number (Required)"}
+                </label>
+                <Input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="h-13 text-lg font-mono tracking-wider rounded-xl border-slate-300 dark:border-slate-700 bg-background"
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    {lang === "hi" ? "रोगी का पूरा नाम *" : "Full Name *"}
-                  </label>
-                  <Input
-                    placeholder={lang === "hi" ? "जैसे: राम कुमार" : "e.g. Ram Kumar"}
-                    value={patientName}
-                    onChange={(e) => setPatientName(e.target.value)}
-                    className="h-12 border-slate-300"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    {lang === "hi" ? "मोबाइल नंबर *" : "Mobile Phone *"}
-                  </label>
-                  <Input
-                    placeholder="e.g. 9876543210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="h-12 border-slate-300 font-mono"
-                  />
-                </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <User className="w-4 h-4 text-emerald-600" />
+                  {lang === "hi" ? "रोगी का पूरा नाम" : "Patient Full Name"}
+                </label>
+                <Input
+                  placeholder="e.g. Ramesh Kumar"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  className="h-13 text-base rounded-xl border-slate-300 dark:border-slate-700 bg-background"
+                />
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-end pt-4 pb-6 px-8 bg-slate-50/50 border-t border-slate-100">
-              <Button
-                size="lg"
-                onClick={handleStartSession}
-                disabled={isStarting}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white h-12 px-8 text-base font-bold shadow-md gap-2"
-              >
-                {isStarting ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <span>{lang === "hi" ? "सत्र प्रारंभ करें" : "Begin Consultation"}</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </Button>
-            </CardFooter>
-          </Card>
+
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button
+                  size="lg"
+                  onClick={handleStartSession}
+                  disabled={isStarting}
+                  className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white h-11 px-6 text-sm font-medium shadow-xs gap-2 transition-all"
+                >
+                  {isStarting ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>{lang === "hi" ? "सत्र प्रारंभ करें" : "Begin Consultation"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* ========================================================================= STEP 2: CONSENT */}
         {step === "consent" && (
-          <Card className="shadow-xl border-slate-200">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  {lang === "hi" ? "चरण 2 / 5: रोगी सहमति (DPDP एवं ABDM)" : "Step 2 of 5: Granular Consent"}
-                </Badge>
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 md:p-10 space-y-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b pb-4">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-3 py-1 text-xs font-bold uppercase tracking-wider border border-emerald-300/40">
+                    {lang === "hi" ? "चरण 2 / 5: रोगी सहमति (DPDP एवं ABDM)" : "Step 2 of 5: Granular Consent"}
+                  </span>
+                  <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground mt-2">
+                    {lang === "hi" ? "डेटा संग्रहण एवं साझाकरण सहमति" : "Data Protection & Health Information Consent"}
+                  </h2>
+                  <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                    {lang === "hi"
+                      ? "डिजिटल व्यक्तिगत डेटा संरक्षण (DPDP) अधिनियम 2023 व आयुष्मान भारत मानकों के अनुरूप अपनी सहमति चुनें।"
+                      : "Select permissions in compliance with the DPDP Act 2023 and ABDM standards."}
+                  </p>
+                </div>
+
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={handlePlayAudioConsent}
-                  className={`gap-1.5 font-semibold text-xs border-emerald-600 text-emerald-700 ${
-                    audioExplaining ? "bg-emerald-50 ring-2 ring-emerald-500" : ""
+                  className={`rounded-lg gap-2 font-semibold text-xs border-slate-200 text-slate-700 dark:text-slate-300 self-start sm:self-center px-3.5 py-2 shadow-xs transition-all ${
+                    audioExplaining ? "bg-slate-100 ring-1 ring-slate-400" : "hover:bg-slate-50"
                   }`}
                 >
-                  <Volume2 className={`w-4 h-4 ${audioExplaining ? "animate-pulse text-emerald-600" : ""}`} />
+                  <Volume2 className={`w-4 h-4 ${audioExplaining ? "text-slate-900" : "text-slate-500"}`} />
                   {audioExplaining
-                    ? lang === "hi"
-                      ? "ऑडियो बज रहा है..."
-                      : "Playing Audio..."
-                    : lang === "hi"
-                    ? "ऑडियो में सुनें"
-                    : "Listen in Audio"}
+                    ? lang === "hi" ? "ऑडियो विवरण बज रहा है..." : "Playing Audio Explanation..."
+                    : lang === "hi" ? "ऑडियो में सुनें" : "Listen in Audio"}
                 </Button>
               </div>
-              <CardTitle className="text-2xl font-bold text-slate-800 mt-2">
-                {lang === "hi" ? "डेटा संग्रहण एवं साझाकरण सहमति" : "Data Protection & Health Information Consent"}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-500">
-                {lang === "hi"
-                  ? "डिजिटल व्यक्तिगत डेटा संरक्षण (DPDP) अधिनियम 2023 व आयुष्मान भारत मानकों के अनुरूप अपनी सहमति चुनें।"
-                  : "Select permissions in compliance with the DPDP Act 2023 and ABDM standards."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+
+              <div className="space-y-3">
                 {CONSENT_OPTIONS.map((opt) => {
                   const isChecked = grantedConsents.includes(opt.id);
                   return (
@@ -978,29 +1032,31 @@ export default function KioskPage() {
                           setGrantedConsents([...grantedConsents, opt.id]);
                         }
                       }}
-                      className={`p-4 flex items-start gap-4 cursor-pointer transition-colors ${
-                        isChecked ? "bg-emerald-50/40" : "hover:bg-slate-50"
+                      className={`p-4 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 ${
+                        isChecked
+                          ? "bg-slate-50 dark:bg-slate-800/60 border-slate-900 dark:border-slate-100 shadow-2xs"
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50/60"
                       }`}
                     >
                       <div
-                        className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center border transition-all ${
+                        className={`mt-0.5 w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
                           isChecked
-                            ? "bg-emerald-700 border-emerald-700 text-white"
-                            : "border-slate-300 bg-white"
+                            ? "bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-xs"
+                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
                         }`}
                       >
-                        {isChecked && <Check className="w-4 h-4 stroke-[3]" />}
+                        {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2 font-bold text-foreground text-sm">
                           <span>{lang === "hi" ? opt.labelHi : opt.labelEn}</span>
                           {opt.required && (
-                            <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300 bg-amber-50">
+                            <Badge variant="outline" className="text-[10px] text-amber-700 dark:text-amber-300 border-amber-300 bg-amber-50 dark:bg-amber-950/40">
                               {lang === "hi" ? "अनिवार्य" : "Mandatory"}
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-xs text-muted-foreground">
                           {lang === "hi" ? opt.descHi : opt.descEn}
                         </p>
                       </div>
@@ -1008,55 +1064,56 @@ export default function KioskPage() {
                   );
                 })}
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-between items-center bg-slate-50 border-t border-slate-100 px-6 py-4">
-              <Button
-                variant="ghost"
-                onClick={() => setStep("identify")}
-                className="text-slate-600"
-              >
-                {lang === "hi" ? "वापस" : "Back"}
-              </Button>
-              <Button
-                size="lg"
-                onClick={handleSaveConsent}
-                disabled={isSubmittingConsent}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-8 h-12 gap-2"
-              >
-                {isSubmittingConsent ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <span>{lang === "hi" ? "सहमति स्वीकारें व आगे बढ़ें" : "Accept & Continue"}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
-            </CardFooter>
-          </Card>
+
+              <div className="flex justify-between items-center pt-4 border-t">
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep("identify")}
+                  className="rounded-lg text-muted-foreground hover:text-foreground text-xs font-semibold px-4"
+                >
+                  {lang === "hi" ? "← वापस" : "← Back"}
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={handleSaveConsent}
+                  disabled={isSubmittingConsent}
+                  className="rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-medium px-6 h-11 gap-2 shadow-xs transition-all"
+                >
+                  {isSubmittingConsent ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>{lang === "hi" ? "सहमति स्वीकारें व आगे बढ़ें" : "Accept & Proceed"}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
         )}
 
         {/* ========================================================================= STEP 3: INTERVIEW */}
         {step === "interview" && (
           <div className="space-y-4">
             {/* Progress Bar & Section Header */}
-            <div className="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-5 py-3.5 flex items-center justify-between shadow-xs">
               <div className="flex items-center gap-3">
-                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-medium uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   {SECTION_HEADINGS[currentItem.section][lang]}
-                </Badge>
-                <span className="text-xs text-slate-400 font-mono">
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono tracking-wider font-semibold">
                   {currentItem.code}
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-xs font-semibold text-slate-600">
-                  {lang === "hi" ? "प्रगति:" : "Progress:"}{" "}
-                  {Math.round(progress.fraction * 100)}% ({progress.answered}/{progress.asked})
+              <div className="flex items-center gap-3.5">
+                <div className="text-xs font-medium text-slate-700 dark:text-slate-300 font-mono">
+                  <span className="text-slate-400">{lang === "hi" ? "प्रगति: " : "Progress: "}</span>
+                  <span className="text-slate-900 dark:text-white font-bold">{Math.round(progress.fraction * 100)}%</span>
+                  <span className="text-slate-400 text-[11px] ml-1">({progress.answered}/{progress.asked})</span>
                 </div>
-                <div className="w-32 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                <div className="w-32 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/80 dark:border-slate-700">
                   <div
-                    className="h-full bg-emerald-600 rounded-full transition-all duration-300"
+                    className="h-full bg-slate-900 dark:bg-white rounded-full transition-all duration-300 ease-out"
                     style={{ width: `${Math.round(progress.fraction * 100)}%` }}
                   />
                 </div>
@@ -1064,12 +1121,11 @@ export default function KioskPage() {
             </div>
 
             {/* Active Question Card */}
-            <Card className="shadow-xl border-slate-200">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="text-slate-500 text-xs">
-                    {currentItem.kind.toUpperCase()}
-                  </Badge>
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 space-y-6 shadow-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <span className="text-[11px] font-medium uppercase tracking-widest px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono border border-slate-200/60 dark:border-slate-700">
+                    {currentItem.kind.toUpperCase()} MODE
+                  </span>
                   <div className="flex items-center gap-2">
                     {/* Audio Readback Button */}
                     <Button
@@ -1086,34 +1142,35 @@ export default function KioskPage() {
                             : "";
                         speakText(`${qText}.${cText}`, () => startListening());
                       }}
-                      className="h-8 gap-1.5 text-xs text-sky-700 hover:bg-sky-50 font-semibold"
+                      className="h-8 gap-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium rounded-lg"
                     >
-                      <Volume2 className={`size-3.5 ${isSpeaking ? "animate-bounce text-sky-600" : ""}`} />
+                      <Volume2 className={`size-3.5 ${isSpeaking ? "animate-bounce text-slate-900 dark:text-white" : ""}`} />
                       <span>{isSpeaking ? (lang === "hi" ? "बोल रहा है..." : "Speaking...") : (lang === "hi" ? "सवाल सुनें" : "Listen")}</span>
                     </Button>
 
                     <button
                       onClick={() => setAutoSpeak(!autoSpeak)}
-                      className={`text-[11px] px-2 py-1 rounded border font-medium transition-colors ${
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1 transition-colors ${
                         autoSpeak
-                          ? "border-sky-400 bg-sky-50 text-sky-800"
-                          : "border-slate-300 text-slate-500 hover:bg-slate-50"
+                          ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900 shadow-2xs"
+                          : "border-slate-200 text-slate-500 hover:bg-slate-50"
                       }`}
                       title={autoSpeak ? "Auto-speech enabled" : "Auto-speech disabled"}
                     >
-                      {autoSpeak ? "🔊 Auto-Speech" : "🔇 Muted"}
+                      <Volume2 className="w-3 h-3" />
+                      <span>{autoSpeak ? "Auto-Speech" : "Muted"}</span>
                     </button>
 
-                    {/* Voice Assistant Livekit Button */}
+                    {/* Voice Assistant Livekit / Rime Button */}
                     <Button
                       size="sm"
                       variant={voiceActive ? "default" : "outline"}
                       disabled={voiceConnecting}
                       onClick={toggleVoiceAssistant}
-                      className={`h-8 gap-1.5 text-xs font-bold transition-all ${
+                      className={`h-8 gap-1.5 text-xs font-bold rounded-lg transition-all ${
                         voiceActive
-                          ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm ring-2 ring-rose-300"
-                          : "text-slate-700 border-slate-300 hover:bg-slate-100"
+                          ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 ring-2 ring-rose-400"
+                          : "text-slate-700 border-slate-200 hover:bg-slate-100/80 hover:border-slate-300"
                       }`}
                     >
                       {voiceConnecting ? (
@@ -1128,7 +1185,7 @@ export default function KioskPage() {
                         </>
                       ) : (
                         <>
-                          <MicOff className="w-3.5 h-3.5" />
+                          <MicOff className="w-3.5 h-3.5 text-slate-400" />
                           <span>{lang === "hi" ? "बोलकर बताएं (AI वॉयस)" : "Speak to Voice AI"}</span>
                         </>
                       )}
@@ -1138,28 +1195,37 @@ export default function KioskPage() {
 
                 {/* Active Audio State (Speaking / Listening) */}
                 {(isSpeaking || isListening) && (
-                  <div className="mt-2 p-2.5 rounded-xl bg-sky-950 text-white border border-sky-600/40 shadow-md flex items-center justify-between gap-2 text-xs animate-in fade-in">
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative flex items-center justify-center size-7 rounded-full bg-sky-500/20 text-sky-300">
+                  <div className="p-3.5 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-xl flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-1">
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex items-center justify-center size-8 rounded-xl bg-emerald-500/20 text-emerald-400">
                         {isSpeaking ? (
-                          <Volume2 className="size-3.5 animate-pulse text-sky-300" />
+                          <Volume2 className="size-4 animate-pulse text-emerald-300" />
                         ) : (
-                          <Mic className="size-3.5 animate-pulse text-emerald-400" />
+                          <Mic className="size-4 animate-pulse text-emerald-400" />
                         )}
-                        <span className="absolute inset-0 rounded-full border border-sky-400 animate-ping opacity-50" />
+                        <span className="absolute inset-0 rounded-xl border border-emerald-400/50 animate-ping opacity-60" />
                       </div>
                       <div>
-                        <div className="font-bold text-sky-200">
-                          {isSpeaking
-                            ? lang === "hi"
-                              ? "कियोस्क सवाल पढ़कर सुना रहा है..."
-                              : "MediKiosk speaking question aloud..."
-                            : lang === "hi"
-                            ? "माइक चालू है — अपना उत्तर बोलें..."
-                            : "Listening for your response..."}
+                        <div className="font-bold text-slate-100 flex items-center gap-2">
+                          <span>
+                            {isSpeaking
+                              ? lang === "hi"
+                                ? "कियोस्क सवाल पढ़कर सुना रहा है..."
+                                : "MediKiosk speaking question aloud..."
+                              : lang === "hi"
+                              ? "माइक चालू है — अपना उत्तर बोलें..."
+                              : "Listening for your verbal response..."}
+                          </span>
+                          {/* Equalizer frequency bars simulation */}
+                          <div className="flex items-end gap-0.5 h-3">
+                            <span className="w-0.5 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                            <span className="w-0.5 h-3 bg-emerald-400 rounded-full animate-pulse [animation-delay:150ms]" />
+                            <span className="w-0.5 h-1.5 bg-emerald-400 rounded-full animate-pulse [animation-delay:300ms]" />
+                            <span className="w-0.5 h-2.5 bg-emerald-400 rounded-full animate-pulse [animation-delay:450ms]" />
+                          </div>
                         </div>
                         {spokenVoiceText && (
-                          <div className="text-[11px] text-sky-300 font-mono">
+                          <div className="text-[11px] text-emerald-300 font-mono mt-0.5">
                             "{spokenVoiceText}"
                           </div>
                         )}
@@ -1170,7 +1236,7 @@ export default function KioskPage() {
                         size="sm"
                         variant="ghost"
                         onClick={stopSpeaking}
-                        className="text-xs text-sky-300 hover:text-white hover:bg-sky-800/50 h-7 px-2"
+                        className="text-xs text-slate-300 hover:text-white hover:bg-white/10 h-7 px-2.5 rounded-md"
                       >
                         {lang === "hi" ? "रोकें" : "Stop"}
                       </Button>
@@ -1180,20 +1246,20 @@ export default function KioskPage() {
 
                 {/* Live Voice Visualizer Banner */}
                 {voiceActive && (
-                  <div className="mt-2 p-3 rounded-xl bg-gradient-to-r from-blue-900 to-indigo-950 text-white border border-blue-400/30 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex items-center justify-center size-8 rounded-full bg-rose-500/20 text-rose-400 shrink-0">
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/30 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-3.5">
+                      <div className="relative flex items-center justify-center size-9 rounded-xl bg-rose-500/20 text-rose-400 shrink-0 shadow-inner">
                         <Mic className="size-4 animate-pulse" />
-                        <span className="absolute inset-0 rounded-full border border-rose-500 animate-ping opacity-60" />
+                        <span className="absolute inset-0 rounded-xl border border-rose-500/80 animate-ping opacity-60" />
                       </div>
                       <div>
                         <div className="text-xs font-bold tracking-wide flex items-center gap-2">
-                          <span>{lang === "hi" ? "वॉयस असिस्टेंट सुन रहा है" : "Live Voice Assistant Listening"}</span>
-                          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px] uppercase">
+                          <span className="text-slate-100">{lang === "hi" ? "वॉयस असिस्टेंट सुन रहा है" : "Live Voice Assistant Listening"}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono uppercase tracking-wider font-bold">
                             Rime Fast TTS • Hinglish
-                          </Badge>
+                          </span>
                         </div>
-                        <div className="text-xs text-blue-200 mt-0.5">
+                        <div className="text-xs text-indigo-200/90 mt-0.5 font-medium">
                           {voiceTranscript
                             ? `"${voiceTranscript}"`
                             : lang === "hi"
@@ -1206,20 +1272,22 @@ export default function KioskPage() {
                       size="sm"
                       variant="ghost"
                       onClick={toggleVoiceAssistant}
-                      className="text-xs text-rose-200 hover:text-white hover:bg-rose-500/20 h-7 px-2 shrink-0 self-end sm:self-auto"
+                      className="text-xs text-rose-300 hover:text-white hover:bg-rose-500/20 h-7 px-3 rounded-lg shrink-0 self-end sm:self-auto font-bold border border-rose-500/30"
                     >
                       {lang === "hi" ? "वॉयस बंद करें" : "Mute"}
                     </Button>
                   </div>
                 )}
-                <CardTitle className="text-xl md:text-2xl font-bold text-slate-800 leading-snug mt-2">
-                  {currentItem.prompt[lang]}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-2 pb-6">
+
+                <div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 leading-snug tracking-tight">
+                    {currentItem.prompt[lang]}
+                  </h2>
+                </div>
+
                 {/* Free Text Input */}
                 {currentItem.kind === "text" && (
-                  <div className="space-y-4">
+                  <div className="space-y-4 pt-2">
                     <Textarea
                       rows={4}
                       placeholder={
@@ -1229,13 +1297,13 @@ export default function KioskPage() {
                       }
                       value={freeTextDraft}
                       onChange={(e) => setFreeTextDraft(e.target.value)}
-                      className="text-lg p-4 border-slate-300 focus:border-emerald-600"
+                      className="text-base sm:text-lg p-4 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 transition-all font-medium"
                     />
                     <Button
                       size="lg"
                       disabled={!freeTextDraft.trim()}
                       onClick={() => handleSaveAnswer(freeTextDraft.trim())}
-                      className="w-full bg-emerald-700 hover:bg-emerald-800 text-white h-12 text-base font-bold"
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white h-11 rounded-lg text-sm font-medium shadow-xs transition-colors"
                     >
                       <span>{lang === "hi" ? "उत्तर सहेजें" : "Save Answer"}</span>
                       <ArrowRight className="w-4 h-4 ml-2" />
@@ -1245,7 +1313,7 @@ export default function KioskPage() {
 
                 {/* Choice Cards (Single / Multi / Duration) */}
                 {currentItem.choices && currentItem.choices.length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
                     {currentItem.choices.map((c) => {
                       const isSelected =
                         answers[currentCode] === c.value ||
@@ -1266,20 +1334,20 @@ export default function KioskPage() {
                               handleSaveAnswer(c.value);
                             }
                           }}
-                          className={`p-4 rounded-xl border text-left flex items-center justify-between transition-all active:scale-[0.98] ${
+                          className={`p-4 rounded-xl border text-left flex items-center justify-between transition-colors ${
                             isSelected
-                              ? "bg-emerald-700 text-white border-emerald-700 shadow-md ring-2 ring-emerald-300"
-                              : "bg-white text-slate-800 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/30"
+                              ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white shadow-xs"
+                              : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:bg-slate-50/80 shadow-2xs"
                           }`}
                         >
-                          <div className="font-bold text-base">
+                          <div className="font-semibold text-sm leading-snug pr-2">
                             {c.label[lang]}
                           </div>
-                          <ChevronRight
-                            className={`w-5 h-5 ${
-                              isSelected ? "text-emerald-100" : "text-slate-300"
-                            }`}
-                          />
+                          <div className={`size-6 rounded-md flex items-center justify-center shrink-0 transition-all ${
+                            isSelected ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900" : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                          }`}>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </div>
                         </button>
                       );
                     })}
@@ -1288,82 +1356,86 @@ export default function KioskPage() {
 
                 {/* Numeric Scale (e.g. pain severity 1-10) */}
                 {currentItem.kind === "scale" && (
-                  <div className="space-y-6 pt-4">
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                      <span>1 ({lang === "hi" ? "हल्का" : "Mild"})</span>
-                      <span>5 ({lang === "hi" ? "मध्यम" : "Moderate"})</span>
-                      <span>10 ({lang === "hi" ? "असहनीय" : "Severe"})</span>
+                  <div className="space-y-4 pt-2">
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">
+                      <span className="text-emerald-700">1 • {lang === "hi" ? "हल्का" : "Mild"}</span>
+                      <span className="text-amber-600">5 • {lang === "hi" ? "मध्यम" : "Moderate"}</span>
+                      <span className="text-rose-600">10 • {lang === "hi" ? "असहनीय" : "Severe"}</span>
                     </div>
-                    <div className="grid grid-cols-10 gap-2">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => handleSaveAnswer(num)}
-                          className={`h-14 rounded-xl font-bold text-lg border transition-all ${
-                            answers[currentCode] === num
-                              ? "bg-rose-600 text-white border-rose-600 shadow-md"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+                        const isChosen = answers[currentCode] === num;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => handleSaveAnswer(num)}
+                            className={`h-14 rounded-2xl font-bold text-lg border transition-spring active:scale-95 flex items-center justify-center ${
+                              isChosen
+                                ? "bg-gradient-to-br from-rose-600 to-rose-700 text-white border-rose-600 shadow-lg shadow-rose-600/30 ring-2 ring-rose-300"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-xs"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
-              </CardContent>
 
-              {/* Navigation Skip / Fast Forward */}
-              <CardFooter className="flex justify-between items-center bg-slate-50 border-t border-slate-100 px-6 py-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const next = nextItem(answers, mode);
-                    if (next) setCurrentCode(next.code);
-                    else setStep(mode === "ayush" ? "ayush_pariksha" : "documents");
-                  }}
-                  className="text-slate-500 hover:text-slate-800 text-xs"
-                >
-                  {lang === "hi" ? "यह प्रश्न छोड़ें" : "Skip this item"}
-                </Button>
+                {/* Navigation Skip / Fast Forward */}
+                <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const next = nextItem(answers, mode);
+                      if (next) setCurrentCode(next.code);
+                      else setStep(mode === "ayush" ? "ayush_pariksha" : "documents");
+                    }}
+                    className="text-slate-400 hover:text-slate-700 text-xs font-medium"
+                  >
+                    {lang === "hi" ? "यह प्रश्न छोड़ें" : "Skip this item"}
+                  </Button>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setStep(mode === "ayush" ? "ayush_pariksha" : "documents")}
-                  className="text-xs font-semibold text-emerald-700 border-emerald-300"
-                >
-                  {lang === "hi" ? "अगले चरण पर जाएँ" : "Proceed to Next Section"}
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setStep(mode === "ayush" ? "ayush_pariksha" : "documents")}
+                    className="text-xs font-bold text-emerald-800 border-emerald-500/30 hover:bg-emerald-50/80 rounded-xl px-4 py-2 transition-spring"
+                  >
+                    {lang === "hi" ? "अगले चरण पर जाएँ" : "Proceed to Next Section"}
+                    <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
         )}
 
         {/* ========================================================================= STEP 3 (AYUSH): DASHAVIDHA PARIKSHA */}
         {step === "ayush_pariksha" && (
-          <Card className="shadow-xl border-slate-200">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <Badge className="bg-amber-100 text-amber-800 border-amber-300">
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-amber-200/50">
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-500/10 text-amber-800 border border-amber-500/20 shadow-xs">
                   {lang === "hi" ? "आयुष दशविध परीक्षा (AIIA Module A)" : "AYUSH Dashavidha Pariksha (10 Factors)"}
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {Object.keys(dashavidhaAnswers).length} / {DASHAVIDHA.length}
-                </Badge>
+                </span>
+                <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                  {Object.keys(dashavidhaAnswers).length} / {DASHAVIDHA.length} COMPLETED
+                </span>
               </div>
-              <CardTitle className="text-2xl font-bold text-slate-800 mt-2">
-                {lang === "hi" ? "प्रकृति, अग्नि व शारीरिक धातु परीक्षण" : "Ayurvedic Constitutional Assessment"}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-500">
-                {lang === "hi"
-                  ? "चरक व अष्टांग हृदय पर आधारित 10 प्राथमिक नैदानिक कारक।"
-                  : "Ten classical diagnostic factors from Ashtanga Hridaya and Charaka Samhita."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                  {lang === "hi" ? "प्रकृति, अग्नि व शारीरिक धातु परीक्षण" : "Ayurvedic Constitutional Assessment"}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1 font-medium">
+                  {lang === "hi"
+                    ? "चरक व अष्टांग हृदय पर आधारित 10 प्राथमिक नैदानिक कारक।"
+                    : "Ten classical diagnostic factors from Ashtanga Hridaya and Charaka Samhita."}
+                </p>
+              </div>
+
               {/* Factor Tabs */}
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                 {DASHAVIDHA.map((f) => {
@@ -1374,11 +1446,11 @@ export default function KioskPage() {
                       key={f.factor}
                       type="button"
                       onClick={() => setActiveDashavidhaFactor(f.factor)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition-all ${
+                      className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap border transition-spring ${
                         isActive
-                          ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                          ? "bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-600/20 ring-2 ring-amber-300"
                           : hasAnswer
-                          ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-300/80"
                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                       }`}
                     >
@@ -1395,12 +1467,12 @@ export default function KioskPage() {
                   DASHAVIDHA.find((f) => f.factor === activeDashavidhaFactor) ||
                   DASHAVIDHA[0];
                 return (
-                  <div className="bg-amber-50/50 p-5 rounded-xl border border-amber-200/80 space-y-4">
+                  <div className="bg-gradient-to-br from-amber-50/70 to-orange-50/40 p-5 sm:p-6 rounded-2xl border border-amber-200/80 space-y-4 shadow-xs">
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800">
+                      <h3 className="text-lg font-bold text-slate-900">
                         {currentF.prompt[lang]}
                       </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-amber-900/70 mt-0.5 font-medium">
                         {currentF.gloss}
                       </p>
                     </div>
@@ -1415,14 +1487,14 @@ export default function KioskPage() {
                               key={c.value}
                               type="button"
                               onClick={() => handleSaveDashavidha(currentF.factor, c.value)}
-                              className={`p-4 rounded-xl border text-left font-bold text-sm transition-all ${
+                              className={`p-4 rounded-2xl border text-left font-bold text-sm transition-spring active:scale-[0.98] ${
                                 isChosen
-                                  ? "bg-amber-600 text-white border-amber-600 shadow-md"
-                                  : "bg-white text-slate-700 border-slate-300 hover:border-amber-400 hover:bg-amber-50/30"
+                                  ? "bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-600/25 ring-2 ring-amber-300"
+                                  : "bg-white text-slate-700 border-slate-200 hover:border-amber-400 hover:bg-amber-50/40"
                               }`}
                             >
                               <div>{c.label[lang]}</div>
-                              <div className="text-[11px] font-normal opacity-80 mt-1">
+                              <div className="text-[11px] font-normal opacity-80 mt-1 font-mono">
                                 {c.value}
                               </div>
                             </button>
@@ -1433,70 +1505,91 @@ export default function KioskPage() {
                   </div>
                 );
               })()}
-            </CardContent>
-            <CardFooter className="flex justify-between items-center bg-slate-50 border-t border-slate-100 px-6 py-4">
-              <Button
-                variant="ghost"
-                onClick={() => setStep("interview")}
-                className="text-slate-600"
-              >
-                {lang === "hi" ? "वापस" : "Back to Questions"}
-              </Button>
-              <Button
-                size="lg"
-                onClick={() => setStep("documents")}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-8 h-12"
-              >
-                <span>{lang === "hi" ? "दस्तावेज़ ओसीआर पर बढ़ें" : "Proceed to Document Scan"}</span>
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </CardFooter>
-          </Card>
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep("interview")}
+                  className="text-slate-600 text-xs font-semibold"
+                >
+                  {lang === "hi" ? "← वापस" : "← Back to Questions"}
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={() => setStep("documents")}
+                  className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-bold px-8 h-12 rounded-xl shadow-lg shadow-emerald-700/20 transition-spring"
+                >
+                  <span>{lang === "hi" ? "दस्तावेज़ ओसीआर पर बढ़ें" : "Proceed to Document Scan"}</span>
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </div>
         )}
 
         {/* ========================================================================= STEP 4: DOCUMENTS OCR */}
         {step === "documents" && (
-          <Card className="shadow-xl border-slate-200">
-            <CardHeader>
-              <Badge className="w-fit bg-emerald-100 text-emerald-800 border-emerald-300">
-                {lang === "hi" ? "चरण 4 / 5: पुराने पर्चे व दस्तावेज़ (Module B)" : "Step 4 of 5: Document Digitisation"}
-              </Badge>
-              <CardTitle className="text-2xl font-bold text-slate-800 mt-2">
-                {lang === "hi" ? "कागज़ी पर्चे व लैब रिपोर्ट स्कैन" : "Scan Physical Prescriptions & Lab Reports"}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-500">
-                {lang === "hi"
-                  ? "कियोस्क के कैमरे के सामने पर्चा रखें या फ़ाइल अपलोड करें।"
-                  : "Present paper records to the kiosk camera or upload test scans."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Scan Trigger Box */}
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-medium uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  {lang === "hi" ? "चरण 4 / 5: पुराने पर्चे व दस्तावेज़ (Module B)" : "Step 4 of 5: Document Digitisation"}
+                </span>
+                <span className="text-xs font-mono font-medium text-slate-400">
+                  GEMINI VISION AI 2.5 OCR
+                </span>
+              </div>
+
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  {lang === "hi" ? "कागज़ी पर्चे व लैब रिपोर्ट स्कैन" : "Scan Physical Prescriptions & Lab Reports"}
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
+                  {lang === "hi"
+                    ? "कियोस्क के कैमरे के सामने पर्चा रखें या फ़ाइल अपलोड करें।"
+                    : "Present paper records to the kiosk camera or upload test scans for automated clinical parsing."}
+                </p>
+              </div>
+
+              {/* Viewfinder Reticle Scan Trigger Box */}
               <div
                 onClick={() => setIsCaptureModalOpen(true)}
-                className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/30 hover:bg-emerald-50/60 p-8 rounded-2xl text-center cursor-pointer transition-all space-y-3"
+                className="group relative overflow-hidden border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 p-8 sm:p-10 rounded-xl text-center cursor-pointer transition-all space-y-4"
               >
-                <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shadow-inner">
-                  <Camera className="w-7 h-7" />
+                {/* Viewfinder corner brackets */}
+                <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-slate-900 dark:border-white rounded-tl-sm transition-all group-hover:scale-110" />
+                <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-slate-900 dark:border-white rounded-tr-sm transition-all group-hover:scale-110" />
+                <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-slate-900 dark:border-white rounded-bl-sm transition-all group-hover:scale-110" />
+                <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-slate-900 dark:border-white rounded-br-sm transition-all group-hover:scale-110" />
+
+                {/* Animated laser scanline on processing */}
+                {isOcrProcessing && (
+                  <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-slate-900 dark:via-white to-transparent animate-pulse top-1/2" />
+                )}
+
+                <div className="w-14 h-14 mx-auto rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                  <Camera className="w-6 h-6" />
                 </div>
-                <h4 className="font-bold text-base text-slate-800">
-                  {lang === "hi"
-                    ? "कागज़ी पर्चा / लैब रिपोर्ट स्कैन करने के लिए यहाँ टैप करें"
-                    : "Tap here to capture document via Vision AI Camera / Upload"}
-                </h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  {lang === "hi"
-                    ? "लाइव कैमरा, फ़ाइल अपलोड या क्लिनिकल प्रीसेट से पर्चा स्कैन करें। एआई दवाइयाँ, मात्रा और ड्रग इंटरेक्शन तुरंत पहचान लेगा।"
-                    : "Live kiosk camera, file upload, or clinical presets. Gemini Vision AI extracts medications, dosages, and drug-drug interactions in real time."}
-                </p>
-                <div className="pt-2 flex justify-center gap-3">
+                
+                <div>
+                  <h4 className="font-semibold text-sm sm:text-base text-slate-900 dark:text-white tracking-tight">
+                    {lang === "hi"
+                      ? "कागज़ी पर्चा / लैब रिपोर्ट स्कैन करने के लिए यहाँ टैप करें"
+                      : "Tap here to capture document via Vision AI Camera / Upload"}
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 font-normal leading-relaxed">
+                    {lang === "hi"
+                      ? "लाइव कैमरा, फ़ाइल अपलोड या क्लिनिकल प्रीसेट से पर्चा स्कैन करें। एआई दवाइयाँ, मात्रा और ड्रग इंटरेक्शन तुरंत पहचान लेगा।"
+                      : "Live kiosk camera, file upload, or clinical presets. Gemini Vision AI extracts medications, dosages, and drug-drug interactions in real time."}
+                  </p>
+                </div>
+
+                <div className="pt-2 flex flex-wrap justify-center gap-3">
                   <Button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsCaptureModalOpen(true);
                     }}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold gap-1.5 shadow-sm"
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium gap-2 px-5 h-9 rounded-lg shadow-xs transition-colors"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>{lang === "hi" ? "कैमरा / अपलोड खोलें" : "Open Camera / Upload"}</span>
@@ -1508,63 +1601,71 @@ export default function KioskPage() {
                       e.stopPropagation();
                       handleSimulateDocumentScan();
                     }}
-                    className="text-xs text-slate-600 hover:text-slate-900 border-slate-300"
+                    className="text-xs text-slate-700 hover:text-slate-900 border-slate-300 hover:bg-slate-50 px-4 h-10 rounded-xl font-bold transition-spring"
                   >
                     <span>{lang === "hi" ? "त्वरित सिमुलेशन" : "Quick Demo Scan"}</span>
                   </Button>
                 </div>
+
                 {isOcrProcessing && (
-                  <div className="flex items-center justify-center gap-2 text-emerald-700 text-sm font-semibold pt-2">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{lang === "hi" ? "ओसीआर विश्लेषण जारी है..." : "Extracting clinical entities..."}</span>
+                  <div className="flex items-center justify-center gap-2 text-emerald-700 text-xs font-bold pt-2 font-mono">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    <span>{lang === "hi" ? "ओसीआर विश्लेषण जारी है..." : "Extracting clinical entities & interactions..."}</span>
                   </div>
                 )}
               </div>
 
               {/* Scanned Items List */}
               {scannedFiles.length > 0 && (
-                <div className="space-y-3">
-                  <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    {lang === "hi" ? "पहचाने गए दस्तावेज़" : "Processed Documents"}
+                <div className="space-y-3 pt-2">
+                  <h5 className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">
+                    {lang === "hi" ? "पहचाने गए दस्तावेज़" : "Processed Documents"} ({scannedFiles.length})
                   </h5>
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                  <div className="space-y-3">
                     {scannedFiles.map((doc, idx) => (
-                      <div key={idx} className="p-4 space-y-2.5">
+                      <div key={idx} className="p-4 sm:p-5 rounded-2xl border border-slate-200/80 bg-slate-50/50 space-y-3 shadow-xs">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-emerald-600 shrink-0" />
+                            <div className="size-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 flex items-center justify-center shrink-0">
+                              <FileText className="w-5 h-5 text-emerald-700" />
+                            </div>
                             <div>
-                              <div className="font-bold text-sm text-slate-800">{doc.name}</div>
-                              <div className="text-xs text-slate-400">
-                                {doc.entities} {lang === "hi" ? "क्लिनिकल एंटिटीज मिलीं" : "entities extracted"} • {doc.type}
+                              <div className="font-bold text-sm text-slate-900">{doc.name}</div>
+                              <div className="text-xs text-slate-500 font-medium">
+                                {doc.entities} {lang === "hi" ? "क्लिनिकल एंटिटीज मिलीं" : "entities extracted"} • <span className="font-mono text-[11px] uppercase">{doc.type}</span>
                               </div>
                             </div>
                           </div>
-                          <Badge className="bg-emerald-100 text-emerald-800 font-semibold text-xs border-emerald-300">
+                          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
                             {doc.status}
-                          </Badge>
+                          </span>
                         </div>
 
                         {/* Extracted Medications chips */}
                         {doc.medications && doc.medications.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {doc.medications.map((med: any, mIdx: number) => (
-                              <span
-                                key={mIdx}
-                                className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 border border-sky-200"
-                              >
-                                <span className="font-semibold">{med.name}</span>
-                                {med.dosage && <span className="text-sky-600">({med.dosage})</span>}
-                              </span>
-                            ))}
+                          <div className="space-y-1.5 pt-1">
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                              Extracted Rx
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {doc.medications.map((med: any, mIdx: number) => (
+                                <span
+                                  key={mIdx}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-900 border border-sky-200/80 shadow-xs"
+                                >
+                                  <span>{med.name}</span>
+                                  {med.dosage && <span className="text-sky-600 font-mono text-[11px]">({med.dosage})</span>}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         )}
 
                         {/* Interaction Warnings */}
                         {doc.interactions && doc.interactions.length > 0 && (
-                          <div className="space-y-1 rounded-lg bg-amber-50 p-2.5 border border-amber-200">
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                              <AlertTriangle className="size-3.5 text-amber-600 shrink-0" />
+                          <div className="space-y-1.5 rounded-xl bg-rose-50/80 p-3 border border-rose-200/80">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-900">
+                              <AlertTriangle className="size-4 text-rose-600 shrink-0" />
                               <span>
                                 {lang === "hi"
                                   ? `${doc.interactions.length} संभावित ड्रग इंटरेक्शन चेतावनी:`
@@ -1572,8 +1673,8 @@ export default function KioskPage() {
                               </span>
                             </div>
                             {doc.interactions.map((inter: any, iIdx: number) => (
-                              <div key={iIdx} className="text-[11px] text-amber-800 pl-5">
-                                • <span className="font-semibold">{inter.drugA} + {inter.drugB}</span>: {inter.effect}
+                              <div key={iIdx} className="text-xs text-rose-800 pl-5 leading-relaxed font-medium">
+                                • <span className="font-bold">{inter.drugA} + {inter.drugB}</span>: {inter.effect}
                               </div>
                             ))}
                           </div>
@@ -1583,60 +1684,72 @@ export default function KioskPage() {
                   </div>
                 </div>
               )}
-            </CardContent>
-            <CardFooter className="flex justify-between items-center bg-slate-50 border-t border-slate-100 px-6 py-4">
-              <Button
-                variant="ghost"
-                onClick={() => setStep("interview")}
-                className="text-slate-600"
-              >
-                {lang === "hi" ? "वापस" : "Back"}
-              </Button>
-              <Button
-                size="lg"
-                onClick={handleProceedToSummary}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-8 h-12 gap-2"
-              >
-                <span>{lang === "hi" ? "अंतिम सारांश व एक्सपोर्ट" : "View Summary & Export"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </CardFooter>
-          </Card>
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep("interview")}
+                  className="text-slate-600 text-xs font-semibold"
+                >
+                  {lang === "hi" ? "← वापस" : "← Back"}
+                </Button>
+                <Button
+                  size="lg"
+                  onClick={handleProceedToSummary}
+                  className="bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-bold px-8 h-12 rounded-xl shadow-lg shadow-emerald-700/20 transition-spring gap-2"
+                >
+                  <span>{lang === "hi" ? "अंतिम सारांश व एक्सपोर्ट" : "View Summary & Export"}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
         )}
 
         {/* ========================================================================= STEP 5: SUMMARY & ABDM EXPORT */}
         {step === "summary" && (
-          <Card className="shadow-xl border-slate-200">
-            <CardHeader>
-              <Badge className="w-fit bg-emerald-100 text-emerald-800 border-emerald-300">
-                {lang === "hi" ? "चरण 5 / 5: नैदानिक सारांश व ABDM एक्सपोर्ट" : "Step 5 of 5: Clinical Summary & ABDM Export"}
-              </Badge>
-              <CardTitle className="text-2xl font-bold text-slate-800 mt-2">
-                {lang === "hi" ? "कंसल्टेशन सारांश व FHIR R4 रिकॉर्ड" : "Consultation Record & Interoperable FHIR Export"}
-              </CardTitle>
-              <CardDescription className="text-sm text-slate-500">
-                {lang === "hi"
-                  ? "ओपीडी डॉक्टर के लिए तैयार सारांश देखें और राष्ट्रीय ABDM नेटवर्क पर एक्सपोर्ट करें।"
-                  : "Review the structured case-taking report and export the NRCES-compliant FHIR R4 bundle."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Patient Badge */}
-              <div className="bg-slate-100 p-4 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-base text-slate-800">
-                    {patientName || "Walk-In Patient"}
-                  </div>
-                  <div className="text-xs text-slate-500 font-mono">
-                    {abhaId ? `ABHA: ${abhaId}` : `Phone: ${phone || "Anonymous"}`} • Mode: {mode.toUpperCase()}
-                  </div>
-                </div>
-                <Badge className="bg-emerald-700 text-white font-bold">
-                  {lang === "hi" ? "परामर्श के लिए तैयार" : "Ready for Doctor"}
-                </Badge>
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 shadow-xs">
+                  {lang === "hi" ? "चरण 5 / 5: नैदानिक सारांश व ABDM एक्सपोर्ट" : "Step 5 of 5: Clinical Summary & ABDM Export"}
+                </span>
+                <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-indigo-50 text-indigo-900 border border-indigo-200">
+                  ABDM NRCES COMPLIANT
+                </span>
               </div>
 
-              {/* Summary Sections */}
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                  {lang === "hi" ? "कंसल्टेशन सारांश व FHIR R4 रिकॉर्ड" : "Consultation Record & Interoperable FHIR Export"}
+                </h2>
+                <p className="text-sm text-slate-500 mt-1 font-medium">
+                  {lang === "hi"
+                    ? "ओपीडी डॉक्टर के लिए तैयार सारांश देखें और राष्ट्रीय ABDM नेटवर्क पर एक्सपोर्ट करें।"
+                    : "Review the structured case-taking report and export the NRCES-compliant FHIR R4 bundle."}
+                </p>
+              </div>
+
+              {/* Patient Identity Badge with tricolor subtle top line */}
+              <div className="relative overflow-hidden bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-orange-500 via-white to-emerald-600" />
+                <div>
+                  <div className="font-bold text-lg text-white">
+                    {patientName || "Walk-In Patient"}
+                  </div>
+                  <div className="text-xs text-slate-300 font-mono mt-0.5 flex items-center gap-2">
+                    <span>{abhaId ? `ABHA: ${abhaId}` : `Phone: ${phone || "Anonymous"}`}</span>
+                    <span>•</span>
+                    <span className="text-emerald-400 font-bold">MODE: {mode.toUpperCase()}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 shadow-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="size-3.5 text-emerald-400" />
+                    <span>{lang === "hi" ? "परामर्श के लिए तैयार" : "Ready for Doctor Consultation"}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Summary Sections in Bento Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {SECTION_ORDER.map((sec) => {
                   const secItems = ONTOLOGY.filter(
@@ -1646,15 +1759,15 @@ export default function KioskPage() {
                   return (
                     <div
                       key={sec}
-                      className="p-4 rounded-xl border border-slate-200 bg-white space-y-2"
+                      className="p-4 sm:p-5 rounded-2xl border border-slate-200/80 bg-white space-y-2.5 shadow-xs"
                     >
-                      <h5 className="font-bold text-xs uppercase tracking-wider text-emerald-800">
+                      <h5 className="font-bold text-xs uppercase tracking-widest text-emerald-800 font-mono">
                         {SECTION_HEADINGS[sec][lang]}
                       </h5>
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {secItems.map((item) => (
-                          <div key={item.code} className="text-xs">
-                            <span className="text-slate-500 font-medium">
+                          <div key={item.code} className="text-xs leading-relaxed">
+                            <span className="text-slate-400 font-medium">
                               {item.prompt[lang]}:
                             </span>{" "}
                             <span className="font-bold text-slate-800">
@@ -1672,15 +1785,15 @@ export default function KioskPage() {
 
               {/* Ayush Dashavidha Card if filled */}
               {mode === "ayush" && Object.keys(dashavidhaAnswers).length > 0 && (
-                <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-2">
-                  <h5 className="font-bold text-xs uppercase tracking-wider text-amber-900">
+                <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-3">
+                  <h5 className="font-bold text-xs uppercase tracking-widest text-amber-900 font-mono">
                     {lang === "hi" ? "दशविध परीक्षा निष्कर्ष" : "Dashavidha Pariksha Findings"}
                   </h5>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                     {Object.entries(dashavidhaAnswers).map(([fac, ans]) => (
-                      <div key={fac} className="bg-white p-2 rounded border border-amber-100 text-xs">
-                        <div className="text-slate-400 font-mono text-[10px] uppercase">{fac}</div>
-                        <div className="font-bold text-slate-800">{ans.value}</div>
+                      <div key={fac} className="bg-white p-2.5 rounded-xl border border-amber-100 text-xs shadow-2xs">
+                        <div className="text-slate-400 font-mono text-[10px] uppercase font-semibold">{fac}</div>
+                        <div className="font-bold text-slate-900 mt-0.5">{ans.value}</div>
                       </div>
                     ))}
                   </div>
@@ -1689,13 +1802,13 @@ export default function KioskPage() {
 
               {/* ABDM Export Result Banner */}
               {abdmExportResult && (
-                <div className="bg-emerald-50 border border-emerald-300 p-4 rounded-xl flex items-center justify-between">
+                <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <div className="flex items-center gap-2 font-semibold text-sm text-slate-900 dark:text-white">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>{lang === "hi" ? "ABDM FHIR R4 बंडल तैयार!" : "ABDM NRCES FHIR R4 Bundle Ready!"}</span>
                     </div>
-                    <div className="text-xs text-emerald-700 font-mono">
+                    <div className="text-xs text-slate-500 font-mono">
                       Ref: {abdmExportResult.abdm_reference} • {abdmExportResult.resource_count} Resources
                     </div>
                   </div>
@@ -1703,63 +1816,64 @@ export default function KioskPage() {
                     size="sm"
                     variant="outline"
                     onClick={handleDownloadBundle}
-                    className="gap-1.5 font-bold text-xs border-emerald-600 text-emerald-800 hover:bg-emerald-100"
+                    className="gap-2 font-medium text-xs border-slate-200 text-slate-800 dark:text-slate-200 hover:bg-slate-100 rounded-lg h-8 px-3 shrink-0 self-start sm:self-auto shadow-2xs"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5" />
                     <span>{lang === "hi" ? "JSON डाउनलोड करें" : "Download FHIR JSON"}</span>
                   </Button>
                 </div>
               )}
-            </CardContent>
-            <CardFooter className="flex justify-between items-center bg-slate-50 border-t border-slate-100 px-6 py-4">
-              <Button
-                variant="outline"
-                onClick={() => setStep("interview")}
-                className="text-slate-700"
-              >
-                {lang === "hi" ? "वापस प्रश्नोत्तर पर" : "Back to Intake"}
-              </Button>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <Button
-                  size="lg"
-                  onClick={handleExportToAbdm}
-                  disabled={isExporting}
-                  className="bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-6 h-12 gap-2"
+                  variant="ghost"
+                  onClick={() => setStep("interview")}
+                  className="text-slate-600 dark:text-slate-400 text-xs font-medium self-start sm:self-auto"
                 >
-                  {isExporting ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <FileCheck className="w-5 h-5" />
-                      <span>{lang === "hi" ? "ABDM में एक्सपोर्ट करें" : "Export to ABDM"}</span>
-                    </>
-                  )}
+                  {lang === "hi" ? "← वापस प्रश्नोत्तर पर" : "← Back to Intake"}
                 </Button>
 
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    toast.success(
-                      lang === "hi"
-                        ? "केस टोकन जारी किया गया। रोगी ओपीडी रूम में प्रतीक्षा करें।"
-                        : "Case Token Issued. Patient may proceed to Doctor Consultation Room."
-                    );
-                    setSessionId(null);
-                    setAnswers({});
-                    setDashavidhaAnswers({});
-                    setScannedFiles([]);
-                    setAbdmExportResult(null);
-                    setEscalated(false);
-                    setStep("identify");
-                  }}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 h-12"
-                >
-                  {lang === "hi" ? "पूर्ण करें (अगला रोगी)" : "Finish Session"}
-                </Button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <Button
+                    size="default"
+                    variant="outline"
+                    onClick={handleExportToAbdm}
+                    disabled={isExporting}
+                    className="flex-1 sm:flex-initial border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-medium text-xs h-10 px-5 rounded-lg shadow-2xs gap-2"
+                  >
+                    {isExporting ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>{lang === "hi" ? "ABDM में एक्सपोर्ट करें" : "Export to ABDM"}</span>
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    size="default"
+                    onClick={() => {
+                      toast.success(
+                        lang === "hi"
+                          ? "केस टोकन जारी किया गया। रोगी ओपीडी रूम में प्रतीक्षा करें।"
+                          : "Case Token Issued. Patient may proceed to Doctor Consultation Room."
+                      );
+                      setSessionId(null);
+                      setAnswers({});
+                      setDashavidhaAnswers({});
+                      setScannedFiles([]);
+                      setAbdmExportResult(null);
+                      setEscalated(false);
+                      setStep("identify");
+                    }}
+                    className="flex-1 sm:flex-initial bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs h-10 px-6 rounded-lg shadow-xs transition-colors"
+                  >
+                    {lang === "hi" ? "पूर्ण करें (अगला रोगी)" : "Finish Session"}
+                  </Button>
+                </div>
               </div>
-            </CardFooter>
-          </Card>
+            </div>
         )}
       </main>
 

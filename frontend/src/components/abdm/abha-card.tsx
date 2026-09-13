@@ -126,8 +126,8 @@ export default function AbhaCard({
         <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-2.5 bg-white">
           <div className="flex items-center gap-2.5">
             {/* National Emblem Emblem Icon */}
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-amber-400 font-serif font-bold text-base shadow-sm">
-              🏛️
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white font-mono font-bold text-[10px] shadow-xs shrink-0 tracking-tight">
+              GOI
             </div>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-900 leading-tight">

@@ -16,6 +16,7 @@ import {
   Pill,
   Activity,
   ScanLine,
+  Stethoscope,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -261,10 +262,10 @@ export default function DocumentCaptureModal({
               <div className="grid gap-2 sm:grid-cols-3">
                 <button
                   onClick={() => handlePresetSelect("ayush_prescription")}
-                  className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3 text-left hover:border-emerald-400 transition-all hover:bg-emerald-950/50"
+                  className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 text-left hover:border-slate-500 transition-all hover:bg-slate-800"
                 >
-                  <span className="text-xl block mb-1">🌿</span>
-                  <div className="font-bold text-xs text-emerald-300">Ayush Prescription</div>
+                  <Sparkles className="w-5 h-5 text-slate-300 mb-1.5" />
+                  <div className="font-bold text-xs text-slate-200">Ayush Prescription</div>
                   <div className="text-[10px] text-slate-400 mt-1">
                     AIIA: Ashwagandha 3g BD, Kaishore Guggulu 2 tabs BD, Giloy Kwath
                   </div>
@@ -272,10 +273,10 @@ export default function DocumentCaptureModal({
 
                 <button
                   onClick={() => handlePresetSelect("allopathic_cardiology")}
-                  className="rounded-xl border border-sky-500/40 bg-sky-950/30 p-3 text-left hover:border-sky-400 transition-all hover:bg-sky-950/50"
+                  className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 text-left hover:border-slate-500 transition-all hover:bg-slate-800"
                 >
-                  <span className="text-xl block mb-1">🩺</span>
-                  <div className="font-bold text-xs text-sky-300">Cardiology Allopathy</div>
+                  <Stethoscope className="w-5 h-5 text-slate-300 mb-1.5" />
+                  <div className="font-bold text-xs text-slate-200">Cardiology Allopathy</div>
                   <div className="text-[10px] text-slate-400 mt-1">
                     GMCH: Metoprolol 50mg OD, Ramipril 5mg, Aspirin 75mg OD
                   </div>
@@ -283,10 +284,10 @@ export default function DocumentCaptureModal({
 
                 <button
                   onClick={() => handlePresetSelect("diabetic_lab_report")}
-                  className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-left hover:border-amber-400 transition-all hover:bg-amber-950/50"
+                  className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 text-left hover:border-slate-500 transition-all hover:bg-slate-800"
                 >
-                  <span className="text-xl block mb-1">🩸</span>
-                  <div className="font-bold text-xs text-amber-300">NABL Lab Report</div>
+                  <Activity className="w-5 h-5 text-slate-300 mb-1.5" />
+                  <div className="font-bold text-xs text-slate-200">NABL Lab Report</div>
                   <div className="text-[10px] text-slate-400 mt-1">
                     HbA1c 8.6%, Fasting Glucose 174 mg/dL, Serum Creatinine 1.4
                   </div>
@@ -358,8 +359,9 @@ export default function DocumentCaptureModal({
                     Date: {ocrResult.parsed.prescription_date} · Type: {ocrResult.parsed.document_type}
                   </div>
                 </div>
-                <Badge variant="outline" className="border-emerald-500 text-emerald-300 text-[10px]">
-                  ✓ Verified by AI
+                <Badge variant="outline" className="border-emerald-500 text-emerald-300 text-[10px] gap-1">
+                  <CheckCircle2 className="size-3 text-emerald-400" />
+                  <span>Verified by AI</span>
                 </Badge>
               </div>
 

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Phone } from "lucide-react";
+import { Phone, Ambulance, CheckCircle2 } from "lucide-react";
 import { firstAidFor } from "@/components/patient/first-aid";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
 import { WellbeingCheck } from "@/components/patient/wellbeing-check";
@@ -90,53 +90,72 @@ export function SosStatus({
 
   return (
     <div className="space-y-4">
-      <Card className={stalled ? "border-destructive" : "border-primary shadow-md"}>
-        <CardContent className="space-y-4 py-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-lg font-bold tracking-tight" lang="hi">
+      <div className={`relative overflow-hidden rounded-xl bg-white dark:bg-slate-900 p-5 space-y-4 shadow-xs ${
+        stalled ? "border border-rose-500/50 glow-rose" : "border border-slate-200/80 dark:border-slate-800"
+      }`}>
+        {/* Emergency Active Glow Ribbon */}
+        <div className={`absolute top-0 left-0 right-0 h-1 ${
+          stalled ? "bg-rose-500" : "bg-gradient-to-r from-red-500 via-amber-500 to-sky-500"
+        }`} />
+
+        <div className="flex items-start justify-between gap-3 pt-1">
+          <div className="min-w-0 flex items-start gap-3">
+            <span className="relative flex h-3.5 w-3.5 shrink-0 mt-1">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                stalled ? "bg-rose-400" : "bg-red-400"
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-3.5 w-3.5 ${
+                stalled ? "bg-rose-500" : "bg-red-600"
+              }`}></span>
+            </span>
+            <div>
+              <p className="text-xl font-extrabold tracking-tight font-heading text-slate-900 dark:text-white" lang="hi">
                 {stalled ? "अभी कोई अस्पताल नहीं मिला" : STEPS[step].hi}
               </p>
-              <p className="text-muted-foreground text-sm">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {stalled ? "No hospital available yet" : STEPS[step].en}
               </p>
             </div>
-            <Badge variant="outline" className="shrink-0 font-mono">
-              {incident.ref}
-            </Badge>
           </div>
+          <Badge variant="outline" className="shrink-0 font-mono text-xs font-bold border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+            #{incident.ref}
+          </Badge>
+        </div>
 
-          {/* Four dots rather than a percentage. A progress bar implies a rate of
-              progress that nobody can promise. */}
-          <div className="flex items-center gap-1.5">
-            {STEPS.map((s, i) => (
-              <div
-                key={s.key}
-                className={`h-1.5 flex-1 rounded-full ${
-                  stalled
-                    ? "bg-destructive/30"
-                    : i <= step
-                      ? "bg-primary"
-                      : "bg-muted"
-                }`}
-              />
-            ))}
-          </div>
+        {/* Four dots rather than a percentage */}
+        <div className="flex items-center gap-2 pt-1">
+          {STEPS.map((s, i) => (
+            <div
+              key={s.key}
+              className={`h-2 flex-1 rounded-full transition-all duration-300 ${
+                stalled
+                  ? "bg-rose-500/20"
+                  : i <= step
+                    ? "bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                    : "bg-slate-200 dark:bg-slate-800"
+              }`}
+            />
+          ))}
+        </div>
 
-          <p className="text-muted-foreground text-xs">
+        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span>
             <span lang="hi">{ago(elapsed).hi} पहले भेजा</span> · sent {ago(elapsed).en} ago
-          </p>
+          </span>
+          <span className="font-mono text-[10px] text-slate-400">
+            Phase {step + 1} of 4
+          </span>
+        </div>
 
-          {stalled ? (
-            <a href="tel:112" className="block">
-              <Button variant="destructive" size="lg" className="h-14 w-full text-base">
-                <Phone className="mr-2 size-5" />
-                <span lang="hi">112 पर कॉल करें</span>
-              </Button>
-            </a>
-          ) : null}
-        </CardContent>
-      </Card>
+        {stalled ? (
+          <a href="tel:112" className="block pt-1">
+            <Button variant="destructive" size="lg" className="h-14 w-full text-base font-bold shadow-lg glow-rose">
+              <Phone className="mr-2 size-5" />
+              <span lang="hi">112 पर कॉल करें (Emergency Helpline)</span>
+            </Button>
+          </a>
+        ) : null}
+      </div>
 
       {/* Only once a vehicle is assigned. A map of one dot -- yourself -- while hospitals
           are still being asked adds nothing and implies something is moving. */}
@@ -205,52 +224,57 @@ export function SosStatus({
       ) : null}
 
       {d?.hospital ? (
-        <Card>
-          <CardContent className="space-y-1 py-4">
-            <p className="text-muted-foreground text-xs uppercase tracking-wider">
-              <span lang="hi">अस्पताल</span> · Hospital
+        <div className="rounded-xl bg-white dark:bg-slate-900 p-4 space-y-1.5 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between">
+            <p className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider font-semibold">
+              <span lang="hi">अस्पताल</span> · Hospital Destination
             </p>
-            <p className="font-semibold">{d.hospital.name}</p>
-            {d.eta_seconds ? (
-              <p className="text-muted-foreground text-sm">
-                <span lang="hi">लगभग {Math.round(d.eta_seconds / 60)} मिनट दूर</span> ·
-                about {Math.round(d.eta_seconds / 60)} min away
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+            <Badge variant="outline" className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[10px] font-semibold">
+              Trauma Center Assigned
+            </Badge>
+          </div>
+          <p className="font-extrabold text-base text-slate-900 dark:text-white font-heading">{d.hospital.name}</p>
+          {d.eta_seconds ? (
+            <p className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span lang="hi">लगभग {Math.round(d.eta_seconds / 60)} मिनट दूर</span> ·
+              about {Math.round(d.eta_seconds / 60)} min away
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {d?.unit ? (
-        <Card>
-          <CardContent className="space-y-1 py-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-muted-foreground text-xs uppercase tracking-wider">
-                <span lang="hi">एम्बुलेंस</span> · Ambulance
-              </p>
-              <Badge variant="outline" className="border-amber-500 text-amber-700">
-                simulated
-              </Badge>
-            </div>
-            <p className="font-semibold">
-              {d.unit.call_sign}
-              {d.unit.driver_name ? ` · ${d.unit.driver_name}` : ""}
+        <div className="rounded-xl bg-white dark:bg-slate-900 p-4 space-y-2 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider font-semibold flex items-center gap-1.5">
+              <Ambulance className="w-4 h-4 text-rose-600" />
+              <span lang="hi">एम्बुलेंस</span> · Dispatched Unit
             </p>
-            {d.ambulance_eta_seconds ? (
-              <p className="text-muted-foreground text-sm">
-                <span lang="hi">
-                  लगभग {Math.round(d.ambulance_eta_seconds / 60)} मिनट में पहुंचेगी
-                </span>{" "}
-                · arriving in about {Math.round(d.ambulance_eta_seconds / 60)} min
-              </p>
-            ) : null}
-            {d.ambulance_state === "on_scene" ? (
-              <p className="text-sm font-medium text-emerald-700" lang="hi">
-                एम्बुलेंस पहुंच गई है
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+            <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-mono">
+              GPS Telemetry Active
+            </Badge>
+          </div>
+          <p className="font-extrabold text-base text-slate-900 dark:text-white font-heading">
+            {d.unit.call_sign}
+            {d.unit.driver_name ? <span className="text-xs font-normal text-slate-500 dark:text-slate-400"> (Driver: {d.unit.driver_name})</span> : ""}
+          </p>
+          {d.ambulance_eta_seconds ? (
+            <p className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-red-500 animate-ping" />
+              <span lang="hi">
+                लगभग {Math.round(d.ambulance_eta_seconds / 60)} मिनट में पहुंचेगी
+              </span>{" "}
+              · arriving in about {Math.round(d.ambulance_eta_seconds / 60)} min
+            </p>
+          ) : null}
+          {d.ambulance_state === "on_scene" ? (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 flex items-center gap-2" lang="hi">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>एम्बुलेंस पहुंच गई है / Ambulance arrived at scene</span>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Asked while nobody is with them yet. Once the crew is on scene there is a trained

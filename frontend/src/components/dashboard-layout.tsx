@@ -98,7 +98,7 @@ const navByRole: Record<string, NavItem[]> = {
 
 // `facility_staff` would otherwise render as "facility_staff Portal" in the header.
 const ROLE_LABEL: Record<string, string> = {
-  doctor: "coordinator",
+  doctor: "doctor",
   facility_staff: "facility",
   fleet_operator: "crew",
 };
