@@ -164,7 +164,7 @@ export default function AdminDashboardPage() {
         </div>
         <Link
           href="/admin/trends"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition shadow-sm self-start md:self-auto"
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition shadow-xs self-start md:self-auto"
         >
           <Activity className="h-4 w-4" />
           Community Health Trends & Outbreak Surveillance →
@@ -172,28 +172,28 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Lenovo LEAP / IndiaAI Outbreak Alert Banner */}
-      <div className="p-3.5 bg-gradient-to-r from-rose-950/90 to-slate-900 border border-rose-500/40 rounded-xl text-rose-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+      <div className="p-4 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-slate-900 dark:text-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-rose-600/30 text-rose-400 rounded-lg shrink-0">
-            <Flame className="h-5 w-5 animate-pulse" />
+          <div className="p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-300 rounded-lg shrink-0 border border-rose-200 dark:border-rose-800">
+            <Flame className="h-4 w-4 animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-rose-400">
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
                 Lenovo LEAP 2026 • AI Public Health Alert (Theme 3.3)
               </span>
-              <span className="text-[10px] bg-rose-600 text-white px-2 py-0.2 rounded-full font-bold">
+              <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-full font-semibold">
                 2 HOTSPOTS ACTIVE
               </span>
             </div>
-            <p className="text-xs text-rose-200 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
               Epidemiological anomaly detected: <strong>+38.4% surge in Febrile Pyrexia</strong> across Mohanlalganj (Lucknow) &amp; pediatric respiratory wheezing in Barabanki CHC catchment.
             </p>
           </div>
         </div>
         <Link
           href="/admin/trends"
-          className="text-xs bg-rose-600 hover:bg-rose-500 text-white font-semibold px-3 py-1.5 rounded-md transition shrink-0 inline-flex items-center gap-1.5"
+          className="text-xs bg-rose-600 hover:bg-rose-700 text-white font-semibold px-3 py-1.5 rounded-md transition shrink-0 inline-flex items-center gap-1.5 shadow-xs"
         >
           Inspect Outbreak Map &amp; Report
           <ArrowRight className="h-3.5 w-3.5" />
@@ -203,61 +203,67 @@ export default function AdminDashboardPage() {
       {/* KPI Cards (System Impact & ROI) */}
       {loading ? <StatsSkeleton /> : (
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="bg-white border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 w-24 h-24 bg-slate-50 rounded-full blur-2xl group-hover:bg-slate-100 transition-colors"></div>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-              <CardTitle className="text-sm font-semibold text-slate-600">Total Patients Enrolled</CardTitle>
-              <Users className="h-5 w-5 text-slate-400" />
+          <Card className="bg-card border-border shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total Patients Enrolled</CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                <Users className="h-4 w-4" />
+              </div>
             </CardHeader>
-            <CardContent className="relative z-10">
-              <div className="text-4xl font-black text-slate-900 tracking-tight">{totalPatients}</div>
-              <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-2">
-                <TrendingUp className="w-3.5 h-3.5" /> {enrollmentGrowth >= 0 ? "+" : ""}{enrollmentGrowth}% this week
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-foreground tracking-tight">{totalPatients}</div>
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center">
+                  <TrendingUp className="w-3.5 h-3.5 mr-0.5" /> {enrollmentGrowth >= 0 ? "+" : ""}{enrollmentGrowth}%
+                </span>{" "}
+                this week
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-slate-200 shadow-sm relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 w-24 h-24 bg-slate-50 rounded-full blur-2xl group-hover:bg-slate-100 transition-colors"></div>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-              <CardTitle className="text-sm font-semibold text-slate-600">Total AI Calls Executed</CardTitle>
-              <Mic className="h-5 w-5 text-slate-400" />
+          <Card className="bg-card border-border shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total AI Calls Executed</CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                <Mic className="h-4 w-4" />
+              </div>
             </CardHeader>
-            <CardContent className="relative z-10">
-              <div className="text-4xl font-black text-slate-900 tracking-tight">{totalCalls}</div>
-              <p className="text-xs text-slate-500 font-medium mt-2">
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-foreground tracking-tight">{totalCalls}</div>
+              <p className="text-[11px] text-muted-foreground mt-1">
                 {callSuccessRate}% successful connection rate
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 border-slate-800 shadow-md relative overflow-hidden group">
-            <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full blur-2xl group-hover:bg-white/10 transition-colors"></div>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-              <CardTitle className="text-sm font-semibold text-slate-400">Cost Saved vs Telecallers</CardTitle>
-              <IndianRupee className="h-5 w-5 text-slate-300" />
+          <Card className="bg-card border-border shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Cost Saved vs Telecallers</CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                <IndianRupee className="h-4 w-4" />
+              </div>
             </CardHeader>
-            <CardContent className="relative z-10">
-              <div className="text-4xl font-black text-white tracking-tight">₹{totalSavings.toLocaleString('en-IN')}</div>
-              <p className="text-[11px] text-slate-400 font-medium mt-2 opacity-90">
-                AI cost: ₹3.86/call | Human cost: ₹15.00/call
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-foreground tracking-tight">₹{totalSavings.toLocaleString('en-IN')}</div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                ₹3.86 AI call vs ₹15.00 human call
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 border-slate-800 shadow-md relative overflow-hidden group">
-            <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-bl-full blur-2xl group-hover:bg-white/10 transition-colors"></div>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-              <CardTitle className="text-sm font-semibold text-slate-400">Voice Pipeline</CardTitle>
-              <Zap className="h-5 w-5 text-slate-300" />
-            </CardHeader>
-            <CardContent className="relative z-10">
-              <div className="text-2xl font-black text-white tracking-tight">
-                STT <span className="text-slate-500">→</span> LLM{" "}
-                <span className="text-slate-500">→</span> TTS
+          <Card className="bg-card border-border shadow-xs">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Voice Pipeline</CardTitle>
+              <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                <Zap className="h-4 w-4" />
               </div>
-              <p className="text-[11px] text-slate-400 font-medium mt-2 leading-snug">
-                Deepgram · Groq Llama 3.3 with Gemini failover · Murf Indic TTS
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-bold font-mono text-foreground tracking-tight">
+                STT <span className="text-muted-foreground">→</span> LLM <span className="text-muted-foreground">→</span> TTS
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Deepgram · Groq Llama 3.3 · Murf Indic
               </p>
             </CardContent>
           </Card>

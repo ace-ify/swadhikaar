@@ -257,67 +257,59 @@ export default function CommunityHealthTrendsPage() {
 
   return (
     <div className="space-y-8 pb-16">
-      {/* ========================================================================= HERO COMMAND DECK */}
-      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/80 p-6 md:p-8 text-white shadow-2xl">
-        {/* Subtle Ambient Glow Background Orbs */}
-        <div className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full bg-emerald-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
-
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3 max-w-3xl">
-            {/* Pill Tags */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-950/60 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-emerald-300 backdrop-blur-md">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Lenovo LEAP 2026 • Theme 3: Healthcare Tech
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-400/30 bg-indigo-950/50 px-3 py-1 text-[11px] font-medium text-indigo-300 backdrop-blur-md">
-                <Sparkles className="h-3 w-3 text-indigo-400" />
-                IndiaAI Mission Engine
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/30 bg-amber-950/50 px-3 py-1 text-[11px] font-medium text-amber-300 backdrop-blur-md">
-                <MapPin className="h-3 w-3 text-amber-400" />
-                AKTU Lucknow Catchment
-              </span>
-            </div>
-
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Community Health Trends &amp; Outbreak Surveillance
-            </h1>
-            <p className="text-sm md:text-base text-slate-300 leading-relaxed">
-              Synthesizing real-time epidemiological intelligence from walk-in MediKiosks, doctor consultations, and vernacular Hindi voice intakes across Uttar Pradesh districts.
-            </p>
+      {/* ========================================================================= SHADCN COMMAND HEADER */}
+      <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="space-y-2 max-w-3xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Lenovo LEAP 2026 • Theme 3: Healthcare Tech
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+              <Sparkles className="h-3 w-3 text-slate-500" />
+              IndiaAI Mission Engine
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+              <MapPin className="h-3 w-3 text-slate-500" />
+              AKTU Lucknow Catchment
+            </span>
           </div>
 
-          {/* Action CTAs */}
-          <div className="flex flex-wrap items-center gap-3 self-start lg:self-center shrink-0">
-            <Button
-              variant={simulationSurge ? "destructive" : "outline"}
-              onClick={() => {
-                setSimulationSurge(!simulationSurge);
-                if (!simulationSurge) {
-                  toast.error("Simulated Outbreak Triggered: +38.4% Febrile Pyrexia Surge in Mohanlalganj, Lucknow!");
-                } else {
-                  toast.info("Surge simulation reset to baseline telemetry.");
-                }
-              }}
-              className="rounded-lg px-4 py-2 text-xs font-semibold tracking-wide transition-all shadow-xs gap-2"
-            >
-              <Flame className="h-4 w-4" />
-              {simulationSurge ? "Reset Surge Demo" : "Simulate Outbreak Surge"}
-            </Button>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Community Health Trends &amp; Outbreak Surveillance
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Synthesizing real-time epidemiological intelligence from walk-in MediKiosks, doctor consultations, and vernacular Hindi voice intakes across Uttar Pradesh districts.
+          </p>
+        </div>
 
-            <Button
-              onClick={handleExportReport}
-              className="rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 text-xs tracking-wide transition-all shadow-lg hover:shadow-emerald-500/25 gap-2"
-            >
-              <Download className="h-4 w-4 text-slate-950" />
-              Export IDSP / NHA FHIR Report
-            </Button>
-          </div>
+        {/* Action CTAs */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <Button
+            variant={simulationSurge ? "destructive" : "outline"}
+            size="sm"
+            onClick={() => {
+              setSimulationSurge(!simulationSurge);
+              if (!simulationSurge) {
+                toast.error("Simulated Outbreak Triggered: +38.4% Febrile Pyrexia Surge in Mohanlalganj, Lucknow!");
+              } else {
+                toast.info("Surge simulation reset to baseline telemetry.");
+              }
+            }}
+            className="text-xs font-semibold h-8 px-3 gap-1.5 border-slate-200 dark:border-slate-800"
+          >
+            <Flame className="h-3.5 w-3.5" />
+            {simulationSurge ? "Reset Surge Demo" : "Simulate Outbreak Surge"}
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={handleExportReport}
+            className="text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 h-8 px-3.5 shadow-xs gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export IDSP / NHA FHIR Report
+          </Button>
         </div>
       </div>
 
@@ -332,10 +324,10 @@ export default function CommunityHealthTrendsPage() {
               <button
                 key={d}
                 onClick={() => setSelectedDistrict(d)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                   selectedDistrict === d
-                    ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-500/30"
-                    : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                 }`}
               >
                 {d}
@@ -348,15 +340,15 @@ export default function CommunityHealthTrendsPage() {
           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" /> Window:
           </span>
-          <div className="flex rounded-full border border-slate-200/80 dark:border-slate-800 bg-muted/50 p-0.5">
+          <div className="flex rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 p-0.5">
             {(["7d", "14d", "30d"] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setTimeRange(r)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                   timeRange === r
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-white text-slate-900 dark:bg-slate-900 dark:text-white shadow-xs"
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 {r === "7d" ? "7 Days" : r === "14d" ? "14 Days" : "30 Days"}
@@ -367,87 +359,87 @@ export default function CommunityHealthTrendsPage() {
       </div>
 
       {/* ========================================================================= KPI CARDS GRID */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1 */}
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-2 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Analyzed Intakes</span>
-            <div className="h-9 w-9 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Analyzed Intakes</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
               <FileText className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
+            <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
               {totalAnalyzedConsultations.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold inline-flex items-center">
-                <ArrowUpRight className="h-3.5 w-3.5" /> +18.4%
+            <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center">
+                <ArrowUpRight className="h-3 w-3" /> +18.4%
               </span>{" "}
-              intake acceleration across 58 rural MediKiosks
+              across 58 rural MediKiosks
             </p>
           </div>
         </div>
 
         {/* Card 2 */}
-        <div className={`rounded-xl border p-5 space-y-3 shadow-xs hover:shadow-sm transition-all ${
+        <div className={`rounded-xl border p-5 space-y-2 shadow-xs transition-all ${
           activeAlertsCount > 2
-            ? "border-rose-300 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20"
+            ? "border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20"
             : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900"
         }`}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Outbreak Alerts</span>
-            <div className="h-9 w-9 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Active Outbreak Alerts</span>
+            <div className="h-8 w-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-200 dark:border-rose-800">
               <AlertTriangle className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-extrabold tracking-tight text-rose-600 dark:text-rose-400 font-mono flex items-center gap-2">
+            <div className="text-2xl font-bold tracking-tight text-rose-600 dark:text-rose-400 font-mono flex items-center gap-2">
               {activeAlertsCount} Hotspots
               {simulationSurge && (
-                <span className="text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-full animate-pulse">
+                <span className="text-[10px] bg-rose-600 text-white font-semibold px-2 py-0.5 rounded-full animate-pulse">
                   SURGE ACTIVE
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Clustered in <strong>Mohanlalganj (Lucknow)</strong> &amp; <strong>Fatehpur (Barabanki)</strong>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Mohanlalganj (Lucknow) &amp; Fatehpur (Barabanki)
             </p>
           </div>
         </div>
 
         {/* Card 3 */}
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-2 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Lifestyle Vulnerability</span>
-            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Lifestyle Vulnerability</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
               <HeartPulse className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-bold tracking-tight text-foreground font-mono">
+            <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
               {avgNcdRisk}%
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Early Stage-1 NCD propensity identified via <em>Dashavidha Pariksha</em>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Stage-1 NCD risk via <em>Dashavidha Pariksha</em>
             </p>
           </div>
         </div>
 
         {/* Card 4 */}
-        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs hover:shadow-sm transition-all">
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-2 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vernacular Voice Share</span>
-            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Vernacular Voice Share</span>
+            <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center border border-slate-200 dark:border-slate-700">
               <Radio className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-bold tracking-tight text-foreground font-mono">
+            <div className="text-2xl font-bold tracking-tight text-foreground font-mono">
               {avgVoiceAdoption}%
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Zero-touch hands-free voice intakes in Hindi &amp; Awadhi (Low-literacy access)
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Hands-free voice in Hindi &amp; Awadhi (Theme 2)
             </p>
           </div>
         </div>

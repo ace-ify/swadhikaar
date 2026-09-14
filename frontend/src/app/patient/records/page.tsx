@@ -68,14 +68,14 @@ function formatDate(iso: string) {
 function RiskBar({ score }: { score: number }) {
   const barColor =
     score >= 50
-      ? "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.7)]"
+      ? "bg-rose-500"
       : score >= 35
-      ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]"
-      : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]";
+      ? "bg-amber-500"
+      : "bg-emerald-500";
   return (
-    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-2.5 p-0.5 border border-slate-200/80 dark:border-slate-700/60">
+    <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-2.5 overflow-hidden border border-slate-200/60 dark:border-slate-700/40">
       <div
-        className={`${barColor} h-1 rounded-full transition-all duration-500`}
+        className={`${barColor} h-full rounded-full transition-all duration-500`}
         style={{ width: `${Math.min(100, Math.max(8, score))}%` }}
       />
     </div>
@@ -139,7 +139,7 @@ export default function PatientRecordsPage() {
           setSessions(data);
         }
       } catch (e) {
-        console.warn("Could not load case_sessions:", e);
+        console.error("loadSessions failed:", e);
       } finally {
         if (!isCancelled) setSessionsLoading(false);
       }
@@ -148,25 +148,25 @@ export default function PatientRecordsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [supabase, primaryPatientId]);
+  }, [supabase]);
 
-  // Fetch Scanned Documents & OCR Entities
+  // Fetch Scanned Documents & Extracted Entities
   useEffect(() => {
     let isCancelled = false;
     async function loadDocuments() {
       setDocumentsLoading(true);
       try {
-        const { data, error } = await supabase
+        const { data: docs, error: docErr } = await supabase
           .from("case_documents")
-          .select("*, document_entities(*)")
-          .order("scanned_at", { ascending: false })
+          .select("*, case_document_entities(*)")
+          .order("uploaded_at", { ascending: false })
           .limit(10);
 
-        if (!isCancelled && !error && data) {
-          setDocuments(data);
+        if (!isCancelled && !docErr && docs) {
+          setDocuments(docs);
         }
       } catch (e) {
-        console.warn("Could not load case_documents:", e);
+        console.error("loadDocuments failed:", e);
       } finally {
         if (!isCancelled) setDocumentsLoading(false);
       }
@@ -175,7 +175,7 @@ export default function PatientRecordsPage() {
     return () => {
       isCancelled = true;
     };
-  }, [supabase, primaryPatientId]);
+  }, [supabase]);
 
   const lastUpdated = vitalsData.length > 0 ? formatDate(vitalsData[0].recorded_at) : "—";
 
@@ -186,11 +186,11 @@ export default function PatientRecordsPage() {
     setTimeout(() => setCopiedAbha(false), 2000);
   };
 
-  // Build risk cards with luminous color palettes
-  const riskCards = riskData.length > 0
-    ? [
+  const riskCards =
+    riskData.length > 0
+      ? [
         {
-          type: "Cardiovascular Risk",
+          type: "Cardiovascular Health",
           score: Math.round(riskData[0].heart_risk_score),
           level: riskData[0].heart_risk_level,
           color:
@@ -201,10 +201,10 @@ export default function PatientRecordsPage() {
               : "text-emerald-600 dark:text-emerald-400",
           badgeClass:
             riskData[0].heart_risk_score >= 50
-              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300 glow-rose"
+              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
               : riskData[0].heart_risk_score >= 35
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 glow-emerald",
+              ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
           details: `Assessed ${formatDate(riskData[0].assessed_at)}. Overall score: ${riskData[0].overall_risk_score.toFixed(1)}. Framingham Risk Index aligned.`,
         },
         {
@@ -219,10 +219,10 @@ export default function PatientRecordsPage() {
               : "text-emerald-600 dark:text-emerald-400",
           badgeClass:
             riskData[0].diabetic_risk_score >= 50
-              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300 glow-rose"
+              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
               : riskData[0].diabetic_risk_score >= 35
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 glow-emerald",
+              ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
           details: `Assessed ${formatDate(riskData[0].assessed_at)}. Fasting & random plasma glucose profile.`,
         },
         {
@@ -237,10 +237,10 @@ export default function PatientRecordsPage() {
               : "text-emerald-600 dark:text-emerald-400",
           badgeClass:
             riskData[0].hypertension_risk_score >= 50
-              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300 glow-rose"
+              ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
               : riskData[0].hypertension_risk_score >= 35
-              ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-              : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 glow-emerald",
+              ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
           details: `Assessed ${formatDate(riskData[0].assessed_at)}. JNC-8 arterial pressure baseline guidelines.`,
         },
       ]
