@@ -52,6 +52,11 @@ from livekit.plugins import openai as openai_plugin
 from livekit.plugins import silero as silero_plugin
 
 try:
+    from livekit.agents import inference as inference_module
+except Exception:
+    inference_module = None
+
+try:
     from livekit.plugins import sarvam as sarvam_plugin
 except Exception:  # pragma: no cover
     sarvam_plugin = None
@@ -1724,48 +1729,52 @@ async def entrypoint(ctx: JobContext) -> None:
         no_delay=True,
         endpointing_ms=300,  # end-of-speech detection: 300ms
     )
-    groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
+    # ── LLM CHAIN: Gemini (Primary) -> Groq (Fallback) -> LiveKit Inference (Tertiary) ──
+    # 1. Primary: Direct Google Gemini (1,000,000 TPM limit on free tier, supports tool calling + Hindi)
+    google_model = os.getenv("GOOGLE_LLM_MODEL", "gemini-2.5-flash").strip()
     gemini_llm = google_plugin.LLM(
-        model=os.getenv("GOOGLE_LLM_MODEL", "gemini-3-flash-preview"),
+        model=google_model,
         temperature=0.5,
     )
+    active_llms = [gemini_llm]
+
+    # 2. Secondary fallback: Groq (ultra-fast inference ~500ms, fallback when Gemini is busy)
+    groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
     if groq_api_key:
         groq_llm = openai_plugin.LLM(
             base_url="https://api.groq.com/openai/v1",
             api_key=groq_api_key,
-            # MUST support tool calling — this agent has five function tools
-            # (escalate_patient, update_risk_level, update_journey_status,
-            # record_vitals, confirm_vaccination_visit) and Groq rejects the whole
-            # request with 400 "`tool calling` is not supported with this model"
-            # otherwise. That is not a degraded call, it is a silent one: no LLM turn
-            # means no TTS, and the patient hears nothing.
-            #
-            # Measured against this account 2026-08-23, Hindi prompt + a tool schema:
-            #   openai/gpt-oss-120b   ~600ms  tools OK, speaks Hindi   <- chosen
-            #   openai/gpt-oss-20b    ~520ms  tools OK, smaller
-            #   qwen/qwen3.6-27b      ~480ms  tools OK but leaks "<think>" into
-            #                                 content, which TTS reads aloud
-            #   groq/compound-mini      —     400: NO TOOL CALLING
-            #   groq/compound           —     400: NO TOOL CALLING
-            #   llama-3.3-70b-*         —     404: retired by Groq
-            # gpt-oss returns empty content when it calls a tool instead of speaking;
-            # that is correct, not the empty-content failure seen without tools.
             model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
             temperature=0.5,
         )
-        # llm.FallbackAdapter, not a hand-rolled wrapper. The one this replaced only
-        # failed over on 429; Groq retired llama-3.3-70b-versatile and the 404 was
-        # re-raised, so a patient on a live call heard silence for the entire call
-        # while Gemini sat idle and healthy. The library adapter catches APIError,
-        # timeouts and bare exceptions, tracks each LLM's status, and recovers back
-        # to the primary when it returns — none of which the wrapper did.
-        llm_model = llm.FallbackAdapter([groq_llm, gemini_llm])
-        logger.info("FAST PIPELINE LLM: Groq primary -> Gemini fallback")
-    else:
-        logger.warning(
-            "GROQ_API_KEY missing, falling back to Gemini text LLM in FAST pipeline"
+        active_llms.append(groq_llm)
+
+    # 3. Tertiary fallback: LiveKit Cloud Inference (cheapest, high-limit model on LiveKit servers)
+    # Uses existing LIVEKIT_API_KEY and LIVEKIT_API_SECRET with free monthly cloud credits
+    if inference_module:
+        livekit_inf_model = os.getenv("LIVEKIT_INFERENCE_MODEL", "google/gemini-2.5-flash").strip()
+        try:
+            livekit_llm = inference_module.LLM(model=livekit_inf_model)
+            active_llms.append(livekit_llm)
+        except Exception as exc:
+            logger.warning("LiveKit Inference LLM could not be initialized: %s", exc)
+
+    # 4. Optional OpenAI fallback if explicitly configured
+    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if openai_api_key:
+        openai_llm = openai_plugin.LLM(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            temperature=0.5,
         )
-        llm_model = gemini_llm
+        active_llms.append(openai_llm)
+
+    attempt_timeout = float(os.getenv("LLM_ATTEMPT_TIMEOUT", "15.0"))
+    if len(active_llms) > 1:
+        llm_model = llm.FallbackAdapter(active_llms, attempt_timeout=attempt_timeout)
+        chain_names = " -> ".join([getattr(m, "model", type(m).__name__) for m in active_llms])
+        logger.info("FAST PIPELINE LLM chain: %s (attempt_timeout=%ss)", chain_names, attempt_timeout)
+    else:
+        llm_model = active_llms[0]
     # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a runtime
     # failover chain, and deliberately not tts.FallbackAdapter. That adapter takes a
     # list of *already-constructed* instances, so every provider would have to hold
