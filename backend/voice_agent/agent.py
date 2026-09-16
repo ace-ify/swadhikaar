@@ -789,12 +789,21 @@ class SwadhikaarAgent(VoiceAgent):
 
     async def on_enter(self) -> None:
         """Called when the agent joins a room. Set up patient context and start conversation."""
-        room = self.session.room_io.room
-        logger.info("Agent joining room: %s", room.name)
+        room_name = "console"
+        metadata_raw = "{}"
+        try:
+            room = self.session.room_io.room
+            if room:
+                room_name = room.name
+                metadata_raw = room.metadata or "{}"
+        except Exception:
+            room = None
+
+        logger.info("Agent joining room: %s", room_name)
 
         # Parse patient context from room metadata
         try:
-            metadata: dict[str, Any] = json.loads(room.metadata or "{}")
+            metadata: dict[str, Any] = json.loads(metadata_raw)
         except json.JSONDecodeError:
             logger.warning("Invalid room metadata JSON — using defaults.")
             metadata = {}
@@ -815,7 +824,7 @@ class SwadhikaarAgent(VoiceAgent):
             logger.error(
                 "case_taking room %s has no session_id in metadata. The interview will "
                 "run and NOTHING will be persisted.",
-                room.name,
+                room_name,
             )
 
         patient_context: dict[str, str] = {
@@ -913,7 +922,7 @@ class SwadhikaarAgent(VoiceAgent):
 
         logger.info(
             "Agent started — room=%s patient=%s call_type=%s",
-            room.name,
+            room_name,
             patient_name,
             call_type,
         )
@@ -1679,12 +1688,32 @@ async def entrypoint(ctx: JobContext) -> None:
     # transcribe natively.
     stt_language, bcp47_code = LANGUAGES.get(language, ("hi", "hi-IN"))
 
+    # Turn detection configuration:
+    # - "vad" (default): Fast local acoustic VAD via Silero. 0 extra latency, ideal for Indic dialects.
+    # - "semantic": LiveKit End-of-Thought (EOT) TurnDetector. Uses neural audio classification to
+    #   distinguish mid-sentence thinking pauses from completed thoughts before responding.
+    turn_mode = os.getenv("TURN_DETECTION_MODE", "vad").strip().lower()
+    if turn_mode == "semantic" and inference_module:
+        td_version = os.getenv("TURN_DETECTOR_VERSION", "v1").strip()
+        turn_detection_config: Any = inference_module.TurnDetector(version=td_version)
+        min_delay = float(os.getenv("ENDPOINTING_MIN_DELAY", "0.2"))
+        max_delay = float(os.getenv("ENDPOINTING_MAX_DELAY", "1.2"))
+        logger.info(
+            "TURN DETECTION: Semantic (inference.TurnDetector version=%s, min=%ss, max=%ss)",
+            td_version, min_delay, max_delay,
+        )
+    else:
+        turn_detection_config = "vad"
+        min_delay = float(os.getenv("ENDPOINTING_MIN_DELAY", "0.3"))
+        max_delay = float(os.getenv("ENDPOINTING_MAX_DELAY", "0.8"))
+        logger.info("TURN DETECTION: Local Acoustic VAD (min=%ss, max=%ss)", min_delay, max_delay)
+
     session_kwargs: dict[str, Any] = {
         "turn_handling": {
-            "turn_detection": "vad",
+            "turn_detection": turn_detection_config,
             "endpointing": {
-                "min_delay": 0.3,  # respond quickly when user stops speaking
-                "max_delay": 0.8,
+                "min_delay": min_delay,  # respond quickly when turn finishes
+                "max_delay": max_delay,  # allow pause if thought is incomplete
             },
             "interruption": {
                 "enabled": True,
