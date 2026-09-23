@@ -1,21 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import DocumentCaptureModal from "@/components/kiosk/document-capture-modal";
 import { useKioskSpeech } from "@/hooks/use-kiosk-speech";
-
-const LiveAmbulanceMap = dynamic(
-  () => import("@/components/ambulance/live-ambulance-map"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[300px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-400 text-xs">
-        Loading live emergency route and ambulance tracking…
-      </div>
-    ),
-  }
-);
 import {
   Card,
   CardContent,
@@ -52,7 +39,6 @@ import {
 import { Room, RoomEvent, Track } from "livekit-client";
 import {
   AlertTriangle,
-  Ambulance,
   ArrowRight,
   Award,
   Camera,
@@ -343,7 +329,6 @@ export default function KioskPage() {
   >([]);
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
-  const [showEmergencyMap, setShowEmergencyMap] = useState(false);
 
   // Kiosk Auto-Spoken Audio Engine for Low-Literacy Intake
   const {
@@ -836,65 +821,12 @@ export default function KioskPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowEmergencyMap(!showEmergencyMap)}
-                className="bg-white hover:bg-slate-50 text-rose-700 font-semibold px-3 py-1 text-xs border-rose-200 rounded-lg shadow-xs flex items-center gap-1.5"
-              >
-                <Ambulance className="w-3.5 h-3.5" />
-                {showEmergencyMap
-                  ? (lang === "hi" ? "नक्शा छुपाएं" : "Hide Map")
-                  : (lang === "hi" ? "लाइव एम्बुलेंस ट्रैक करें" : "Track Moving Ambulance")}
-              </Button>
               <Badge className="bg-rose-950 text-white font-medium px-2.5 py-0.5 text-xs rounded-md">
-                {lang === "hi" ? "डॉक्टर व एम्बुलेंस अलर्ट सक्रिय" : "Emergency Dispatch Notified"}
+                {lang === "hi" ? "अत्यावश्यक डॉक्टर समीक्षा हेतु चिह्नित" : "Flagged for Urgent Doctor Review"}
               </Badge>
             </div>
           </div>
 
-          {/* Expandable Live Moving Ambulance Emergency Map */}
-          {showEmergencyMap && (
-            <div className="max-w-5xl w-full mx-auto px-6 pt-1 animate-in slide-in-from-top-2">
-              <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950 shadow-sm">
-                <div className="bg-slate-900 text-white p-3.5 px-5 flex items-center justify-between text-xs border-b border-slate-800">
-                  <span className="font-bold text-red-400 flex items-center gap-2">
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                    </span>
-                    {lang === "hi"
-                      ? "कियोस्क की ओर आ रही 108 एम्बुलेंस की लाइव स्थिति"
-                      : "108 Acute Ambulance Telemetry (En Route to MediKiosk)"}
-                  </span>
-                  <span className="text-slate-400 font-mono text-[11px]">
-                    {patientName || "Walk-In Patient"} · Civil Hospital Kiosk #1
-                  </span>
-                </div>
-                <LiveAmbulanceMap
-                  scene={{
-                    lat: 26.8467,
-                    lon: 80.9462,
-                    victimName: patientName || "Kiosk Patient",
-                    severity: "CRITICAL",
-                    address: "Civil Hospital OPD MediKiosk Booth #1, Lucknow",
-                  }}
-                  hospital={{
-                    name: "Dr. Ram Manohar Lohia Trauma Center, Lucknow",
-                    lat: 26.8722,
-                    lon: 80.9912,
-                    bedsAvailable: 8,
-                  }}
-                  unit={{
-                    callSign: "AMB-108-LUCKNOW",
-                    driverName: "Sanjay Yadav",
-                  }}
-                  status="en_route"
-                  height="340px"
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1674,7 +1606,7 @@ export default function KioskPage() {
                             </div>
                             {doc.interactions.map((inter: any, iIdx: number) => (
                               <div key={iIdx} className="text-xs text-rose-800 pl-5 leading-relaxed font-medium">
-                                • <span className="font-bold">{inter.drugA} + {inter.drugB}</span>: {inter.effect}
+                                • <span className="font-bold">{inter.drugA} + {inter.drugB}</span>: {inter.warning}
                               </div>
                             ))}
                           </div>
@@ -1806,10 +1738,10 @@ export default function KioskPage() {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 font-semibold text-sm text-slate-900 dark:text-white">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>{lang === "hi" ? "ABDM FHIR R4 बंडल तैयार!" : "ABDM NRCES FHIR R4 Bundle Ready!"}</span>
+                      <span>{lang === "hi" ? "FHIR R4 बंडल तैयार (ड्राफ्ट — ABDM को सबमिट नहीं)" : "FHIR R4 Bundle Ready (draft — not submitted to ABDM)"}</span>
                     </div>
                     <div className="text-xs text-slate-500 font-mono">
-                      Ref: {abdmExportResult.abdm_reference} • {abdmExportResult.resource_count} Resources
+                      Local bundle: {abdmExportResult.abdm_reference} • {abdmExportResult.resource_count} Resources
                     </div>
                   </div>
                   <Button

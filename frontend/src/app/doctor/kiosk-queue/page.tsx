@@ -1,19 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import dynamic from "next/dynamic";
-
-const LiveAmbulanceMap = dynamic(
-  () => import("@/components/ambulance/live-ambulance-map"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[320px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-400 text-xs">
-        Loading live emergency route and ambulance tracking…
-      </div>
-    ),
-  }
-);
 import {
   Card,
   CardContent,
@@ -42,7 +29,6 @@ import {
   CheckCircle2,
   XCircle,
   Edit3,
-  Ambulance,
   FileDown,
   Stethoscope,
   Clock,
@@ -195,7 +181,6 @@ export default function DoctorKioskQueuePage() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [exportingFhir, setExportingFhir] = useState(false);
   const [escalatingAmbulance, setEscalatingAmbulance] = useState(false);
-  const [showAmbulanceTracker, setShowAmbulanceTracker] = useState(false);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -855,15 +840,6 @@ export default function DoctorKioskQueuePage() {
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
                         size="sm"
-                        variant="outline"
-                        onClick={() => setShowAmbulanceTracker(!showAmbulanceTracker)}
-                        className="bg-white hover:bg-rose-50 border-rose-200 text-rose-800 font-medium text-xs rounded-lg h-8 px-3 shadow-2xs transition-colors"
-                      >
-                        <Ambulance className="w-3.5 h-3.5 mr-1.5 text-rose-600" />
-                        {showAmbulanceTracker ? "Hide Tracker" : "Track Moving Ambulance"}
-                      </Button>
-                      <Button
-                        size="sm"
                         onClick={handleEmergencyDispatch}
                         disabled={escalatingAmbulance}
                         className="bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs rounded-lg h-8 px-3.5 shadow-xs transition-colors"
@@ -874,46 +850,6 @@ export default function DoctorKioskQueuePage() {
                   </div>
                 )}
 
-                {/* Live Moving Ambulance Tracker Panel */}
-                {selectedSession.red_flag && showAmbulanceTracker && (
-                  <div className="p-4 border border-rose-500/30 bg-slate-950 rounded-xl animate-in slide-in-from-top-2 space-y-2">
-                    <div className="flex items-center justify-between pb-1 text-xs">
-                      <span className="font-bold text-rose-400 flex items-center gap-2">
-                        <span className="relative flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span>
-                        </span>
-                        Live Moving Ambulance Telemetry (En Route to Kiosk)
-                      </span>
-                      <span className="text-slate-400 font-mono text-[11px]">
-                        Patient: {selectedSession.patient?.name || "Walk-In Patient"}
-                      </span>
-                    </div>
-                    <div className="rounded-xl overflow-hidden border border-slate-800">
-                      <LiveAmbulanceMap
-                        scene={{
-                          lat: (selectedSession.patient as any)?.lat || 26.1445,
-                          lon: (selectedSession.patient as any)?.lon || 91.7362,
-                          victimName: selectedSession.patient?.name || "Walk-In Patient",
-                          severity: "CRITICAL",
-                          address: (selectedSession.patient as any)?.village || "MediKiosk Intake Booth",
-                        }}
-                        hospital={{
-                          name: "AIIA / GMCH Emergency Trauma Ward",
-                          lat: 26.1554,
-                          lon: 91.7745,
-                          bedsAvailable: 8,
-                        }}
-                        unit={{
-                          callSign: "AMB-108-DISPUR",
-                          driverName: "Pranab Barman",
-                        }}
-                        status="en_route"
-                        height="320px"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Navigation Tabs Bar */}

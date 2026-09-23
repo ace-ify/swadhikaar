@@ -96,7 +96,7 @@ export default function AbhaCard({
       mobile,
       blood_group: bloodGroup,
       kyc_verified: kycVerified,
-      issuer: "National Health Authority, Ministry of Health & Family Welfare, Govt. of India",
+      issuer: "SIMULATED demo card — not issued by the National Health Authority",
       issued_at: new Date().toISOString(),
     };
 
@@ -216,7 +216,7 @@ export default function AbhaCard({
               <SvgQrCode value={`https://abdm.gov.in/profile/${abhaNumber}`} size={104} />
               <div className="mt-1.5 flex items-center gap-1 text-[9px] font-mono font-semibold text-slate-500">
                 <QrCode className="size-2.5" />
-                SCAN TO VERIFY
+                DEMO · NOT VERIFIABLE
               </div>
             </div>
           </div>

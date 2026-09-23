@@ -542,7 +542,7 @@ export default function PatientRecordsPage() {
                 Prescriptions &amp; Digitised Lab Reports
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Extracted via MediKiosk Vision AI OCR with 24-point drug-interaction cross checks against Indian Pharmacopoeia
+                Extracted via MediKiosk Vision AI OCR, with an advisory drug-drug interaction check (16-rule heuristic — not a substitute for pharmacist review)
               </p>
             </div>
             <Badge variant="outline" className="font-mono text-xs border-slate-300 dark:border-slate-700">
@@ -583,7 +583,7 @@ export default function PatientRecordsPage() {
                     {/* Safety Alert Ribbon */}
                     <div className="flex items-center gap-2 rounded-lg border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/30 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-300">
                       <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span>Drug Safety Screen: 0 contraindications or severe drug-drug interactions detected across extracted items.</span>
+                      <span>Drug-interaction screening runs at scan time and is advisory only. Always confirm your medicines with your doctor or pharmacist.</span>
                     </div>
 
                     {/* Extracted Entities Table */}

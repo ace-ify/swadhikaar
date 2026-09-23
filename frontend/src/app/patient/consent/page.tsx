@@ -26,11 +26,14 @@ function formatDate(iso: string) {
   });
 }
 
-// Supabase `scope` field used as a proxy for mandatory status
-// (consents with scope "core" or "mandatory" are treated as non-revokable in the UI)
+// A consent is mandatory (non-revocable) when its PURPOSE is one the service
+// cannot run without. The kiosk writes the required consent with purpose
+// "collect_history" (the only CONSENT_OPTIONS entry marked required) and
+// scope "case_session" — so the old `scope === "mandatory"|"core"` check never
+// matched and every consent rendered as revocable. Key off purpose instead.
+const MANDATORY_CONSENT_PURPOSES = new Set(["collect_history"]);
 function isMandatory(consent: Consent) {
-  const scope = (consent.scope ?? "").toLowerCase();
-  return scope === "mandatory" || scope === "core";
+  return MANDATORY_CONSENT_PURPOSES.has((consent.purpose ?? "").toLowerCase());
 }
 
 export default function PatientConsentPage() {

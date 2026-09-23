@@ -10,14 +10,14 @@
 **Swadhikaar** is a unified, voice-first clinical operating system designed for India's public health frontline — Primary Health Centres (PHCs), District Civil Hospitals, and rural health kiosks. It bridges:
 1. **Low-Literacy & Vernacular Walk-In Intake** (zero-touch hands-free voice in Hindi/English/Hinglish).
 2. **Holistic Dual-Engine Clinical Triage** (Allopathic Red-Flag safety DAG + Classical Ayush *Dashavidha Pariksha*).
-3. **Vision AI Prescription Digitization** (Gemini Vision OCR + 24-point drug interaction checker).
+3. **Vision AI Prescription Digitization** (Gemini Vision OCR + advisory 16-rule drug-drug interaction checker).
 4. **Acute Emergency Response** (telemetry-tracked live moving ambulance dispatch).
 5. **Community Health Trends & Outbreak Surveillance** (real-time epidemiological intelligence from medical reporting data).
 6. **National Health Infrastructure Interoperability** (Ayushman Bharat Digital Mission - ABHA Card & FHIR R4).
 
 ---
 
-## 2. All 5 Problem Statements (Chronological Log)
+## 2. All 7 Problem Statements (Chronological Log — active focus: PS-01 & PS-02)
 
 ### Problem Statement 1: SIH26047 — Ministry of Ayush / AIIA
 - **Source**: [https://ace-ify.github.io/sih-hub/ps/SIH26047/](https://ace-ify.github.io/sih-hub/ps/SIH26047/)
@@ -53,13 +53,33 @@
   - Emphasize **Responsible AI** (verified clinical protocols vs LLM hallucinations).
   - Highlight **Digital Inclusion** through the hands-free voice interface.
 
+### Problem Statement 6 (New Idea Track): PS-01 — Prescription Understanding Agent
+- **Source**: Healthcare Hackathon Track 2026 (Healthtech Beyond Fitness)
+- **Core Challenge**: Patients often leave OPD visits with handwritten or abbreviated prescriptions and struggle to understand medicine names, dosage, frequency, and timing.
+- **Mandate**: Assistive AI system that converts prescriptions into a clear, patient-friendly medication schedule after human verification.
+  - *Flow*: Prescription image → Medicine & instruction extraction → User/Human verification step → Dosage/timing schedule → Patient/caregiver plan.
+  - *MVP / Outcomes*: Prescription upload, medicine/instruction extraction, human verification step, daily medication schedule, patient-friendly explanation, caregiver/shareable view.
+  - *Bonus*: Hindi/Indic languages, voice instructions, pictograms (morning/afternoon/night), missed-dose tracking, reminder workflow.
+  - *Constraint*: The system must NOT diagnose diseases or recommend new medicines.
+- **Swadhikaar Alignment**: Direct extension of Swadhikaar Track 1 (Gemini Vision OCR & advisory 16-rule drug-drug interaction checker).
+
+### Problem Statement 7 (New Idea Track): PS-02 — PM-JAY Hospital Readiness Agent
+- **Source**: Healthcare Hackathon Track 2026 (Healthtech Beyond Fitness)
+- **Core Challenge**: PM-JAY (Ayushman Bharat) beneficiaries know they are entitled to healthcare support but struggle to understand which hospital to visit, what documents to carry, and what to expect during the hospital process.
+- **Mandate**: AI-assisted hospital-readiness tool taking patient location & care requirements to generate a practical preparation plan using PM-JAY dataset.
+  - *Flow*: Location + Care requirement → Suitable empaneled hospitals → Required documents checklist → Hospital visit workflow & steps → Preparation checklist.
+  - *MVP / Outcomes*: Patient/location profile, hospital information source, specialty-based filtering, document checklist, hospital visit workflow, plain-language PM-JAY guidance.
+  - *Bonus*: Hindi/Indic language, voice assistant, ASHA/caregiver mode, map-based navigation, bounded RAG over official PM-JAY documents.
+  - *Constraint*: No claims processing, medical diagnosis, or unsupported eligibility/coverage decisions.
+  - **Swadhikaar Alignment**: 100% philosophical & technical match with Swadhikaar's Tricolor ABHA Digital Health Card, citizen rights orientation, and Indic voice intake.
+
 ---
 
 ## 3. The 5 Polish & Implementation Tracks
 
 | Track | Title | Description & Delivered Capabilities | Primary PS Source |
 | :---: | :--- | :--- | :--- |
-| **Track 1** | **Live Camera & Vision AI OCR + Drug Interaction Checker** | Replaced mock text with live camera capture / file drag-and-drop powered by **Google Gemini Vision AI** (`gemini-2.5-flash`). Extracts medications, dosages, lab analytes, and runs a **24-point drug-drug interaction & allergy safety engine**. Synced across Kiosk, Doctor Queue, and Patient Portal. | SIH26047 |
+| **Track 1** | **Live Camera & Vision AI OCR + Drug Interaction Checker** | Replaced mock text with live camera capture / file drag-and-drop powered by **Google Gemini Vision AI** (`gemini-2.5-flash`). Extracts medications, dosages, lab analytes, and runs an **advisory 16-rule drug-drug interaction checker** (curated pairs; no allergy engine, not pharmacopoeia-sourced). Synced across Kiosk, Doctor Queue, and Patient Portal. | SIH26047 |
 | **Track 2** | **Hands-Free Auto-Spoken Audio Intake (`useKioskSpeech`)** | Automated speech synthesis and recognition engine in Hindi and English. Speaks intake questions out loud for illiterate/elderly walk-ins, captures spoken responses, speaks audio confirmations, and advances zero-touch. | Rime PS & Lenovo LEAP (Theme 2) |
 | **Track 3** | **Live Moving Ambulance Map on Emergency Dispatch** | High-fidelity Leaflet map (`LiveAmbulanceMap`) with animated vehicle traveling along road geometry, live telemetry HUD (speed, distance, ETA countdown), flashing emergency strobe beacon, and real-time synchronization across `/admin/dispatch`, `/doctor/kiosk-queue`, and `/patient/sos`. | IIT Guwahati (psadditional) |
 | **Track 4** | **Official Tricolor ABHA Card & ABDM Sandbox Simulator** | Authentic NHA Ayushman Bharat Digital Health Card with national tricolor emblem, QR code, and KYC badge. Interactive sandbox simulator executing NHA Milestones **M1, M2, and M3** with expandable FHIR R4 JSON bundle viewer. | SIH26133 |
@@ -89,6 +109,8 @@
 ---
 
 ## 5. Prototype & Demo Screenshots Checklist for Presentations
+
+> ⚠️ **Screenshots are NOT yet committed to `docs/screenshots/`.** The links below are placeholders pending capture; the "Status" column is aspirational, not verified. Do not present these as captured evidence until the PNGs exist.
 
 | Screen / Feature | Route / Location | Repository File Link | Status |
 | :--- | :--- | :--- | :--- |

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-// Comprehensive 24-Point Drug-Drug Interaction Rules
+// Drug-Drug Interaction Rules — 16 curated pairs, advisory heuristic (NOT sourced from a pharmacopoeia)
 interface DrugInteractionRule {
   drugA: string;
   drugB: string;
@@ -383,7 +383,7 @@ Return a STRICT JSON object (no markdown formatting, no code block) with the fol
       };
     }
 
-    // 3. Run 24-Point Drug-Drug Interaction Checker
+    // 3. Run advisory drug-drug interaction check (16-rule heuristic)
     const medicationNames = (parsedResult.medications || []).map((m: any) => m.name);
     const interactions = checkDrugInteractions(medicationNames);
 

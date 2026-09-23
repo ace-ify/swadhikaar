@@ -341,7 +341,7 @@ export default function DocumentCaptureModal({
                 {lang === "hi" ? "जेमिनी विज़न एआई दस्तावेज़ पढ़ रहा है…" : "Gemini Vision AI analyzing medical text…"}
               </div>
               <p className="text-xs text-slate-400">
-                Extracting medications, strengths, dosages &amp; running 24-point interaction check
+                Extracting medications, strengths, dosages &amp; running an advisory drug-interaction check
               </p>
             </div>
           )}
@@ -361,7 +361,7 @@ export default function DocumentCaptureModal({
                 </div>
                 <Badge variant="outline" className="border-emerald-500 text-emerald-300 text-[10px] gap-1">
                   <CheckCircle2 className="size-3 text-emerald-400" />
-                  <span>Verified by AI</span>
+                  <span>AI-extracted · verify below</span>
                 </Badge>
               </div>
 
@@ -370,7 +370,7 @@ export default function DocumentCaptureModal({
                 <div className="rounded-lg border border-amber-500/80 bg-amber-950/50 p-3.5 text-xs text-amber-200 space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-amber-400">
                     <AlertTriangle className="size-4" />
-                    <span>24-Point Drug-Drug Interaction Warning Detected!</span>
+                    <span>Possible drug interaction — review with your doctor/pharmacist</span>
                   </div>
                   {ocrResult.interactions.map((inter: any, idx: number) => (
                     <div key={idx} className="text-[11px] leading-relaxed">
