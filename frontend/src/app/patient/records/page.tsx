@@ -23,6 +23,7 @@ import { usePatients, useVitals, useRiskAssessments, useFHIRResources } from "@/
 import { createClient } from "@/lib/supabase";
 import AbhaCard from "@/components/abdm/abha-card";
 import AbdmGatewaySimulator from "@/components/abdm/abdm-gateway-simulator";
+import { MedicationSchedulePlan } from "@/components/kiosk/medication-schedule";
 
 import {
   FileText,
@@ -585,6 +586,22 @@ export default function PatientRecordsPage() {
                       <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span>Drug-interaction screening runs at scan time and is advisory only. Always confirm your medicines with your doctor or pharmacist.</span>
                     </div>
+
+                    {/* Patient-friendly medication schedule (derived from the stored frequency) */}
+                    {doc.document_entities && doc.document_entities.some((e: any) => e.entity_type === "medication") && (
+                      <MedicationSchedulePlan
+                        lang="en"
+                        trackDoses
+                        medications={doc.document_entities
+                          .filter((e: any) => e.entity_type === "medication")
+                          .map((e: any) => ({
+                            name: e.entity_name,
+                            dosage: e.dosage_or_value,
+                            frequency: e.frequency,
+                            instructions: e.instructions,
+                          }))}
+                      />
+                    )}
 
                     {/* Extracted Entities Table */}
                     {doc.document_entities && doc.document_entities.length > 0 ? (

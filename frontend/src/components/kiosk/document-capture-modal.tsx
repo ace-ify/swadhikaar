@@ -13,12 +13,13 @@ import {
   Sparkles,
   RefreshCw,
   X,
-  Pill,
   Activity,
   ScanLine,
   Stethoscope,
 } from "lucide-react";
 import { toast } from "sonner";
+import { MedicationScheduleReview, type ReviewedMedication } from "./medication-schedule";
+import { scheduleToCanonicalFrequency } from "@/lib/clinical/frequency";
 
 export interface DocumentCaptureModalProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ export default function DocumentCaptureModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<any | null>(null);
+  const [verifiedMeds, setVerifiedMeds] = useState<ReviewedMedication[]>([]);
+  const [scanSeq, setScanSeq] = useState(0);
 
   // Camera stream refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -127,6 +130,7 @@ export default function DocumentCaptureModal({
   const processOcr = async (payload: { image_base64?: string; sample_preset?: string }) => {
     setIsProcessing(true);
     setOcrResult(null);
+    setScanSeq((n) => n + 1);
     try {
       const res = await fetch("/api/ocr", {
         method: "POST",
@@ -167,10 +171,26 @@ export default function DocumentCaptureModal({
       entities:
         (ocrResult.parsed.medications?.length || 0) +
         (ocrResult.parsed.lab_results?.length || 0),
-      medications: ocrResult.parsed.medications,
+      medications: verifiedMeds.length ? verifiedMeds : ocrResult.parsed.medications,
       labResults: ocrResult.parsed.lab_results,
       interactions: ocrResult.interactions,
     });
+    // Persist the verified schedule so patient/records reflects the correction later.
+    if (ocrResult.document_id && verifiedMeds.length) {
+      fetch("/api/verify-medications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document_id: ocrResult.document_id,
+          medications: verifiedMeds.map((m) => ({
+            match_name: m.originalName,
+            name: m.name,
+            dosage: m.dosage,
+            frequency: scheduleToCanonicalFrequency(m.schedule),
+          })),
+        }),
+      }).catch(() => {});
+    }
     onClose();
   };
 
@@ -380,28 +400,14 @@ export default function DocumentCaptureModal({
                 </div>
               )}
 
-              {/* Extracted Medications */}
+              {/* Extracted Medications — editable schedule + human verification */}
               {ocrResult.parsed.medications && ocrResult.parsed.medications.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <Pill className="size-3.5 text-sky-400" />
-                    <span>Extracted Medications ({ocrResult.parsed.medications.length})</span>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {ocrResult.parsed.medications.map((med: any, i: number) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 text-xs space-y-0.5"
-                      >
-                        <div className="font-bold text-slate-100">{med.name}</div>
-                        <div className="font-mono text-sky-400 text-[11px]">
-                          {med.dosage} · {med.frequency}
-                        </div>
-                        <div className="text-slate-400 text-[10px]">{med.instructions}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <MedicationScheduleReview
+                  key={scanSeq}
+                  medications={ocrResult.parsed.medications}
+                  lang={lang}
+                  onChange={setVerifiedMeds}
+                />
               )}
 
               {/* Extracted Lab Analytes */}

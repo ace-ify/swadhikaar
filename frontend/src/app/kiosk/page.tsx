@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import DocumentCaptureModal from "@/components/kiosk/document-capture-modal";
+import { MedicationSchedulePlan } from "@/components/kiosk/medication-schedule";
 import { useKioskSpeech } from "@/hooks/use-kiosk-speech";
 import {
   Card,
@@ -1573,23 +1574,10 @@ export default function KioskPage() {
                           </span>
                         </div>
 
-                        {/* Extracted Medications chips */}
+                        {/* Confirmed medication schedule (pictogram plan + voice) */}
                         {doc.medications && doc.medications.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-                              Extracted Rx
-                            </div>
-                            <div className="flex flex-wrap gap-1.5">
-                              {doc.medications.map((med: any, mIdx: number) => (
-                                <span
-                                  key={mIdx}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-900 border border-sky-200/80 shadow-xs"
-                                >
-                                  <span>{med.name}</span>
-                                  {med.dosage && <span className="text-sky-600 font-mono text-[11px]">({med.dosage})</span>}
-                                </span>
-                              ))}
-                            </div>
+                          <div className="pt-1">
+                            <MedicationSchedulePlan medications={doc.medications} lang={lang} />
                           </div>
                         )}
 
