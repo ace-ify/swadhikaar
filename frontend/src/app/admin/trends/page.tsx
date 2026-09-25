@@ -65,6 +65,10 @@ interface DistrictSurveillance {
 }
 
 const UP_DISTRICTS_DATA: DistrictSurveillance[] = [
+  { district: "Gadchiroli", division: "Nagpur (Maharashtra)", activeKiosks: 12, totalConsultations: 401, dominantSyndrome: "Acute Febrile Illness (Suspected Malaria/Dengue)", syndromeCategory: "febrile", riskLevel: "critical", velocityChange: 33.7, anomalyDetected: true, anomalyDescription: "Febrile cluster with thrombocytopenia across Bhamragad & Etapalli tribal blocks; poor road access", ncdRiskIndex: 29.4, voiceAdoptionRate: 82.1, coordinates: [20.1809, 80.0034], primaryIntervention: "Fogging & rapid malaria kits to Bhamragad; pre-position ORS/IV at MJPJAY-empanelled CHC Gadchiroli." },
+  { district: "Nandurbar", division: "Nashik (Maharashtra)", activeKiosks: 7, totalConsultations: 238, dominantSyndrome: "Pediatric Lower Respiratory Infection (Tribal Belt)", syndromeCategory: "respiratory", riskLevel: "elevated", velocityChange: 21.4, anomalyDetected: true, anomalyDescription: "Rise in under-5 breathlessness across Akkalkuwa & Dhadgaon; high antenatal follow-up drop-off", ncdRiskIndex: 27.8, voiceAdoptionRate: 79.6, coordinates: [21.3667, 74.2404], primaryIntervention: "Mobilise ASHA/ANM with pulse oximeters; auto-schedule maternal follow-up recalls in Marathi; reserve pediatric beds." },
+  { district: "Nagpur", division: "Nagpur (Maharashtra)", activeKiosks: 10, totalConsultations: 356, dominantSyndrome: "Early Hypertension & Glycemic Irregularity", syndromeCategory: "metabolic", riskLevel: "moderate", velocityChange: 6.2, anomalyDetected: false, anomalyDescription: "Routine walk-in screening capturing pre-hypertensive markers in peri-urban cohorts", ncdRiskIndex: 45.9, voiceAdoptionRate: 74.8, coordinates: [21.1458, 79.0882], primaryIntervention: "Weekly lifestyle & dietary counselling at PHCs; link pre-hypertensive cohort to MJPJAY chronic-care pathway." },
+  { district: "Pune (Rural)", division: "Pune (Maharashtra)", activeKiosks: 9, totalConsultations: 311, dominantSyndrome: "Acute Respiratory & Seasonal Influenza", syndromeCategory: "respiratory", riskLevel: "elevated", velocityChange: 12.9, anomalyDetected: false, anomalyDescription: "Seasonal respiratory rise in Ambegaon & Junnar rural blocks", ncdRiskIndex: 38.2, voiceAdoptionRate: 76.3, coordinates: [18.5204, 73.8567], primaryIntervention: "Stock salbutamol & masks at rural PHCs; issue advisory via ASHA voice broadcast." },
   {
     district: "Lucknow",
     division: "Lucknow",
@@ -223,9 +227,9 @@ export default function CommunityHealthTrendsPage() {
   const handleExportReport = () => {
     const report = {
       reporting_agency: "Swadhikaar Clinical OS — Public Health Intelligence Unit",
-      state: "Uttar Pradesh",
-      monitoring_headquarters: "AKTU Lucknow Campus Catchment",
-      alignment: "IndiaAI Mission & IDSP National Surveillance Protocol",
+      states: "Maharashtra (lead), Uttar Pradesh, Bihar, Assam",
+      monitoring_headquarters: "Maharashtra State Innovation Society (MSInS) pilot",
+      alignment: "IDSP National Surveillance & Maharashtra IHIP",
       generated_at: new Date().toISOString(),
       time_window: timeRange,
       total_consultations: totalAnalyzedConsultations,
@@ -263,15 +267,15 @@ export default function CommunityHealthTrendsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Lenovo LEAP 2026 • Theme 3: Healthcare Tech
+              Multi-state pilot • Maharashtra-led
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
               <Sparkles className="h-3 w-3 text-slate-500" />
-              IndiaAI Mission Engine
+              IDSP / Maharashtra IHIP
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
               <MapPin className="h-3 w-3 text-slate-500" />
-              AKTU Lucknow Catchment
+              Maharashtra • UP • Bihar • Assam
             </span>
           </div>
 
@@ -279,7 +283,7 @@ export default function CommunityHealthTrendsPage() {
             Community Health Trends &amp; Outbreak Surveillance
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Synthesizing real-time epidemiological intelligence from walk-in MediKiosks, doctor consultations, and vernacular Hindi voice intakes across Uttar Pradesh districts.
+            Synthesizing real-time epidemiological intelligence from walk-in MediKiosks, doctor consultations, and vernacular voice intakes across Maharashtra, UP, Bihar &amp; Assam districts.
           </p>
         </div>
 
@@ -291,7 +295,7 @@ export default function CommunityHealthTrendsPage() {
             onClick={() => {
               setSimulationSurge(!simulationSurge);
               if (!simulationSurge) {
-                toast.error("Simulated Outbreak Triggered: +38.4% Febrile Pyrexia Surge in Mohanlalganj, Lucknow!");
+                toast.error("Simulated Outbreak Triggered: +38.4% Febrile Pyrexia Surge in Bhamragad, Gadchiroli!");
               } else {
                 toast.info("Surge simulation reset to baseline telemetry.");
               }
@@ -320,7 +324,7 @@ export default function CommunityHealthTrendsPage() {
             <Filter className="h-3.5 w-3.5" /> District Focus:
           </span>
           <div className="flex gap-1.5 shrink-0">
-            {["All", "Lucknow", "Barabanki", "Kanpur Nagar", "Varanasi", "Gorakhpur", "Prayagraj", "Ayodhya"].map((d) => (
+            {["All", "Gadchiroli", "Nandurbar", "Nagpur", "Pune (Rural)", "Lucknow", "Barabanki", "Kanpur Nagar", "Varanasi", "Gorakhpur", "Prayagraj", "Ayodhya"].map((d) => (
               <button
                 key={d}
                 onClick={() => setSelectedDistrict(d)}
@@ -403,7 +407,7 @@ export default function CommunityHealthTrendsPage() {
               )}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
-              Mohanlalganj (Lucknow) &amp; Fatehpur (Barabanki)
+              Bhamragad (Gadchiroli) &amp; Akkalkuwa (Nandurbar)
             </p>
           </div>
         </div>
@@ -439,7 +443,7 @@ export default function CommunityHealthTrendsPage() {
               {avgVoiceAdoption}%
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
-              Hands-free voice in Hindi &amp; Awadhi (Theme 2)
+              Hands-free voice in Marathi, Hindi &amp; regional
             </p>
           </div>
         </div>
@@ -450,7 +454,7 @@ export default function CommunityHealthTrendsPage() {
         <TabsList className="inline-flex h-9 items-center justify-start rounded-lg bg-slate-100 dark:bg-slate-800 p-1 text-slate-500 border border-slate-200 dark:border-slate-700">
           <TabsTrigger value="matrix" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
             <MapPin className="h-3.5 w-3.5" />
-            UP District Matrix
+            District Surveillance Matrix
           </TabsTrigger>
           <TabsTrigger value="curves" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
             <TrendingUp className="h-3.5 w-3.5" />
@@ -458,7 +462,7 @@ export default function CommunityHealthTrendsPage() {
           </TabsTrigger>
           <TabsTrigger value="lifestyle" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
             <HeartPulse className="h-3.5 w-3.5" />
-            Lifestyle &amp; Habits (PS 2)
+            Lifestyle &amp; Habits
           </TabsTrigger>
           <TabsTrigger value="advisory" className="rounded-md px-3 py-1 text-xs font-medium gap-1.5 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-foreground data-[state=active]:shadow-xs">
             <BrainCircuit className="h-3.5 w-3.5" />
@@ -637,7 +641,7 @@ export default function CommunityHealthTrendsPage() {
                       />
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      Patients self-navigating kiosk hands-free in Hindi/Awadhi
+                      Patients self-navigating kiosk hands-free in Marathi/Hindi
                     </div>
                   </div>
 
@@ -790,7 +794,7 @@ export default function CommunityHealthTrendsPage() {
                 <div>
                   <h3 className="text-lg font-bold text-foreground">Ayush Dashavidha Lifestyle Factor Profiling</h3>
                   <p className="text-xs text-muted-foreground">
-                    Structured preventive evaluation captured during walk-in kiosk triage (Lenovo LEAP PS 2).
+                    Structured preventive evaluation captured during walk-in kiosk triage.
                   </p>
                 </div>
               </div>

@@ -48,8 +48,8 @@ export default function MapPage() {
           Operations Map
         </h1>
         <p className="text-sm font-medium text-muted-foreground">
-          Enrolled patients, health facilities and open escalations across Bihar and
-          Assam.
+          Enrolled patients, health facilities and open escalations across Maharashtra,
+          Bihar and Assam.
         </p>
       </div>
 
