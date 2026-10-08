@@ -537,6 +537,15 @@ export default function PatientRecordsPage() {
       {/* Tab 2: Scanned Prescriptions & OCR Medications */}
       {activeTab === "prescriptions" && (
         <div className="space-y-4">
+          <a
+            href="/patient/pmjay"
+            className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/20 p-3.5 hover:bg-emerald-100/60 dark:hover:bg-emerald-950/40 transition-colors"
+          >
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-white">Need hospital care? Find a PM-JAY hospital →</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">Empanelled hospitals near you, documents to carry &amp; what to expect</div>
+            </div>
+          </a>
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white font-heading">

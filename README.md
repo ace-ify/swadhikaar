@@ -8,7 +8,22 @@ The system combines:
 - role-based clinical operations dashboards,
 - healthcare workflow tracking and audit trails.
 
+## Scope
+
+Swadhikaar models a citizen's **care lifecycle** — intake → understand → access → emergency → continuity — as one voice-first, bilingual platform. The lifecycle pillars:
+
+- **Walk-in intake** (kiosk + clinical case-taking) and **longitudinal records / ABDM FHIR R4** — the shared spine.
+- **PS-01 — Prescription Understanding:** OCR → human-verified → daily medication schedule (pictograms, plain language, voice read-back), caregiver share, calendar reminders, missed-dose tracking.
+- **PS-02 — PM-JAY Hospital Readiness:** location + care need → empanelled hospitals (real NHA data) → documents checklist → visit steps → plain-language guidance, with voice, caregiver/ASHA mode, map directions, and a citation-grounded "ask about PM-JAY" assistant.
+- **Emergency response (EOS):** acute SOS → ambulance dispatch → receiving-facility seam → recovery follow-up. A core pillar — acute care — pilot-tested, and it hands a closed emergency back into the continuity layer.
+
+**PS-01 and PS-02 are the two pillars built to full depth in this cycle** (complete MVP + bonuses, tested); the intake/records/voice spine and EOS are the surrounding lifecycle they connect into.
+
+**Supporting / illustrative** (retained for continuity, not core deliverables; some use simulated data, labelled as such): community-health trends, environmental/agri advisories, ASHA field screening, vaccination tracking.
+
 ## Table of Contents
+
+- [Scope](#scope)
 
 - [Overview](#overview)
 - [Architecture](#architecture)

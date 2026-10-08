@@ -12,6 +12,7 @@ import {
   PhoneCall,
   ShieldCheck,
   HeartPulse,
+  Hospital,
   Stethoscope,
   Users,
   BrainCircuit,
@@ -62,6 +63,7 @@ const navByRole: Record<string, NavItem[]> = {
     { label: "My Records", href: "/patient/records", icon: ClipboardList, group: "After care" },
     { label: "Call History", href: "/patient/calls", icon: PhoneCall, group: "After care" },
     { label: "Consent", href: "/patient/consent", icon: ShieldCheck, group: "After care" },
+    { label: "PM-JAY Hospitals", href: "/patient/pmjay", icon: Hospital, group: "Access care" },
   ],
   doctor: [
     { label: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
