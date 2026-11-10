@@ -22,6 +22,10 @@ import {
   Pill,
   Hospital,
   ShieldAlert,
+  Globe,
+  ChevronDown,
+  SquarePen,
+  Siren,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,8 +69,23 @@ const RESET_MESSAGES: Record<LanguageMode, string> = {
   en: "Hello Ramesh ji! New session started. What would you like to check or consult today?",
 };
 
+const LANGUAGE_OPTIONS: { code: LanguageMode; label: string; sub: string }[] = [
+  { code: "hi", label: "Hinglish", sub: "Hindi + English (Shivani)" },
+  { code: "ta", label: "Tanglish", sub: "Tamil + English (Lakshmi)" },
+  { code: "bn", label: "Benglish", sub: "Bengali + English (Riyaa)" },
+  { code: "en", label: "English", sub: "Indian English (Shivani)" },
+];
+
+const LANGUAGE_LABELS: Record<LanguageMode, string> = {
+  hi: "Hinglish",
+  ta: "Tanglish",
+  bn: "Benglish",
+  en: "English",
+};
+
 export default function PatientChatGPTPage() {
   const [lang, setLang] = useState<LanguageMode>("hi");
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"chat" | "voice">("chat");
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [audioLevel, setAudioLevel] = useState(0);
@@ -90,6 +109,18 @@ export default function PatientChatGPTPage() {
   const biomarkerAnalyzerRef = useRef<VocalBiomarkersAnalyzer | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close language menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -494,17 +525,8 @@ export default function PatientChatGPTPage() {
           <div className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold text-sm tracking-tight text-foreground">
-              {lang === "ta"
-                ? "Sahara AI (சகாரா)"
-                : lang === "bn"
-                ? "Sahara AI (সাহারা)"
-                : lang === "hi"
-                ? "सहारा AI"
-                : "Sahara Health AI"}
+              Sahara AI
             </span>
-            <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 text-teal-400 border-teal-500/30">
-              Gnani Voice
-            </Badge>
           </div>
 
           <div className="h-4 w-px bg-border/60 mx-1 hidden sm:block" />
@@ -514,106 +536,105 @@ export default function PatientChatGPTPage() {
             <button
               type="button"
               onClick={() => setViewMode("chat")}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium transition-all ${
                 viewMode === "chat"
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <MessageSquare className="h-3 w-3" />
-              <span>{lang === "ta" ? "சாட்" : lang === "bn" ? "চ্যাট" : lang === "hi" ? "चैट" : "Chat"}</span>
+              <span>Chat</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("voice")}
-              className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium transition-all ${
                 viewMode === "voice"
                   ? "bg-teal-600 text-white shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Headphones className="h-3 w-3" />
-              <span>{lang === "ta" ? "வாய்ஸ்" : lang === "bn" ? "ভয়েস" : lang === "hi" ? "वॉयस" : "Voice"}</span>
+              <span>Voice</span>
             </button>
           </div>
         </div>
 
-        {/* Right: Controls (Language, New Chat, SOS) */}
+        {/* Right: Controls (Language Dropdown, New Chat, SOS) */}
         <div className="flex items-center gap-2">
           {/* Fall Alert Test */}
           <button
             type="button"
             onClick={() => setFallAlertOpen(true)}
-            className="hidden md:flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md text-red-400 hover:bg-red-500/10 transition-colors"
+            className="hidden md:flex items-center gap-1 text-[11px] px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10 transition-colors"
+            title="Simulate sudden fall detection"
           >
             <AlertTriangle className="h-3 w-3" />
-            <span>{lang === "ta" ? "Fall Test" : lang === "bn" ? "Fall Test" : lang === "hi" ? "फॉल टेस्ट" : "Test Fall"}</span>
+            <span>Test Fall</span>
           </button>
 
-          {/* 4-Language Code-Mixed Toggle Bar */}
-          <div className="flex rounded-lg border border-border/60 p-0.5 bg-muted/30">
+          {/* Sleek Compact Language Switcher Dropdown */}
+          <div className="relative" ref={langMenuRef}>
             <button
               type="button"
-              onClick={() => handleSwitchLanguage("hi")}
-              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
-                lang === "hi" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Hinglish (Timbre v3.0 Shivani)"
+              onClick={() => setLangMenuOpen((o) => !o)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border/60 bg-muted/30 hover:bg-muted text-xs font-medium text-foreground transition-all shadow-xs"
+              title="Select Code-Mixed Language"
             >
-              Hinglish (हि)
+              <Globe className="h-3.5 w-3.5 text-teal-500" />
+              <span>{LANGUAGE_LABELS[lang]}</span>
+              <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${langMenuOpen ? "rotate-180" : ""}`} />
             </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchLanguage("ta")}
-              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
-                lang === "ta" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Tanglish (Timbre v3.0 Lakshmi)"
-            >
-              Tanglish (த)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchLanguage("bn")}
-              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
-                lang === "bn" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Benglish (Timbre v3.0 Riyaa)"
-            >
-              Benglish (বা)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchLanguage("en")}
-              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
-                lang === "en" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="English (Indian English)"
-            >
-              EN
-            </button>
+
+            {langMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-52 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Code-Mixed Language
+                </div>
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.code}
+                    type="button"
+                    onClick={() => {
+                      handleSwitchLanguage(opt.code);
+                      setLangMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                      lang === opt.code
+                        ? "bg-teal-500/15 text-teal-400 font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex flex-col text-left">
+                      <span className="font-medium text-foreground">{opt.label}</span>
+                      <span className="text-[10px] text-muted-foreground/80">{opt.sub}</span>
+                    </div>
+                    {lang === opt.code && <Check className="h-3.5 w-3.5 text-teal-400 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* New Chat Button */}
+          {/* Sleek New Chat Action Button */}
           <button
             type="button"
             onClick={handleResetChat}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Reset Chat"
+            className="flex items-center justify-center h-7.5 w-7.5 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shadow-xs"
+            title="Start New Conversation"
+            aria-label="New Chat"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">
-              {lang === "ta" ? "புதிய சாட்" : lang === "bn" ? "নতুন চ্যাট" : lang === "hi" ? "नया चैट" : "New Chat"}
-            </span>
+            <SquarePen className="h-3.5 w-3.5" />
           </button>
 
-          {/* 108 SOS Quick Action */}
+          {/* SOS Quick Action (Clean without 108) */}
           <Link
             href="/patient/sos"
-            className="flex items-center gap-1 px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-xs transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors"
+            title="Emergency SOS"
           >
-            <Phone className="h-3.5 w-3.5 animate-pulse" />
-            <span>108 SOS</span>
+            <Siren className="h-3.5 w-3.5 animate-pulse" />
+            <span>SOS</span>
           </Link>
         </div>
       </header>
