@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 const ROLE_HOME: Record<UserRole, string> = {
-  patient: "/patient/sos",
+  patient: "/patient",
   doctor: "/doctor/dashboard",
   admin: "/admin/dashboard",
   asha: "/asha/dashboard",

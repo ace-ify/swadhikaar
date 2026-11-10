@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { type LucideIcon, Sunrise, Sun, Sunset, Moon, Pill, AlertTriangle, Clock, Volume2, Share2, CalendarClock, Check } from "lucide-react";
+import { type LucideIcon, Sunrise, Sun, Sunset, Moon, Pill, AlertTriangle, Clock, Volume2, Share2, CalendarClock, Check, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   parseFrequency,
@@ -347,10 +347,14 @@ export function MedicationSchedulePlan({
         <div className="text-[11px] font-bold uppercase tracking-wider font-mono text-slate-400">
           {title ?? (lang === "hi" ? "दवा अनुसूची" : "Medication Schedule")}
         </div>
-        <div className="flex items-center gap-1.5">
-          <button type="button" onClick={speakPlan} className={btn}>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button type="button" onClick={speakPlan} className={btn} title="Natural Indic voice powered by Gnani Timbre v3.0">
             <Volume2 className="size-3.5" />
             {lang === "hi" ? "सुनें" : "Listen"}
+            <span className="ml-1 inline-flex items-center gap-0.5 text-[9px] font-normal text-sky-800 bg-sky-100 dark:bg-sky-900/60 rounded px-1">
+              <Sparkles className="size-2 text-sky-600" />
+              Gnani Timbre
+            </span>
           </button>
           <button type="button" onClick={sharePlan} className={btn}>
             <Share2 className="size-3.5" />

@@ -34,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { AlertOctagon, Sparkles, Copy, Check } from "lucide-react";
+import { clinicalEventBus } from "@/lib/event-bus";
 import { MedicalSnapshot } from "@/components/patient/medical-snapshot";
 import { ScenePhoto } from "@/components/scene-photo";
 import {
@@ -873,6 +875,36 @@ export default function DispatchPage() {
     pulse + nudge,
   );
   const [busyPreset, setBusyPreset] = useState<string | null>(null);
+  const [crossDoorSos, setCrossDoorSos] = useState<any | null>(null);
+  const [copiedSbar, setCopiedSbar] = useState(false);
+
+  // Subscribe to Cross-Door Reactive Event Bus (Door 1 -> Door 4)
+  useEffect(() => {
+    const unsub = clinicalEventBus.subscribe((event) => {
+      if (event.type === "EMERGENCY_SOS_TRIGGERED") {
+        setCrossDoorSos(event.payload);
+        toast.error(`🚨 HIGH PRIORITY: Live SOS received from Citizen (/patient) - ${event.payload.type}`, {
+          duration: 10000,
+        });
+        refresh();
+      }
+    });
+    return unsub;
+  }, []);
+
+  const copySbarText = () => {
+    if (!crossDoorSos?.sbar) return;
+    const text = `SBAR CLINICAL HANDOFF NOTE:
+S: ${crossDoorSos.sbar.situation}
+B: ${crossDoorSos.sbar.background}
+A: ${crossDoorSos.sbar.assessment}
+R: ${crossDoorSos.sbar.recommendation}
+Coords: ${crossDoorSos.coords.lat}, ${crossDoorSos.coords.lng}`;
+    navigator.clipboard.writeText(text);
+    setCopiedSbar(true);
+    setTimeout(() => setCopiedSbar(false), 2000);
+    toast.success("SBAR Handoff copied to clipboard");
+  };
 
   async function spawn(preset: (typeof PRESETS)[number]) {
     setBusyPreset(preset.label);
@@ -905,8 +937,74 @@ export default function DispatchPage() {
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           Dispatch Console
         </h1>
-
       </div>
+
+      {/* Cross-Door Live Emergency Beacon with Pre-compiled SBAR Handoff Note */}
+      {crossDoorSos && (
+        <div className="rounded-2xl border-2 border-rose-500 bg-rose-950/90 text-white p-5 shadow-2xl animate-in fade-in slide-in-from-top-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-rose-800/80">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex size-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex rounded-full size-3 bg-rose-500" />
+              </span>
+              <span className="font-bold text-sm tracking-wide uppercase text-rose-200 flex items-center gap-2">
+                <AlertOctagon className="size-4 text-rose-400" />
+                DOOR 1 ➔ DOOR 4 LIVE SOS BEACON: {crossDoorSos.type.toUpperCase()}
+              </span>
+              <Badge className="bg-rose-500 text-white font-mono text-[10px] uppercase">
+                {crossDoorSos.triage} PRIORITY
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={copySbarText}
+                className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs h-7"
+              >
+                {copiedSbar ? <Check className="size-3 mr-1 text-emerald-400" /> : <Copy className="size-3 mr-1" />}
+                {copiedSbar ? "Copied" : "Copy SBAR Note"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setCrossDoorSos(null)}
+                variant="ghost"
+                className="text-xs text-rose-300 hover:text-white h-7 px-2"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-sans">
+            <div className="p-3 rounded-xl bg-black/40 border border-rose-800/50">
+              <div className="font-bold text-rose-300 mb-1 font-mono uppercase text-[10px]">Situation (S)</div>
+              <p className="text-slate-200 leading-relaxed">{crossDoorSos.sbar.situation}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-black/40 border border-rose-800/50">
+              <div className="font-bold text-rose-300 mb-1 font-mono uppercase text-[10px]">Background (B)</div>
+              <p className="text-slate-200 leading-relaxed">{crossDoorSos.sbar.background}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-black/40 border border-rose-800/50">
+              <div className="font-bold text-rose-300 mb-1 font-mono uppercase text-[10px]">Assessment (A)</div>
+              <p className="text-slate-200 leading-relaxed">{crossDoorSos.sbar.assessment}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-black/40 border border-rose-800/50">
+              <div className="font-bold text-rose-300 mb-1 font-mono uppercase text-[10px]">Recommendation (R)</div>
+              <p className="text-slate-200 leading-relaxed">{crossDoorSos.sbar.recommendation}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 pt-2 border-t border-rose-900/60 flex items-center justify-between text-[11px] text-rose-300 font-mono">
+            <span>GPS Coords: {crossDoorSos.coords.lat.toFixed(5)}, {crossDoorSos.coords.lng.toFixed(5)}</span>
+            <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+              <Sparkles className="size-3" />
+              Pre-compiled SBAR Handoff for 108 ALS / BLS Ambulance
+            </span>
+          </div>
+        </div>
+      )}
 
       <Card className="shadow-sm">
         <CardHeader className="pb-3">

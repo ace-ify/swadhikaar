@@ -10,10 +10,12 @@
 // fails to do, the phone network is the fallback that does not depend on us.
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { Camera, Phone, X } from "lucide-react";
 import { SosStatus } from "@/components/patient/sos-status";
 import { AirQuality } from "@/components/patient/air-quality";
@@ -23,6 +25,9 @@ import {
   myDispatch,
   uploadScenePhoto,
 } from "@/hooks/use-acute";
+import { clinicalEventBus } from "@/lib/event-bus";
+import { generateSbarHandoff } from "@/lib/clinical/sbar";
+import CprMetronome from "@/components/emergency/cpr-metronome";
 
 // Hindi first, English under it. This is the one screen a person in a village holds
 // in an emergency; the admin screens are read by staff who work in English.
@@ -62,6 +67,7 @@ export default function SosPage() {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [avpuState, setAvpuState] = useState<"A" | "V" | "P" | "U">("A");
   const now = useNow();
 
   // The victim is very often not the person holding the phone. Somebody stops at a
@@ -158,6 +164,26 @@ export default function SosPage() {
       } else {
         setNudge((n) => n + 1);
 
+        // Publish to Cross-Door Reactive Event Bus (instantly syncs with /dispatch and /doctor)
+        clinicalEventBus.publish({
+          type: "EMERGENCY_SOS_TRIGGERED",
+          payload: {
+            incidentId: body.incident_id || `sos-${Date.now()}`,
+            type: kind.type,
+            victimName: forSelf ? undefined : victimName.trim() || undefined,
+            coords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            triage: (kind.triage as any) || "red",
+            sbar: generateSbarHandoff({
+              type: kind.type,
+              triage: (kind.triage as any) || "red",
+              victimName: forSelf ? undefined : victimName.trim() || undefined,
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            }),
+            timestamp: Date.now(),
+          },
+        });
+
         // Dispatch is already open at this point. The photo is a best-effort follow-up:
         // if it fails, say so plainly and leave the case alone. Losing a photograph is
         // not a reason to imply the ambulance did not go.
@@ -221,7 +247,73 @@ export default function SosPage() {
       </a>
 
       {live && incident ? (
-        <SosStatus incident={incident} now={now} />
+        <div className="space-y-4">
+          <SosStatus incident={incident} now={now} />
+
+          {/* Sahara Emergency Participant Mesh */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-muted/40 p-3 rounded-xl border border-border text-center text-xs">
+            <div className="p-2 rounded-lg bg-background/80 border border-border">
+              <span className="block text-[10px] text-muted-foreground uppercase font-bold">You (Victim)</span>
+              <span className="font-semibold text-emerald-400">GPS Live</span>
+            </div>
+            <div className="p-2 rounded-lg bg-background/80 border border-border">
+              <span className="block text-[10px] text-muted-foreground uppercase font-bold">Sahara AI</span>
+              <span className="font-semibold text-teal-400">Triage Copilot</span>
+            </div>
+            <div className="p-2 rounded-lg bg-background/80 border border-border">
+              <span className="block text-[10px] text-muted-foreground uppercase font-bold">Caregiver</span>
+              <span className="font-semibold text-cyan-400">WhatsApp Active</span>
+            </div>
+            <div className="p-2 rounded-lg bg-background/80 border border-border">
+              <span className="block text-[10px] text-muted-foreground uppercase font-bold">108 EMS</span>
+              <span className="font-semibold text-red-400">CAD Dispatched</span>
+            </div>
+          </div>
+
+          {/* AVPU Consciousness Latch */}
+          <div className="p-3 bg-red-950/20 border border-red-500/30 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-red-400">चेतना स्तर (AVPU Consciousness):</span>
+              <span className="font-mono text-zinc-300 font-bold">
+                {avpuState === "A" ? "A · Alert" : avpuState === "V" ? "V · Verbal" : avpuState === "P" ? "P · Pain" : "U · UNRESPONSIVE"}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { key: "A", label: "A (सचेत)" },
+                { key: "V", label: "V (बोल पा रहे)" },
+                { key: "P", label: "P (दर्द महसूस)" },
+                { key: "U", label: "U (बेहोश)" },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setAvpuState(opt.key as any)}
+                  className={`py-1.5 px-1 rounded text-[11px] font-bold border transition-all ${
+                    avpuState === opt.key
+                      ? "bg-red-600 text-white border-red-500 shadow"
+                      : "bg-background/60 text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* T5: Real-time CPR metronome & resuscitation rhythm while waiting for 108 */}
+          <CprMetronome lang="hi" />
+
+          {/* Quick Link to Offline First Aid */}
+          <div className="pt-1 flex justify-center">
+            <Link
+              href="/patient/first-aid"
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }), "text-xs border-border")}
+            >
+              📖 प्राथमिक उपचार गाइड (Offline First Aid)
+            </Link>
+          </div>
+        </div>
       ) : (
         <>
           {/* Ambient, and only when there is no live case: during an emergency nobody
@@ -365,6 +457,15 @@ export default function SosPage() {
                 </span>
               </Button>
             ))}
+          </div>
+
+          <div className="pt-2 flex justify-center">
+            <Link
+              href="/patient/first-aid"
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }), "text-xs border-border")}
+            >
+              📖 प्राथमिक उपचार गाइड (Offline First Aid Protocols)
+            </Link>
           </div>
         </>
       )}

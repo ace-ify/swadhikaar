@@ -10,8 +10,7 @@ import type { NextConfig } from "next";
 // so if any of these landing screens moves later, a cached 308 would keep sending people
 // to the old one with no way to clear it.
 const ROLE_HOME: Record<string, string> = {
-  "/patient": "/patient/sos",
-  "/patient/dashboard": "/patient/sos", // deleted; kept so old links still work
+  "/patient/dashboard": "/patient", // old bookmark redirects to Door 1 portal
   "/admin": "/admin/dashboard",
   "/doctor": "/doctor/dashboard",
   "/asha": "/asha/dashboard",

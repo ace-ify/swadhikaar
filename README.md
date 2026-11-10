@@ -1,12 +1,16 @@
 # Swadhikaar
 
-Swadhikaar is an Indic voice-first care operations platform for proactive patient outreach, triage, escalation, and longitudinal follow-up.
+> **Built for the Great Indian AI Internship Challenge by Gnani.ai**  
+> *Sovereign Indic Voice AI for Citizen Healthcare Operations*
+
+Swadhikaar is an Indic voice-first care operations platform for proactive patient outreach, prescription literacy, hospital readiness (PM-JAY), triage, and longitudinal follow-up — powered by **Gnani.ai Prisma v3.0 (STT)** and **Gnani.ai Timbre v3.0 (TTS)**.
 
 The system combines:
-- realtime AI voice calls over telephony,
+- Sovereign Indic speech intelligence (Gnani Prisma & Timbre across regional languages),
+- Realtime AI voice interactions over web kiosk & telephony,
 - Supabase-first backend architecture,
-- role-based clinical operations dashboards,
-- healthcare workflow tracking and audit trails.
+- Ayushman Bharat Digital Mission (ABDM) FHIR R4 clinical compliance,
+- Role-based clinical operations dashboards with audit trails.
 
 ## Scope
 
@@ -70,10 +74,12 @@ swadhikaar/
 
 ## Tech Stack
 
-- Frontend: Next.js 16, React 19, TypeScript, Tailwind
-- Data + Auth + Realtime: Supabase
-- Voice runtime: LiveKit Agents (Python)
-- STT/TTS/LLM providers (pipeline-dependent): Deepgram, Sarvam/Cartesia, Groq, Gemini
+- **Sovereign Speech Engine:** Gnani.ai Prisma v3.0 (Indic-auto STT) & Gnani.ai Timbre v3.0 (Indic TTS)
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS, Lucide
+- **Data + Auth + Realtime:** Supabase (Postgres with RLS & Migrations)
+- **Clinical Standards:** ABDM FHIR R4 Bundle exports
+- **Voice Runtime (Telephony):** LiveKit Agents (Python) with Indic failover support
+- **Reasoning / LLM:** Google Gemini & Groq LLaMA-3.3-70B
 
 ## Prerequisites
 

@@ -37,6 +37,7 @@ import {
   callCaseSummary,
   callStartVoiceCall,
 } from "@/lib/edge-functions";
+import { clinicalEventBus } from "@/lib/event-bus";
 import { Room, RoomEvent, Track } from "livekit-client";
 import {
   AlertTriangle,
@@ -331,7 +332,7 @@ export default function KioskPage() {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [isCaptureModalOpen, setIsCaptureModalOpen] = useState(false);
 
-  // Kiosk Auto-Spoken Audio Engine for Low-Literacy Intake
+  // Kiosk Auto-Spoken Audio Engine for Low-Literacy Intake (Powered by Gnani.ai)
   const {
     isSpeaking,
     isListening,
@@ -341,6 +342,8 @@ export default function KioskPage() {
     speakText,
     stopSpeaking,
     startListening,
+    engine: voiceEngine,
+    sttLatency,
   } = useKioskSpeech({
     lang,
     onSpeechResult: (spoken) => {
@@ -469,6 +472,17 @@ export default function KioskPage() {
             ? "सत्र सफलतापूर्वक शुरू हुआ!"
             : "Session initialized successfully!"
         );
+        // Cross-Door Event: Notify Door 3 (/ops) of new walk-in encounter
+        clinicalEventBus.publish({
+          type: "PATIENT_INTAKE_COMPLETED",
+          payload: {
+            patientId: resp.session_id,
+            name: patientName.trim() || "Walk-in Citizen",
+            chiefComplaint: "Walk-in OPD Case Registration",
+            triageColor: "green",
+            timestamp: Date.now(),
+          },
+        });
         setStep("consent");
       } else {
         throw new Error(resp?.error || "Failed to initialize session");
@@ -1139,7 +1153,7 @@ export default function KioskPage() {
                         <span className="absolute inset-0 rounded-xl border border-emerald-400/50 animate-ping opacity-60" />
                       </div>
                       <div>
-                        <div className="font-bold text-slate-100 flex items-center gap-2">
+                        <div className="font-bold text-slate-100 flex items-center gap-2 flex-wrap">
                           <span>
                             {isSpeaking
                               ? lang === "hi"
@@ -1148,6 +1162,10 @@ export default function KioskPage() {
                               : lang === "hi"
                               ? "माइक चालू है — अपना उत्तर बोलें..."
                               : "Listening for your verbal response..."}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/30">
+                            ⚡ {isSpeaking ? "Gnani Timbre v3.0" : "Gnani Prisma v3.0"}
+                            {sttLatency && !isSpeaking ? ` (${(sttLatency * 1000).toFixed(0)}ms)` : ""}
                           </span>
                           {/* Equalizer frequency bars simulation */}
                           <div className="flex items-end gap-0.5 h-3">

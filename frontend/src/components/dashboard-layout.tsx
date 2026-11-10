@@ -29,6 +29,10 @@ import {
   Siren,
   BookOpen,
   Map as MapIcon,
+  Sparkles,
+  Pill,
+  Camera,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -57,15 +61,17 @@ interface NavItem {
 
 const navByRole: Record<string, NavItem[]> = {
   patient: [
-    { label: "Get Help Now", href: "/patient/sos", icon: Siren, group: "Emergency" },
-    { label: "Emergency Card", href: "/patient/profile", icon: HeartPulse, group: "Emergency" },
-    { label: "What To Do", href: "/patient/first-aid", icon: BookOpen, group: "Emergency" },
-    { label: "My Records", href: "/patient/records", icon: ClipboardList, group: "After care" },
-    { label: "Call History", href: "/patient/calls", icon: PhoneCall, group: "After care" },
-    { label: "Consent", href: "/patient/consent", icon: ShieldCheck, group: "After care" },
-    { label: "PM-JAY Hospitals", href: "/patient/pmjay", icon: Hospital, group: "Access care" },
+    { label: "Voice Companion", href: "/patient", icon: Sparkles, group: "Sahara Care" },
+    { label: "Daily Medications", href: "/patient/meds", icon: Pill, group: "Daily Care" },
+    { label: "Vitals & Health", href: "/patient/vitals", icon: Activity, group: "Daily Care" },
+    { label: "Scan Prescription", href: "/patient/scan", icon: Camera, group: "Daily Care" },
+    { label: "Caregiver Circle", href: "/patient/caregiver", icon: Users, group: "Care Circle" },
+    { label: "Doctor Summary", href: "/patient/summary", icon: FileText, group: "Care Circle" },
+    { label: "Emergency SOS", href: "/patient/sos", icon: Siren, group: "Emergency" },
+    { label: "Profile & ABHA Card", href: "/patient/profile", icon: ShieldCheck, group: "Account" },
   ],
   doctor: [
+    { label: "Clinical Ops & Copilot", href: "/ops", icon: Activity },
     { label: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
     { label: "Walk-In Kiosk Queue", href: "/doctor/kiosk-queue", icon: ClipboardList },
     { label: "Escalation Queue", href: "/doctor/escalations", icon: HeartPulse },
@@ -75,6 +81,8 @@ const navByRole: Record<string, NavItem[]> = {
   ],
   admin: [
     { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+    { label: "Clinical Cockpit (Door 3)", href: "/ops", icon: Activity },
+    { label: "108 Dispatch (Door 4)", href: "/dispatch", icon: Siren },
     { label: "Operations", href: "/admin/operations", icon: Activity },
     { label: "Patients", href: "/admin/patients", icon: Users },
     { label: "Workflows", href: "/admin/workflows", icon: Workflow },

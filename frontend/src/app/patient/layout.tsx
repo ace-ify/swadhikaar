@@ -32,6 +32,7 @@ export default function PatientLayout({
   const { userName } = useAuth();
   const pathname = usePathname();
   const duringEmergency = EMERGENCY_ROUTES.some((r) => pathname.startsWith(r));
+  const isChatHome = pathname === "/patient" || pathname === "/patient/";
 
   return (
     <AccessibilityProvider>
@@ -39,7 +40,7 @@ export default function PatientLayout({
         <AppSidebar role="patient" />
         <SidebarInset className="flex flex-col bg-background h-screen overflow-hidden">
           <DashboardHeader role="patient" userName={userName} />
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-muted/20">
+          <main className={`flex-1 ${isChatHome ? "overflow-hidden p-0 bg-background" : "overflow-y-auto p-4 md:p-8 bg-muted/20"}`}>
             {children}
           </main>
         </SidebarInset>
