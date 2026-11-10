@@ -1,5 +1,5 @@
 /**
- * Static, plain-language PM-JAY readiness content for PS-02. Grounded in the NHA
+ * Static, plain-language PM-JAY readiness content. Grounded in the NHA
  * "Process Flow at Empanelled Hospitals" + the official documents-to-carry guidance.
  * HARD CONSTRAINT: this is information only — it never decides eligibility or processes
  * a claim. Eligibility lives on the official portal we deep-link to.

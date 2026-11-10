@@ -1,5 +1,5 @@
 /**
- * Care-need taxonomy for the PS-02 PM-JAY finder. The official district files list
+ * Care-need taxonomy for the PM-JAY finder. The official district files list
  * raw "Empanelled Specialities" that are inconsistent (misspelt "Opthalmology", and
  * procedure/test text like "Ct"/"Mri"/"Treatment Procedure ..." leaking into the
  * cell). So the patient never picks from the raw union — they pick a clean care-need,

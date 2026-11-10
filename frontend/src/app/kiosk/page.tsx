@@ -688,7 +688,7 @@ export default function KioskPage() {
               <span>{lang === "hi" ? "मेडीकियोस्क टर्मिनल" : "MediKiosk Terminal"}</span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800/80 px-2.5 py-0.5 text-[10px] font-mono font-medium text-slate-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                {mode === "ayush" ? "AIIA AYUSH OPD" : "Civil Hospital OPD"}
+                {mode === "ayush" ? "Ayush OPD Desk" : "Civil Hospital OPD"}
               </span>
             </h1>
             <p className="text-xs text-slate-400 font-normal">
@@ -753,7 +753,7 @@ export default function KioskPage() {
                   : "text-slate-400 hover:text-white hover:bg-slate-700/50"
               }`}
             >
-              AYUSH (AIIA)
+              AYUSH OPD
             </Button>
           </div>
 
@@ -1369,7 +1369,7 @@ export default function KioskPage() {
           <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 space-y-6 shadow-sm">
               <div className="flex items-center justify-between pb-3 border-b border-amber-200/50">
                 <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-500/10 text-amber-800 border border-amber-500/20 shadow-xs">
-                  {lang === "hi" ? "आयुष दशविध परीक्षा (AIIA Module A)" : "AYUSH Dashavidha Pariksha (10 Factors)"}
+                  {lang === "hi" ? "आयुष दशविध परीक्षा" : "AYUSH Dashavidha Pariksha (10 Factors)"}
                 </span>
                 <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-amber-50 text-amber-900 border border-amber-200">
                   {Object.keys(dashavidhaAnswers).length} / {DASHAVIDHA.length} COMPLETED

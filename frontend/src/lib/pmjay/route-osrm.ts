@@ -1,5 +1,5 @@
 /**
- * Real road routing for the PS-02 map via the public OSRM demo server (no API key).
+ * Real road routing for the hospital map via the public OSRM demo server (no API key).
  * Returns the route as [lat, lon][] for Leaflet, or null on any failure — the map then
  * falls back to a straight dashed line, and the per-hospital "Directions" button still
  * hands off to the device's Maps app for precise turn-by-turn. The public OSRM server

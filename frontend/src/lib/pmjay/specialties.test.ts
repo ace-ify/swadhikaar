@@ -1,5 +1,5 @@
 /**
- * Self-check for the PS-02 care-need matcher. Run: npm test (node --test).
+ * Self-check for the PM-JAY care-need matcher. Run: npm test (node --test).
  * The check that matters: the care-need filter must survive the source data's noise
  * (misspellings, procedure-text leakage) without false positives.
  */

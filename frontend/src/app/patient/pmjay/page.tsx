@@ -1,9 +1,9 @@
 "use client";
 
-// PS-02 PM-JAY Hospital Readiness finder. Patient picks their district + the kind of
+// PM-JAY Hospital Readiness finder. Patient picks their district + the kind of
 // care they need; we show matching EMPANELLED hospitals from the official data, the
 // documents to carry, and the visit steps. Information only — eligibility lives on the
-// official NHA portal we deep-link to (hard PS-02 constraint: no eligibility decisions).
+// official NHA portal we deep-link to.
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";

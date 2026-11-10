@@ -1,7 +1,7 @@
 /**
- * parseFrequency — the PS-01 keystone. Turns a prescription's raw frequency/SIG
+ * parseFrequency — turns a prescription's raw frequency/SIG
  * notation ("1-0-1", "BD", "TDS", "Once daily at bedtime (HS)", "SOS / As needed
- * for fever", "q8h") into a structured daily schedule the rest of PS-01 renders:
+ * for fever", "q8h") into a structured daily schedule the rest of the application renders:
  * the timeline, pictograms, plain-language plan, voice readback and reminders all
  * consume this one shape.
  *

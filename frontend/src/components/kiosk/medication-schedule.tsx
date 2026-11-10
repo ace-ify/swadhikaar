@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * PS-01 medication schedule + human verification.
+ * Medication schedule + clinical verification.
  *
  * DoseGrid renders the four time-of-day slots as pictograms (lucide sun/moon).
  * MedicationScheduleReview is the SAFETY GATE: it parses each extracted medicine's
  * frequency into a schedule, shows it, and lets the human correct name/dose/timing
- * before the plan is issued (PS-01 requires verification before the patient plan).
+ * before the plan is issued (requires verification before the patient plan).
  * Consumes the pure parser in lib/clinical/frequency.
  */
 

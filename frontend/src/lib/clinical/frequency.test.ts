@@ -1,5 +1,5 @@
 /**
- * Self-check for the PS-01 frequency parser. Run: npm test (node --test).
+ * Self-check for the medication frequency parser. Run: npm test (node --test).
  *
  * The checks that matter most: (1) a schedule parsed from an abbreviation never
  * leaks that abbreviation into the patient-facing text (ISMP safety), and (2) the

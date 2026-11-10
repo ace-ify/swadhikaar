@@ -163,7 +163,7 @@ export async function POST(req: Request) {
     if (sample_preset === "ayush_prescription") {
       parsedResult = {
         document_type: "prescription",
-        facility: "All India Institute of Ayurveda (AIIA), New Delhi",
+        facility: "Civil Hospital Ayush Centre, New Delhi",
         doctor_name: "Dr. Vaidya Ramakant Sharma, BAMS, MD (Ayur)",
         prescription_date: new Date().toISOString().slice(0, 10),
         medications: [
@@ -357,7 +357,7 @@ Return a STRICT JSON object (no markdown formatting, no code block) with the fol
     if (!parsedResult) {
       parsedResult = {
         document_type: "prescription",
-        facility: "Ayush Health & Wellness Centre, AIIA",
+        facility: "Civil Hospital & Wellness Centre, New Delhi",
         doctor_name: "Dr. A. K. Sharma, MD",
         prescription_date: new Date().toISOString().slice(0, 10),
         medications: [

@@ -1,6 +1,6 @@
 "use client";
 
-// Embedded map for the PS-02 finder. CircleMarker (not Marker) — Leaflet's default
+// Embedded map for the PM-JAY finder. CircleMarker (not Marker) — Leaflet's default
 // Marker pulls PNG icons by relative URL and breaks under the bundler, same reason the
 // other maps avoid it. Shows empanelled-hospital pins (approximate ones drawn dashed,
 // since many are geocoded only to the district), the patient's own location, and — once

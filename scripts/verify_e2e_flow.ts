@@ -1,8 +1,8 @@
 /**
  * End-to-End Verification Test Script for Swadhikaar Clinical Operating System
  *
- * Tests the complete integrated lifecycle across all 4 problem statements:
- * 1. MediKiosk Walk-In Check-In (SIH26047 - Ministry of Ayush / AIIA)
+ * Tests the complete integrated clinical lifecycle:
+ * 1. MediKiosk Walk-In Check-In (OPD Case-Taking)
  * 2. DPDP Act & ABDM Granular Audio-Explained Consent
  * 3. Clinical Intake DAG Traversal & Answers
  * 4. Ayush Dashavidha Pariksha (10 Classical Factors)
@@ -10,8 +10,8 @@
  * 6. Automated Dual Summary Generation (Clinician SOAP + Patient Conversational)
  * 7. Doctor Clinical Governance Sign-Off (Accept / Amend / Reject)
  * 8. Authentic ABDM NRCES FHIR R4 Document Bundle Assembly
- * 9. Acute Emergency Ambulance Escalation (psadditional.pdf - IIT Guwahati)
- * 10. Interoperability & Audit Logging (SIH26133 - Govt of Maharashtra)
+ * 9. Acute Emergency Ambulance Escalation (108 CAD CAD Dispatch)
+ * 10. Interoperability & Audit Logging (ABDM FHIR R4 Export)
  */
 
 import assert from "node:assert/strict";

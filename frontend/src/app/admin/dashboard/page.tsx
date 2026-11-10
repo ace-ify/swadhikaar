@@ -171,7 +171,7 @@ export default function AdminDashboardPage() {
         </Link>
       </div>
 
-      {/* Lenovo LEAP / IndiaAI Outbreak Alert Banner */}
+      {/* Public Health Surveillance Outbreak Alert Banner */}
       <div className="p-4 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-xl text-slate-900 dark:text-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-300 rounded-lg shrink-0 border border-rose-200 dark:border-rose-800">
@@ -180,7 +180,7 @@ export default function AdminDashboardPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
-                Lenovo LEAP 2026 • AI Public Health Alert (Theme 3.3)
+                Swadhikaar Surveillance • AI Public Health Early Warning
               </span>
               <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded-full font-semibold">
                 2 HOTSPOTS ACTIVE

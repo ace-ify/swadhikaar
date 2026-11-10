@@ -1,5 +1,5 @@
 /**
- * Bounded corpus for the PS-02 "ask about PM-JAY" RAG. Each chunk is a factual
+ * Bounded corpus for the "ask about PM-JAY" assistant. Each chunk is a factual
  * passage condensed from an official NHA / PM-JAY source, carrying its citation.
  * The assistant answers ONLY from these chunks (see lib/pmjay/retrieve + the
  * /api/pmjay-ask route): no passage clears the retrieval threshold → it refuses.

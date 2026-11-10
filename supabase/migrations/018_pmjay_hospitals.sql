@@ -1,5 +1,5 @@
 -- 018_pmjay_hospitals.sql
--- PS-02: AB-PMJAY empanelled-hospital directory, ingested from the official
+-- AB-PMJAY empanelled-hospital directory, ingested from the official
 -- district-wise empanelled lists (scripts/load_pmjay_hospitals.py). Public reference
 -- data: patients (including the unauthenticated kiosk) read it; only the service role
 -- (ingestion script) writes it. No coordinates in the source files, so the finder is

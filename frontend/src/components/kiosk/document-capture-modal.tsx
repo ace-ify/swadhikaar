@@ -287,7 +287,7 @@ export default function DocumentCaptureModal({
                   <Sparkles className="w-5 h-5 text-slate-300 mb-1.5" />
                   <div className="font-bold text-xs text-slate-200">Ayush Prescription</div>
                   <div className="text-[10px] text-slate-400 mt-1">
-                    AIIA: Ashwagandha 3g BD, Kaishore Guggulu 2 tabs BD, Giloy Kwath
+                    Govt OPD: Ashwagandha 3g BD, Kaishore Guggulu 2 tabs BD, Giloy Kwath
                   </div>
                 </button>
 
