@@ -6,38 +6,29 @@ import {
   Mic,
   MicOff,
   Volume2,
+  VolumeX,
   Sparkles,
   Send,
-  RotateCcw,
   AlertTriangle,
   Copy,
   Check,
-  Headphones,
-  MessageSquare,
   Activity,
-  Phone,
-  Radio,
-  X,
   Stethoscope,
   Pill,
   Hospital,
-  ShieldAlert,
   Globe,
   ChevronDown,
   SquarePen,
   Siren,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { speak, stopSpeaking } from "@/lib/speak";
 import { clinicalEventBus } from "@/lib/event-bus";
 import { VocalBiomarkersAnalyzer, type VocalBiomarkersResult } from "@/lib/clinical/vocal-biomarkers";
 import { NebulaVoiceOrb, type OrbState } from "@/components/patient/nebula-voice-orb";
 import {
   HospitalCard,
-  MedicationCard,
   SavingsCard,
-  SchemeCard,
   VitalsCard,
   EmergencyCard,
 } from "@/components/patient/tool-cards";
@@ -56,7 +47,7 @@ interface ChatMessage {
 type LanguageMode = "hi" | "en" | "ta" | "bn";
 
 const WELCOME_MESSAGES: Record<LanguageMode, string> = {
-  hi: "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप कैसा महसूस कर रहे हैं? आप बोलकर या लिखकर लक्षण पूछ सकते हैं।",
+  hi: "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप बोलकर या लिखकर लक्षण पूछ सकते हैं।",
   ta: "வணக்கம் Ramesh ji! நான் உங்கள் Sahara AI நல்வாழ்வு தோழன். உங்க உடம்பு இப்போ எப்படி இருக்கு? அறிகுறிகளைப் பேசி அல்லது டைப் செய்து கேட்கலாம்.",
   bn: "নমস্কার Ramesh বাবু! আমি সাহারা — আপনার AI স্বাস্থ্য সাথী। আপনি এখন কেমন বোধ করছেন? আপনার লক্ষণগুলি মুখে বলুন বা টাইপ করে জানান।",
   en: "Hello Ramesh ji! I am Sahara — your AI health companion. How are you feeling today? You can speak or type your symptoms.",
@@ -86,15 +77,15 @@ const LANGUAGE_LABELS: Record<LanguageMode, string> = {
 export default function PatientChatGPTPage() {
   const [lang, setLang] = useState<LanguageMode>("hi");
   const [langMenuOpen, setLangMenuOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"chat" | "voice">("chat");
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [audioLevel, setAudioLevel] = useState(0);
   const [inputText, setInputText] = useState("");
   const [isCopiedId, setIsCopiedId] = useState<string | null>(null);
   const [biomarkers, setBiomarkers] = useState<VocalBiomarkersResult | null>(null);
   const [fallAlertOpen, setFallAlertOpen] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Chat message stream
+  // Chat message stream (Preserves full conversation transcripts across speech & typing)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "msg-0",
@@ -149,7 +140,7 @@ export default function PatientChatGPTPage() {
   // Switch Language Mode across Hinglish, Tanglish, Benglish & English
   const handleSwitchLanguage = (newLang: LanguageMode) => {
     setLang(newLang);
-    stopSpeaking();
+    handleStopSpeaking();
     setMessages((prev) => {
       if (prev.length <= 1) {
         return [
@@ -173,9 +164,16 @@ export default function PatientChatGPTPage() {
     toast.info(activeToasts[newLang]);
   };
 
+  // Stop currently playing speech audio
+  const handleStopSpeaking = () => {
+    stopSpeaking();
+    setIsSpeaking(false);
+    setOrbState((curr) => (curr === "emergency" ? "emergency" : "idle"));
+  };
+
   // Reset conversation
   const handleResetChat = () => {
-    stopSpeaking();
+    handleStopSpeaking();
     setMessages([
       {
         id: `msg-${Date.now()}`,
@@ -194,8 +192,12 @@ export default function PatientChatGPTPage() {
     toast.info(resetToasts[lang]);
   };
 
-  // Voice Microphone Toggle
+  // Voice Microphone Toggle (Seamless All-in-One Voice & Chat)
   const handleToggleVoice = async () => {
+    if (isSpeaking) {
+      handleStopSpeaking();
+    }
+
     if (orbState === "listening") {
       // Stop recording
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -283,7 +285,7 @@ export default function PatientChatGPTPage() {
     }
   };
 
-  // Process user query & respond with clinical intelligence
+  // Process user query & respond with text message + spoken voice + clinical cards
   const handleProcessUserQuery = (queryText: string) => {
     if (!queryText.trim()) return;
 
@@ -461,8 +463,16 @@ export default function PatientChatGPTPage() {
       setMessages((prev) => [...prev, botMsg]);
 
       // Voice Output via Gnani Timbre TTS (hi -> Shivani, ta -> Lakshmi, bn -> Riyaa)
-      speak(replyText, lang);
+      setIsSpeaking(true);
+      speak(replyText, lang, {
+        onStart: () => setIsSpeaking(true),
+        onEnd: () => {
+          setIsSpeaking(false);
+          setOrbState((curr) => (curr === "emergency" ? "emergency" : "idle"));
+        },
+      });
 
+      // Reset speaking indicator after audio finishes
       setTimeout(() => {
         setOrbState((curr) => (curr === "emergency" ? "emergency" : "idle"));
       }, 5500);
@@ -518,49 +528,23 @@ export default function PatientChatGPTPage() {
 
   return (
     <div className="flex flex-col h-full w-full bg-background select-text">
-      {/* 1. ChatGPT-Style Slim Top Header */}
+      {/* 1. Slim Top Header */}
       <header className="h-13 shrink-0 border-b border-border/50 px-4 md:px-6 flex items-center justify-between bg-background/80 backdrop-blur-md z-10">
-        {/* Left: Brand & Mode Switcher */}
+        {/* Left: Brand */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold text-sm tracking-tight text-foreground">
               Sahara AI
             </span>
-          </div>
-
-          <div className="h-4 w-px bg-border/60 mx-1 hidden sm:block" />
-
-          {/* Mode Pill: Chat vs Full Voice */}
-          <div className="hidden sm:flex rounded-full border border-border/60 p-0.5 bg-muted/30 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode("chat")}
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium transition-all ${
-                viewMode === "chat"
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <MessageSquare className="h-3 w-3" />
-              <span>Chat</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("voice")}
-              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-medium transition-all ${
-                viewMode === "voice"
-                  ? "bg-teal-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Headphones className="h-3 w-3" />
-              <span>Voice</span>
-            </button>
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20 hidden sm:inline-flex items-center gap-1">
+              <Sparkles className="h-2.5 w-2.5" />
+              Sovereign Voice & Chat
+            </span>
           </div>
         </div>
 
-        {/* Right: Controls (Language Dropdown, New Chat, SOS) */}
+        {/* Right: Controls (Test Fall, Language Dropdown, New Chat, SOS) */}
         <div className="flex items-center gap-2">
           {/* Fall Alert Test */}
           <button
@@ -639,197 +623,140 @@ export default function PatientChatGPTPage() {
         </div>
       </header>
 
-      {/* 2. Main Body Area */}
-      {viewMode === "voice" ? (
-        /* ================= VOICE COMPANION MODE (ChatGPT Advanced Voice Mode) ================= */
-        <div className="flex-1 flex flex-col items-center justify-between p-6 md:p-12 relative overflow-hidden bg-radial from-teal-950/20 via-background to-background">
-          {/* Top Bar inside voice mode */}
-          <div className="w-full max-w-lg flex items-center justify-between z-10">
-            <div className="flex items-center gap-2">
-              <Radio className="h-4 w-4 text-teal-400 animate-pulse" />
-              <span className="text-xs text-muted-foreground">
-                {lang === "ta"
-                  ? "Sovereign Voice Session Active (Tanglish - Lakshmi)"
-                  : lang === "bn"
-                  ? "Sovereign Voice Session Active (Benglish - Riyaa)"
-                  : lang === "hi"
-                  ? "सॉवरेन वॉइस सत्र सक्रिय (Hinglish - Shivani)"
-                  : "Sovereign Voice Session Active (Indian English)"}
-              </span>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setViewMode("chat")}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4 mr-1" />
-              {lang === "ta" ? "சாட் திரும்பு" : lang === "bn" ? "চ্যাটে ফিরুন" : lang === "hi" ? "चैट पर लौटें" : "Back to Chat"}
-            </Button>
-          </div>
-
-          {/* Center 3D Bloop Orb */}
-          <div className="flex flex-col items-center justify-center my-auto z-10">
-            <NebulaVoiceOrb
-              state={orbState}
-              audioLevel={audioLevel}
-              lang={lang}
-              onClick={handleToggleVoice}
-              size={260}
-            />
-
-            {/* Vocal Biomarkers Badge */}
-            {biomarkers && (
-              <div className="mt-4 px-3 py-1.5 rounded-full bg-muted/60 border border-border/80 text-xs flex items-center gap-2">
-                <Activity className="h-3.5 w-3.5 text-teal-400" />
-                <span className="text-muted-foreground">Dyspnea Index:</span>
-                <span className="font-semibold text-foreground">{biomarkers.dyspneaScore}/10</span>
-                <Badge variant="outline" className="text-[10px] text-teal-400 border-teal-500/30">
-                  {biomarkers.classification}
-                </Badge>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Voice Controls */}
-          <div className="w-full max-w-md flex flex-col items-center gap-3 z-10">
-            <div className="flex items-center gap-4">
-              <Button
-                size="lg"
-                onClick={handleToggleVoice}
-                className={`rounded-full h-14 w-14 p-0 shadow-lg transition-transform ${
-                  orbState === "listening"
-                    ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                    : "bg-teal-600 hover:bg-teal-500 text-white hover:scale-105"
-                }`}
-              >
-                {orbState === "listening" ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              {lang === "ta"
-                ? "மைக்கை அழுத்திப் பேசுங்கள். சஹாரா உடனடியாகப் பதிலளிக்கும்."
-                : lang === "bn"
-                ? "মাইক চেপে কথা বলুন। সাহারা তৎক্ষণাৎ উত্তর দেবে।"
-                : lang === "hi"
-                ? "माइक दबाकर बोलें। समाप्त करने के बाद सहारा तुरंत जवाब देगा।"
-                : "Tap the mic and speak. Sahara will transcribe and respond verbally."}
-            </p>
-          </div>
-        </div>
-      ) : (
-        /* ================= CHAT MODE (Clean ChatGPT Layout) ================= */
-        <div className="flex-1 flex flex-col min-h-0 relative">
-          {/* Scrollable Conversation Canvas */}
-          <div
-            ref={chatScrollRef}
-            className="flex-1 overflow-y-auto px-4 md:px-6 py-6 space-y-6"
-          >
-            <div className="max-w-3xl mx-auto w-full">
-              {/* If no interaction yet, show centered welcoming hero & prompt tiles */}
-              {messages.length <= 1 ? (
-                <div className="flex flex-col items-center justify-center min-h-[50vh] text-center my-auto py-8">
-                  {/* Interactive 3D Bloop Orb Centerpiece */}
-                  <div className="mb-6">
-                    <NebulaVoiceOrb
-                      state={orbState}
-                      audioLevel={audioLevel}
-                      lang={lang}
-                      onClick={handleToggleVoice}
-                      size={180}
-                    />
-                  </div>
-
-                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground mb-2">
-                    {lang === "ta"
-                      ? "வணக்கம் Ramesh ji, இன்று உங்கள் உடல்நலம் எப்படி இருக்கிறது?"
-                      : lang === "bn"
-                      ? "নমস্কার Ramesh বাবু, আজ আপনার শরীর কেমন আছে?"
-                      : lang === "hi"
-                      ? "नमस्ते रमेश जी, आज आपकी सेहत कैसी है?"
-                      : "Hello Ramesh ji, how are you feeling today?"}
-                  </h1>
-                  <p className="text-sm text-muted-foreground max-w-md mb-8">
-                    {lang === "ta"
-                      ? "அறிகுறிகளைச் சொல்லுங்கள், மாத்திரை அட்டவணையை சரிபார்க்கவும் அல்லது அருகிலுள்ள PM-JAY மருத்துவமனையைக் கண்டறியவும்."
-                      : lang === "bn"
-                      ? "লক্ষণ জানান, ওষুধের সময়সূচী চেক করুন বা কাছের PM-JAY হাসপাতাল খুঁজুন।"
-                      : lang === "hi"
-                      ? "लक्षण बताएं, अपनी नियमित दवाओं के बारे में पूछें या नजदीकी PM-JAY अस्पताल खोजें।"
-                      : "Describe your symptoms, check dose schedules, or locate nearby PM-JAY hospitals."}
-                  </p>
-
-                  {/* 2x2 ChatGPT-Style Suggestion Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl text-left">
-                    {starterPrompts.map((item, idx) => {
-                      const Icon = item.icon;
-                      const promptText =
-                        lang === "ta" ? item.ta : lang === "bn" ? item.bn : lang === "hi" ? item.hi : item.en;
-                      const promptDesc =
-                        lang === "ta" ? item.descTa : lang === "bn" ? item.descBn : lang === "hi" ? item.descHi : item.descEn;
-
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => handleProcessUserQuery(promptText)}
-                          className="group p-3.5 rounded-2xl border border-border/70 bg-card hover:bg-muted/50 hover:border-teal-500/40 transition-all flex items-start gap-3 shadow-xs hover:shadow-sm"
-                        >
-                          <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 group-hover:bg-teal-500/20 transition-colors shrink-0">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-sm font-semibold text-foreground group-hover:text-teal-400 transition-colors line-clamp-1">
-                              {promptText}
-                            </div>
-                            <div className="text-xs text-muted-foreground line-clamp-1">
-                              {promptDesc}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+      {/* 2. Unified Conversational Canvas (Voice + Chat Integrated) */}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        {/* Scrollable Conversation Canvas */}
+        <div
+          ref={chatScrollRef}
+          className="flex-1 overflow-y-auto px-4 md:px-6 py-6 space-y-6"
+        >
+          <div className="max-w-3xl mx-auto w-full">
+            {/* If no interaction yet, show centered welcoming hero with interactive 3D bloop orb */}
+            {messages.length <= 1 ? (
+              <div className="flex flex-col items-center justify-center min-h-[50vh] text-center my-auto py-8">
+                {/* Interactive 3D Bloop Orb Centerpiece */}
+                <div
+                  className="mb-6 cursor-pointer"
+                  onClick={handleToggleVoice}
+                  title="बात करने के लिए टैप करें / Tap to speak"
+                >
+                  <NebulaVoiceOrb
+                    state={orbState}
+                    audioLevel={audioLevel}
+                    lang={lang}
+                    onClick={handleToggleVoice}
+                    size={180}
+                  />
                 </div>
-              ) : (
-                /* Chat Messages Stream */
-                <div className="space-y-6 pb-6">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${
-                        msg.sender === "user" ? "items-end" : "items-start"
-                      } space-y-2`}
-                    >
-                      {/* Sender Avatar & Message Bubble */}
-                      <div
-                        className={`flex gap-3 max-w-[88%] md:max-w-[80%] ${
-                          msg.sender === "user" ? "flex-row-reverse" : "flex-row"
-                        }`}
+
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground mb-2">
+                  {lang === "ta"
+                    ? "வணக்கம் Ramesh ji, இன்று உங்கள் உடல்நலம் எப்படி இருக்கிறது?"
+                    : lang === "bn"
+                    ? "নমস্কার Ramesh বাবু, আজ আপনার শরীর কেমন আছে?"
+                    : lang === "hi"
+                    ? "नमस्ते रमेश जी, आज आपकी सेहत कैसी है?"
+                    : "Hello Ramesh ji, how are you feeling today?"}
+                </h1>
+                <p className="text-sm text-muted-foreground max-w-md mb-8">
+                  {lang === "ta"
+                    ? "அறிகுறிகளைச் சொல்லுங்கள், மாத்திரை அட்டவணையை சரிபார்க்கவும் அல்லது அருகிலுள்ள PM-JAY மருத்துவமனையைக் கண்டறியவும்."
+                    : lang === "bn"
+                    ? "লক্ষণ জানান, ওষুধের সময়সূচী চেক করুন বা কাছের PM-JAY হাসপাতাল খুঁজুন।"
+                    : lang === "hi"
+                    ? "लक्षण बताएं, अपनी नियमित दवाओं के बारे में पूछें या नजदीकी PM-JAY अस्पताल खोजें।"
+                    : "Describe your symptoms, check dose schedules, or locate nearby PM-JAY hospitals."}
+                </p>
+
+                {/* 2x2 Suggestion Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl text-left">
+                  {starterPrompts.map((item, idx) => {
+                    const Icon = item.icon;
+                    const promptText =
+                      lang === "ta" ? item.ta : lang === "bn" ? item.bn : lang === "hi" ? item.hi : item.en;
+                    const promptDesc =
+                      lang === "ta" ? item.descTa : lang === "bn" ? item.descBn : lang === "hi" ? item.descHi : item.descEn;
+
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleProcessUserQuery(promptText)}
+                        className="group p-3.5 rounded-2xl border border-border/70 bg-card hover:bg-muted/50 hover:border-teal-500/40 transition-all flex items-start gap-3 shadow-xs hover:shadow-sm"
                       >
+                        <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 group-hover:bg-teal-500/20 transition-colors shrink-0">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground group-hover:text-teal-400 transition-colors line-clamp-1">
+                            {promptText}
+                          </div>
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {promptDesc}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Chat Messages Stream with Live Voice & Tool Cards */
+              <div className="space-y-6 pb-6">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${
+                      msg.sender === "user" ? "items-end" : "items-start"
+                    } space-y-2`}
+                  >
+                    {/* Sender Avatar & Message Bubble */}
+                    <div
+                      className={`flex gap-3 max-w-[88%] md:max-w-[80%] ${
+                        msg.sender === "user" ? "flex-row-reverse" : "flex-row"
+                      }`}
+                    >
+                      {msg.sender === "sahara" && (
+                        <div className="h-7 w-7 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <div
+                          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
+                            msg.sender === "user"
+                              ? "bg-teal-600 text-white rounded-tr-xs"
+                              : "bg-muted/50 text-foreground border border-border/60 rounded-tl-xs"
+                          }`}
+                        >
+                          <p>{msg.text}</p>
+                        </div>
+
+                        {/* Action Buttons for Sahara Responses */}
                         {msg.sender === "sahara" && (
-                          <div className="h-7 w-7 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="h-3.5 w-3.5" />
-                          </div>
-                        )}
-
-                        <div className="space-y-1">
-                          <div
-                            className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-xs ${
-                              msg.sender === "user"
-                                ? "bg-teal-600 text-white rounded-tr-xs"
-                                : "bg-muted/50 text-foreground border border-border/60 rounded-tl-xs"
-                            }`}
-                          >
-                            <p>{msg.text}</p>
-                          </div>
-
-                          {/* Action Buttons for Sahara Responses */}
-                          {msg.sender === "sahara" && (
-                            <div className="flex items-center gap-3 px-1 pt-0.5 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-3 px-1 pt-0.5 text-xs text-muted-foreground">
+                            {isSpeaking ? (
                               <button
                                 type="button"
-                                onClick={() => speak(msg.text, lang)}
+                                onClick={handleStopSpeaking}
+                                className="flex items-center gap-1 text-teal-500 hover:text-teal-400 font-medium transition-colors"
+                              >
+                                <VolumeX className="h-3 w-3" />
+                                <span>
+                                  {lang === "ta" ? "நிறுத்து" : lang === "bn" ? "থামুন" : lang === "hi" ? "रोकें" : "Stop"}
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsSpeaking(true);
+                                  speak(msg.text, lang, {
+                                    onStart: () => setIsSpeaking(true),
+                                    onEnd: () => setIsSpeaking(false),
+                                  });
+                                }}
                                 className="flex items-center gap-1 hover:text-teal-400 transition-colors"
                               >
                                 <Volume2 className="h-3 w-3" />
@@ -837,166 +764,199 @@ export default function PatientChatGPTPage() {
                                   {lang === "ta" ? "கேளுங்கள்" : lang === "bn" ? "শুনুন" : lang === "hi" ? "सुनें" : "Listen"}
                                 </span>
                               </button>
+                            )}
 
-                              <button
-                                type="button"
-                                onClick={() => handleCopyText(msg.id, msg.text)}
-                                className="flex items-center gap-1 hover:text-foreground transition-colors"
-                              >
-                                {isCopiedId === msg.id ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-400" />
-                                    <span className="text-emerald-400">
-                                      {lang === "ta" ? "Copied" : lang === "bn" ? "Copied" : lang === "hi" ? "कॉपी हुआ" : "Copied"}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" />
-                                    <span>
-                                      {lang === "ta" ? "Copy" : lang === "bn" ? "Copy" : lang === "hi" ? "कॉपी" : "Copy"}
-                                    </span>
-                                  </>
-                                )}
-                              </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(msg.id, msg.text)}
+                              className="flex items-center gap-1 hover:text-foreground transition-colors"
+                            >
+                              {isCopiedId === msg.id ? (
+                                <>
+                                  <Check className="h-3 w-3 text-emerald-400" />
+                                  <span className="text-emerald-400">
+                                    {lang === "ta" ? "Copied" : lang === "bn" ? "Copied" : lang === "hi" ? "कॉपी हुआ" : "Copied"}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3 w-3" />
+                                  <span>
+                                    {lang === "ta" ? "Copy" : lang === "bn" ? "Copy" : lang === "hi" ? "कॉपी" : "Copy"}
+                                  </span>
+                                </>
+                              )}
+                            </button>
 
-                              <span className="text-[10px] opacity-60 font-mono">{msg.timestamp}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Inline Rich Clinical Tool Cards (Rendered like ChatGPT Canvas/Artifacts) */}
-                      {msg.toolCard === "emergency" && (
-                        <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
-                          <EmergencyCard details={msg.toolData} />
-                        </div>
-                      )}
-                      {msg.toolCard === "savings" && (
-                        <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
-                          <SavingsCard data={msg.toolData} />
-                        </div>
-                      )}
-                      {msg.toolCard === "hospital" && (
-                        <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
-                          <HospitalCard />
-                        </div>
-                      )}
-                      {msg.toolCard === "vitals" && (
-                        <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
-                          <VitalsCard />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Thinking Indicator */}
-                  {orbState === "thinking" && (
-                    <div className="flex items-center gap-3 pl-2">
-                      <div className="h-7 w-7 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0">
-                        <Sparkles className="h-3.5 w-3.5 animate-spin" />
-                      </div>
-                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-muted/40 border border-border/40 text-xs text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                        <span className="ml-1.5 font-medium">
-                          {lang === "ta"
-                            ? "Sahara yosikkuthu..."
-                            : lang === "bn"
-                            ? "Sahara bhabche..."
-                            : lang === "hi"
-                            ? "सहारा सोच रहा है..."
-                            : "Sahara is thinking..."}
-                        </span>
+                            <span className="text-[10px] opacity-60 font-mono">{msg.timestamp}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+
+                    {/* Inline Rich Clinical Tool Cards */}
+                    {msg.toolCard === "emergency" && (
+                      <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
+                        <EmergencyCard details={msg.toolData} />
+                      </div>
+                    )}
+                    {msg.toolCard === "savings" && (
+                      <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
+                        <SavingsCard data={msg.toolData} />
+                      </div>
+                    )}
+                    {msg.toolCard === "hospital" && (
+                      <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
+                        <HospitalCard />
+                      </div>
+                    )}
+                    {msg.toolCard === "vitals" && (
+                      <div className="w-full max-w-[88%] md:max-w-[80%] pl-10">
+                        <VitalsCard />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Thinking / Transcribing Indicator */}
+                {orbState === "thinking" && (
+                  <div className="flex items-center gap-3 pl-2">
+                    <div className="h-7 w-7 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0">
+                      <Sparkles className="h-3.5 w-3.5 animate-spin" />
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-muted/40 border border-border/40 text-xs text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      <span className="ml-1.5 font-medium">
+                        {lang === "ta"
+                          ? "Sahara yosikkuthu..."
+                          : lang === "bn"
+                          ? "Sahara bhabche..."
+                          : lang === "hi"
+                          ? "सहारा सोच रहा है..."
+                          : "Sahara is thinking..."}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* 3. Bottom ChatGPT-Style Docked Prompt Capsule */}
-          <div className="shrink-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
-            <div className="max-w-3xl mx-auto w-full space-y-2">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleProcessUserQuery(inputText);
-                }}
-                className="relative flex items-center gap-2 rounded-3xl border border-border/80 bg-card/90 backdrop-blur-md px-3 py-2 shadow-lg focus-within:border-teal-500/80 focus-within:ring-2 focus-within:ring-teal-500/20 transition-all"
-              >
-                {/* Voice Microphone Button */}
+        {/* 3. Docked Bottom Unified Voice & Text Capsule */}
+        <div className="shrink-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
+          <div className="max-w-3xl mx-auto w-full space-y-2">
+            {/* Live Listening Banner when Microphone is Active */}
+            {orbState === "listening" && (
+              <div className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-teal-500/10 border border-teal-500/30 text-teal-500 text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-500"></span>
+                  </span>
+                  <span className="font-semibold text-foreground">
+                    {lang === "ta"
+                      ? "சஹாரா கேட்கிறது... பேசுங்கள்"
+                      : lang === "bn"
+                      ? "সাহারা শুনছে... বলুন"
+                      : lang === "hi"
+                      ? "सहारा सुन रहा है... बोलिए (सॉवरेन वॉइस सक्रिय)"
+                      : "Sahara is listening... speak now"}
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={handleToggleVoice}
-                  title="Speak to Sahara"
-                  className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                    orbState === "listening"
-                      ? "bg-teal-500 text-white animate-pulse shadow-md shadow-teal-500/30 scale-105"
-                      : "text-muted-foreground hover:text-teal-400 hover:bg-muted/60"
-                  }`}
+                  className="px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-medium text-xs transition-colors shadow-xs"
                 >
-                  {orbState === "listening" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {lang === "ta" ? "முடிந்தது" : lang === "bn" ? "সমাপ্ত" : lang === "hi" ? "समाप्त करें" : "Done"}
                 </button>
+              </div>
+            )}
 
-                {/* Text Input */}
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={
-                    lang === "ta"
-                      ? "சஹாராவிடம் கேளுங்கள்... (அறிகுறிகள், மருந்துகள், PM-JAY மருத்துவமனை)"
-                      : lang === "bn"
-                      ? "সাহারার কাছে জানতে চান... (লক্ষণ, ওষুধ, PM-JAY হাসপাতাল)"
-                      : lang === "hi"
-                      ? "सहारा से कुछ भी पूछें... (लक्षण, दवाइयाँ, PM-JAY अस्पताल)"
-                      : "Ask Sahara anything... (symptoms, medications, hospitals)"
-                  }
-                  className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-                />
+            {/* Vocal Biomarkers Badge (if available from recent voice utterance) */}
+            {biomarkers && (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Activity className="h-3 w-3 text-teal-400" />
+                  <span>Acoustic Vocal Biomarker:</span>
+                  <span className="font-medium text-foreground">Dyspnea {biomarkers.dyspneaScore}/10</span>
+                </div>
+                <Badge variant="outline" className="text-[10px] text-teal-400 border-teal-500/30">
+                  {biomarkers.classification}
+                </Badge>
+              </div>
+            )}
 
-                {/* Switch to Full Voice Mode */}
-                <button
-                  type="button"
-                  onClick={() => setViewMode("voice")}
-                  title="Switch to Fullscreen Voice Orb"
-                  className="hidden sm:flex h-8 w-8 rounded-full items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                >
-                  <Headphones className="h-4 w-4" />
-                </button>
+            {/* Prompt Form: Mic + Text Input + Send */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleProcessUserQuery(inputText);
+              }}
+              className="relative flex items-center gap-2 rounded-3xl border border-border/80 bg-card/90 backdrop-blur-md px-3 py-2 shadow-lg focus-within:border-teal-500/80 focus-within:ring-2 focus-within:ring-teal-500/20 transition-all"
+            >
+              {/* Voice Microphone Button */}
+              <button
+                type="button"
+                onClick={handleToggleVoice}
+                title={orbState === "listening" ? "Stop listening" : "Tap to speak (Code-mixed voice)"}
+                className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                  orbState === "listening"
+                    ? "bg-red-600 text-white animate-pulse shadow-md shadow-red-500/30 scale-105"
+                    : "text-muted-foreground hover:text-teal-400 hover:bg-muted/60"
+                }`}
+              >
+                {orbState === "listening" ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
 
-                {/* Send Button */}
-                <button
-                  type="submit"
-                  disabled={!inputText.trim()}
-                  className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                    inputText.trim()
-                      ? "bg-teal-600 hover:bg-teal-500 text-white shadow-xs"
-                      : "text-muted-foreground/30 bg-muted/40 cursor-not-allowed"
-                  }`}
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </button>
-              </form>
+              {/* Text Input */}
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={
+                  lang === "ta"
+                    ? "சஹாராவிடம் கேளுங்கள்... அல்லது மைக்கை அழுத்தவும்"
+                    : lang === "bn"
+                    ? "সাহারার কাছে জানতে চান... অথবা মাইকে বলুন"
+                    : lang === "hi"
+                    ? "बोलें या लिखकर पूछें... (लक्षण, दवाइयाँ, PM-JAY अस्पताल)"
+                    : "Speak or type anything... (symptoms, medications, PM-JAY)"
+                }
+                className="flex-1 bg-transparent border-0 outline-none text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+              />
 
-              {/* Minimal Disclaimer */}
-              <p className="text-[11px] text-muted-foreground/60 text-center">
-                {lang === "ta"
-                  ? "சஹாரா ஒரு AI சுகாதாரத் தோழன். அவசர நிலைகளில் உடனே 108-ஐ அழைக்கவும்."
-                  : lang === "bn"
-                  ? "সাহারা একটি AI স্বাস্থ্য সঙ্গী। জরুরি পরিস্থিতিতে অবিলম্বে 108 ডায়াল করুন।"
-                  : lang === "hi"
-                  ? "सहारा एक AI स्वास्थ्य साथी है। किसी भी गंभीर आपातकाल में तुरंत 108 पर कॉल करें।"
-                  : "Sahara is an AI health companion. In critical emergencies, immediately dial 108."}
-              </p>
-            </div>
+              {/* Send Button */}
+              <button
+                type="submit"
+                disabled={!inputText.trim()}
+                className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                  inputText.trim()
+                    ? "bg-teal-600 hover:bg-teal-500 text-white shadow-xs"
+                    : "text-muted-foreground/30 bg-muted/40 cursor-not-allowed"
+                }`}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </form>
+
+            {/* Minimal Disclaimer */}
+            <p className="text-[11px] text-muted-foreground/60 text-center">
+              {lang === "ta"
+                ? "சஹாரா ஒரு AI சுகாதாரத் தோழன். அவசர நிலைகளில் உடனே 108-ஐ அழைக்கவும்."
+                : lang === "bn"
+                ? "সাহারা একটি AI স্বাস্থ্য সঙ্গী। জরুরি পরিস্থিতিতে অবিলম্বে 108 ডায়াল করুন।"
+                : lang === "hi"
+                ? "सहारा एक AI स्वास्थ्य साथी है। किसी भी गंभीर आपातकाल में तुरंत 108 पर कॉल करें।"
+                : "Sahara is an AI health companion. In critical emergencies, immediately dial 108."}
+            </p>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Fall Alert Simulation Modal Overlay */}
       <FallAlertOverlay

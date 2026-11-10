@@ -44,7 +44,7 @@ export default function PatientLayout({
             {children}
           </main>
         </SidebarInset>
-        {duringEmergency ? null : <VoiceAgentWidget />}
+        {duringEmergency || isChatHome ? null : <VoiceAgentWidget />}
       </SidebarProvider>
     </AccessibilityProvider>
   );
