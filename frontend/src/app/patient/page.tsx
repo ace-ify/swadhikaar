@@ -42,12 +42,13 @@ interface ChatMessage {
   timestamp: string;
   toolCard?: "hospital" | "medication" | "savings" | "scheme" | "vitals" | "emergency";
   toolData?: any;
+  vocalBiomarker?: VocalBiomarkersResult | null;
 }
 
 type LanguageMode = "hi" | "en" | "ta" | "bn";
 
 const WELCOME_MESSAGES: Record<LanguageMode, string> = {
-  hi: "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप बोलकर या लिखकर लक्षण पूछ सकते हैं।",
+  hi: "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप कैसा महसूस कर रहे हैं? आप बोलकर या लिखकर लक्षण पूछ सकते हैं।",
   ta: "வணக்கம் Ramesh ji! நான் உங்கள் Sahara AI நல்வாழ்வு தோழன். உங்க உடம்பு இப்போ எப்படி இருக்கு? அறிகுறிகளைப் பேசி அல்லது டைப் செய்து கேட்கலாம்.",
   bn: "নমস্কার Ramesh বাবু! আমি সাহারা — আপনার AI স্বাস্থ্য সাথী। আপনি এখন কেমন বোধ করছেন? আপনার লক্ষণগুলি মুখে বলুন বা টাইপ করে জানান।",
   en: "Hello Ramesh ji! I am Sahara — your AI health companion. How are you feeling today? You can speak or type your symptoms.",
@@ -56,7 +57,7 @@ const WELCOME_MESSAGES: Record<LanguageMode, string> = {
 const RESET_MESSAGES: Record<LanguageMode, string> = {
   hi: "नमस्ते रमेश जी! नया सत्र शुरू हो चुका है। आप आज क्या पूछना या जांचना चाहते हैं?",
   ta: "வணக்கம் Ramesh ji! புதிய அமர்வு தொடங்கிவிட்டது. இன்று நீங்கள் என்ன கேட்க விரும்புகிறீர்கள்?",
-  bn: "নমস্কার Ramesh বাবু! নতুন সেশন শুরু হয়েছে। আজ আপনি কী জানতে বা চেক করতে চান?",
+  bn: "নমস্কার Ramesh বাবু! নতুন সেশন শুরু হয়েছে। আজ আপনি কী जानना বা চেক করতে চান?",
   en: "Hello Ramesh ji! New session started. What would you like to check or consult today?",
 };
 
@@ -81,7 +82,6 @@ export default function PatientChatGPTPage() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [inputText, setInputText] = useState("");
   const [isCopiedId, setIsCopiedId] = useState<string | null>(null);
-  const [biomarkers, setBiomarkers] = useState<VocalBiomarkersResult | null>(null);
   const [fallAlertOpen, setFallAlertOpen] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -229,9 +229,9 @@ export default function PatientChatGPTPage() {
         setOrbState("thinking");
         setAudioLevel(0);
 
+        let bioResult: VocalBiomarkersResult | null = null;
         if (biomarkerAnalyzerRef.current) {
-          const bioResult = biomarkerAnalyzerRef.current.stopAnalysis();
-          setBiomarkers(bioResult);
+          bioResult = biomarkerAnalyzerRef.current.stopAnalysis();
         }
 
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
@@ -266,7 +266,7 @@ export default function PatientChatGPTPage() {
           }
         }
 
-        handleProcessUserQuery(recognizedText);
+        handleProcessUserQuery(recognizedText, bioResult);
       };
 
       recorder.start();
@@ -285,8 +285,8 @@ export default function PatientChatGPTPage() {
     }
   };
 
-  // Process user query & respond with text message + spoken voice + clinical cards
-  const handleProcessUserQuery = (queryText: string) => {
+  // Process user query through Sovereign Sahara AI Agent API
+  const handleProcessUserQuery = async (queryText: string, voiceBio?: VocalBiomarkersResult | null) => {
     if (!queryText.trim()) return;
 
     const userMsg: ChatMessage = {
@@ -294,160 +294,61 @@ export default function PatientChatGPTPage() {
       sender: "user",
       text: queryText,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      vocalBiomarker: voiceBio || null,
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInputText("");
     setOrbState("thinking");
 
-    // Clinical Logic & Tool Card Selection
-    setTimeout(() => {
-      const q = queryText.toLowerCase();
+    try {
+      const historyPayload = messages.slice(-6).map((m) => ({ sender: m.sender, text: m.text }));
+      const res = await fetch("/api/sahara/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: queryText,
+          lang,
+          history: historyPayload,
+        }),
+      });
+
       let replyText = "";
       let toolCardType: ChatMessage["toolCard"] = undefined;
       let toolData: any = undefined;
 
-      const isEmergency =
-        q.includes("सीने") ||
-        q.includes("chest") ||
-        q.includes("सांस") ||
-        q.includes("breath") ||
-        q.includes("चक्कर") ||
-        q.includes("सिरदर्द") ||
-        q.includes("headache") ||
-        q.includes("dizziness") ||
-        q.includes("marbu") ||
-        q.includes("vali") ||
-        q.includes("nenju") ||
-        q.includes("swasam") ||
-        q.includes("moochu") ||
-        q.includes("mayakkam") ||
-        q.includes("buke") ||
-        q.includes("betha") ||
-        q.includes("heaviness") ||
-        q.includes("saas") ||
-        q.includes("koshto") ||
-        q.includes("kosto") ||
-        q.includes("matha") ||
-        q.includes("ghurche");
+      if (res.ok) {
+        const data = await res.json();
+        replyText = data.reply || "";
+        toolCardType = data.toolCard || undefined;
+        toolData = data.toolData || undefined;
+      }
 
-      const isMedicine =
-        q.includes("दवा") ||
-        q.includes("medicine") ||
-        q.includes("bp") ||
-        q.includes("sugar") ||
-        q.includes("सस्ता") ||
-        q.includes("जन औषधि") ||
-        q.includes("marunthu") ||
-        q.includes("tablets") ||
-        q.includes("salt") ||
-        q.includes("oushodh") ||
-        q.includes("goli") ||
-        q.includes("aushadhi");
+      if (!replyText) {
+        replyText = "नमस्ते रमेश जी! मैं आपकी बात समझ गया हूँ। कृपया बताएं मैं आपकी सेहत में और क्या सहायता कर सकता हूँ?";
+      }
 
-      const isHospital =
-        q.includes("अस्पताल") ||
-        q.includes("hospital") ||
-        q.includes("pmjay") ||
-        q.includes("आयुष्मान") ||
-        q.includes("aaspathiri") ||
-        q.includes("hashpatal") ||
-        q.includes("bed") ||
-        q.includes("doctor");
-
-      if (isEmergency) {
-        if (lang === "ta") {
-          replyText =
-            "⚠️ Unga symptoms acute-ah irukku. Naanga clinical triage panni 108 Emergency SBAR pre-alert dispatch desk-ku anupiyullom. Immediate rest edukavum.";
-        } else if (lang === "bn") {
-          replyText =
-            "⚠️ Apnar symptoms guruttopurno. Amra acute clinical triage korechi ebong 108 EMS pre-alert SBAR dispatch desk e pathiyechi. Ekhoni rest nin.";
-        } else if (lang === "hi") {
-          replyText =
-            "⚠️ आपके लक्षण महत्वपूर्ण हैं। हमने आपके लक्षणों का क्लीनिकल ट्राइएज किया है और आपातकालीन 108 SBAR प्रोटोकॉल तैयार किया है।";
-        } else {
-          replyText =
-            "⚠️ These symptoms require immediate clinical attention. We conducted acute triage and generated a pre-alert SBAR summary for 108 EMS.";
-        }
-        toolCardType = "emergency";
-        toolData = {
-          title: "Acute Clinical Triage Pre-Alert (Red/Amber Path)",
-          sbar: "S: Acute Chest Heaviness / Headache & Dizziness. B: Male, 58Y, Hypertensive on Telma 40. A: Suspected hypertensive urgency / acute event. R: 108 EMS desk alerted.",
-        };
+      if (toolCardType === "emergency") {
         setOrbState("emergency");
-
         // Broadcast to Door 3 (Ops) and Door 4 (Dispatch)
         clinicalEventBus.publish({
           type: "EMERGENCY_SOS_TRIGGERED",
           payload: {
             incidentId: `sos-${Date.now()}`,
-            type: "Acute Symptoms / Dizziness Pre-Alert",
+            type: "Acute Symptoms Pre-Alert",
             victimName: "रमेश कुमार (Ramesh Kumar)",
             coords: { lat: 28.6139, lng: 77.209 },
             triage: "red",
-            sbar: {
-              situation: "Severe chest heaviness, headache or dizziness reported via code-mixed patient intake",
+            sbar: toolData?.sbar || {
+              situation: "Severe chest heaviness, headache or acute distress reported via code-mixed patient intake",
               background: "Male, 58Y, Hypertensive on Telma 40",
-              assessment: "Suspected hypertensive urgency / cardiac risk",
+              assessment: "Suspected hypertensive urgency / acute event",
               recommendation: "Immediate vitals check & 108 CAD ambulance standby",
             },
             timestamp: Date.now(),
           },
         });
-      } else if (isMedicine) {
-        if (lang === "ta") {
-          replyText =
-            "Unga regular BP medicine Telma 40. Idhe generic salt (Telmisartan 40mg) Jan Aushadhi Kendra-la mattum ₹32-ku kedaikkum, ungalukku 88% direct savings kedaikkum!";
-        } else if (lang === "bn") {
-          replyText =
-            "Apnar regular BP medicine Telma 40. Eki generic salt (Telmisartan 40mg) Jan Aushadhi Kendra-te matro ₹32 te paben, jar fole 88% pocket savings hobe!";
-        } else if (lang === "hi") {
-          replyText =
-            "आपकी नियमित BP की दवा Telma 40 है। आप जन औषधि केंद्र से यही सॉल्ट (Telmisartan 40mg) केवल ₹32 में प्राप्त कर सकते हैं, जिससे आपकी 88% की बचत होगी।";
-        } else {
-          replyText =
-            "Your regular BP medicine is Telma 40. The same generic salt (Telmisartan 40mg) is available at Jan Aushadhi Kendra for only ₹32, saving 88%.";
-        }
-        toolCardType = "savings";
-        toolData = {
-          brandedName: "Telma 40 (Telmisartan 40mg)",
-          brandedPrice: 285,
-          genericName: "Jan Aushadhi Telmisartan 40mg",
-          genericPrice: 32,
-          savingsPct: 88,
-        };
-        setOrbState("speaking");
-      } else if (isHospital) {
-        if (lang === "ta") {
-          replyText =
-            "Unga location-ku kitta Civil Hospital 2.4 km dhoorathula irukku. Anga Ayushman Bharat PM-JAY cashless treatment & 14 emergency beds available-ah irukku.";
-        } else if (lang === "bn") {
-          replyText =
-            "Apnar kache Civil Hospital matro 2.4 km dure ache, jekhane PM-JAY cashless treatment ebong 14 ti emergency bed available ache.";
-        } else if (lang === "hi") {
-          replyText =
-            "आपके नज़दीक सिविल अस्पताल (Civil Hospital) 2.4 किमी दूरी पर है, जहाँ आयुष्मान भारत PM-JAY के तहत मुफ़्त इलाज व 14 आपातकालीन बेड उपलब्ध हैं।";
-        } else {
-          replyText =
-            "Civil Hospital is 2.4 km away with PM-JAY cashless treatment and 14 emergency beds currently open.";
-        }
-        toolCardType = "hospital";
-        setOrbState("speaking");
       } else {
-        if (lang === "ta") {
-          replyText =
-            "Unga details note pannikitten. Konjam water kudichitu rest edunga. Edhavadhu discomfort irundha udane enakku sollunga.";
-        } else if (lang === "bn") {
-          replyText =
-            "Ami apnar kotha note kore niyechi. Ektu jol khan ebong rest nin. Kono rokom koshto hole sathe sathe janaben.";
-        } else if (lang === "hi") {
-          replyText =
-            "मैंने आपकी जानकारी नोट कर ली है। कृपया थोड़ा पानी पिएं और विश्राम करें। यदि कोई भी असहजता महसूस हो तो तुरंत मुझे बताएं।";
-        } else {
-          replyText =
-            "I have recorded your notes. Please drink some water and rest. If you feel any worsening discomfort, let me know immediately.";
-        }
-        toolCardType = "vitals";
         setOrbState("speaking");
       }
 
@@ -472,11 +373,13 @@ export default function PatientChatGPTPage() {
         },
       });
 
-      // Reset speaking indicator after audio finishes
       setTimeout(() => {
         setOrbState((curr) => (curr === "emergency" ? "emergency" : "idle"));
       }, 5500);
-    }, 1100);
+    } catch (err) {
+      console.error("Sahara agent error:", err);
+      setOrbState("idle");
+    }
   };
 
   const starterPrompts = [
@@ -731,6 +634,14 @@ export default function PatientChatGPTPage() {
                           }`}
                         >
                           <p>{msg.text}</p>
+
+                          {/* Show Vocal Dyspnea Biomarker ONLY on spoken message bubbles */}
+                          {msg.vocalBiomarker && (
+                            <div className="mt-2 pt-1.5 border-t border-white/20 flex items-center gap-1.5 text-[10px] text-teal-100">
+                              <Activity className="h-2.5 w-2.5 text-teal-200" />
+                              <span>Acoustic Dyspnea {msg.vocalBiomarker.dyspneaScore}/10 ({msg.vocalBiomarker.classification})</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Action Buttons for Sahara Responses */}
@@ -873,20 +784,6 @@ export default function PatientChatGPTPage() {
                 >
                   {lang === "ta" ? "முடிந்தது" : lang === "bn" ? "সমাপ্ত" : lang === "hi" ? "समाप्त करें" : "Done"}
                 </button>
-              </div>
-            )}
-
-            {/* Vocal Biomarkers Badge (if available from recent voice utterance) */}
-            {biomarkers && (
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <Activity className="h-3 w-3 text-teal-400" />
-                  <span>Acoustic Vocal Biomarker:</span>
-                  <span className="font-medium text-foreground">Dyspnea {biomarkers.dyspneaScore}/10</span>
-                </div>
-                <Badge variant="outline" className="text-[10px] text-teal-400 border-teal-500/30">
-                  {biomarkers.classification}
-                </Badge>
               </div>
             )}
 
