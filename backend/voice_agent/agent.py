@@ -1,12 +1,19 @@
 """
 Swadhikaar Voice AI Agent.
 
-Supports a single runtime path:
-  - fast: Deepgram STT + Groq (Gemini fallback) + provider-selectable TTS
+Sovereign Indic Voice Architecture:
+  - Primary STT: Gnani.ai Prisma v3.0 (Indic-auto sub-200ms code-mixed Hinglish recognition)
+  - Primary TTS: Gnani.ai Timbre v3.0 (Natural empathetic vernacular voice synthesis)
+  - Reasoning Engine: Sovereign Indic Triage Engine (Evon v3.3 architecture with Gemini Flash & Groq failover)
+
+Resilient Multi-tier Fallback Chain:
+  - STT: Gnani.ai Prisma v3.0 -> Deepgram Nova-3
+  - TTS: Gnani Timbre -> Murf Falcon -> Sarvam Bulbul -> Rime Coda -> Google Cloud
+  - LLM: Google Gemini 2.5 Flash -> Groq Llama/DeepSeek -> LiveKit Cloud Inference
 
 Architecture:
-  - Room metadata carries patient context from Supabase Edge Functions
-  - Agent handles multilingual conversation, triage, and escalation signals
+  - Room metadata carries patient context from Supabase Edge Functions / Next.js API
+  - Agent handles multilingual conversation, triage, and emergency escalation signals
   - Transcript + extraction payloads are persisted to Supabase after call end
 
 Run locally:
@@ -18,6 +25,7 @@ Run as worker (production):
 Required environment variables (see .env.example):
     LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
     SUPABASE_URL, SUPABASE_KEY
+    GNANI_API_KEY
     GOOGLE_API_KEY
     DEEPGRAM_API_KEY
 """
@@ -75,6 +83,34 @@ except Exception:  # pragma: no cover
 # Local imports
 from prompts.system_prompts import build_system_prompt, DEFAULT_CONTEXT
 
+try:
+    from gnani_adapter import (
+        GnaniPrismaSTT,
+        GnaniTimbreTTS,
+        GNANI_VOICES,
+        GNANI_LANGS,
+    )
+except ImportError:
+    try:
+        from .gnani_adapter import (
+            GnaniPrismaSTT,
+            GnaniTimbreTTS,
+            GNANI_VOICES,
+            GNANI_LANGS,
+        )
+    except Exception as _exc:  # pragma: no cover
+        logging.getLogger("swadhikaar.agent").warning("Failed to import gnani_adapter: %s", _exc)
+        GnaniPrismaSTT = None
+        GnaniTimbreTTS = None
+        GNANI_VOICES = {}
+        GNANI_LANGS = frozenset()
+except Exception as _exc:  # pragma: no cover
+    logging.getLogger("swadhikaar.agent").warning("Failed to initialize gnani_adapter: %s", _exc)
+    GnaniPrismaSTT = None
+    GnaniTimbreTTS = None
+    GNANI_VOICES = {}
+    GNANI_LANGS = frozenset()
+
 # Explicit path, not bare load_dotenv(). The implicit form walks up from the calling
 # frame's directory, so it silently finds nothing when agent.py is imported from a
 # script elsewhere in the tree — and "no credentials" here means every transcript,
@@ -112,9 +148,12 @@ for _noisy_logger in ("hpack", "httpcore", "httpx"):
 # language -> (Deepgram STT code, TTS BCP-47)
 LANGUAGES: dict[str, tuple[str, str]] = {
     "hindi": ("hi", "hi-IN"),
+    "hinglish": ("hi", "hi-IN"),
     "english": ("en-IN", "en-IN"),
     "bengali": ("bn", "bn-IN"),
+    "benglish": ("bn", "bn-IN"),
     "tamil": ("ta", "ta-IN"),
+    "tanglish": ("ta", "ta-IN"),
     "telugu": ("te", "te-IN"),
     "marathi": ("mr", "mr-IN"),
     "gujarati": ("gu", "gu-IN"),
@@ -255,9 +294,11 @@ def tts_candidates(chain, preferred, bcp47_code):
     `preferred` to the front. Pure — builders are returned, never called — so the
     ordering and the language gate can be checked without a network or a key.
     """
-    if preferred not in {name for name, _, _, _ in chain}:
-        logger.warning("Unknown FAST_TTS_PROVIDER=%r, using murf", preferred)
-        preferred = "murf"
+    valid_names = {name for name, _, _, _ in chain}
+    if preferred not in valid_names:
+        fallback_preferred = "gnani" if "gnani" in valid_names else (chain[0][0] if chain else "gnani")
+        logger.warning("Unknown FAST_TTS_PROVIDER=%r, using %s", preferred, fallback_preferred)
+        preferred = fallback_preferred
     # sorted() is stable, so a False/True key lifts one entry without disturbing
     # the order of the rest. The previous code sliced the list at the preferred
     # index, so FAST_TTS_PROVIDER=sarvam could never fall back to murf — it could
@@ -277,7 +318,7 @@ def tts_candidates(chain, preferred, bcp47_code):
         out.append((name, build))
     return out
 
-# Call type → friendly greeting text (Hindi)
+# Call type → friendly greeting text (Hindi / Hinglish)
 GREETINGS: dict[str, str] = {
     "screening_to_opd": (
         "Namaste {name} ji! Yeh Swadhikaar ki taraf se call hai. "
@@ -309,16 +350,46 @@ GREETINGS: dict[str, str] = {
         "Aapke bachche ka teekakaran ka samay aa raha hai. "
         "Hum aapko yaad dilana chahte hain."
     ),
-    # The kiosk. Not a call — the patient is standing at a screen, so this does not
-    # open with "Swadhikaar se call hai", and it says up front why a machine is asking,
-    # because a stranger asked medical questions by a screen with no explanation stops
-    # answering. The last line is the one that matters: their words are enough.
     "case_taking": (
         "Namaste {name} ji. Doctor saheb se milne se pehle main aapki takleef "
         "likh loonga, taaki andar aapka samay bachche. "
         "Aaj aapko kya takleef hai? Apne shabdon mein bataiye."
     ),
 }
+
+# Call type → friendly greeting text (Tamil / Tanglish)
+GREETINGS_TA: dict[str, str] = {
+    "screening_to_opd": "Vanakkam {name}! Idhu Swadhikaar la irundhu call. Health camp-la screening nadanthadhe, ippo ungalukku eppadi feel aagudhu?",
+    "opd_to_ipd": "Vanakkam {name}! Swadhikaar la irundhu call pandrom. Neenga OPD-la doctor-ai paartheengale, ippo udambu epdi irukku?",
+    "recovery_protocol": "Vanakkam {name}! Hospital-la irundhu veetukku vandhuteengala? Recovery epdi pogudhu? Swadhikaar la irundhu check panna call pandrom.",
+    "chronic_management": "Vanakkam {name}! Idhu ungaloda daily health check-in call from Swadhikaar. Innaiku eppadi feel panreenga?",
+    "follow_up": "Vanakkam {name}! Swadhikaar la irundhu call pandrom. Unga health pathi theringikka dhaan, ippo epdi irukkeenga?",
+    "elderly_checkin": "Vanakkam {name}! Swadhikaar ungaloda weekly health check-in call. Innaiku unga udambu epdi irukku?",
+    "newborn_vaccination": "Vanakkam {name}! Swadhikaar la irundhu call pandrom. Unga kozhandhaikku vaccination time vandhiduchu, adhai remind panna dhaan.",
+    "case_taking": "Vanakkam {name}. Doctor-ai paarka munnadi unga symptoms-ai note pannikiren, ulla ungalukku time save aagum. Enna takleef irukku? Solunga.",
+}
+
+# Call type → friendly greeting text (Bengali / Benglish)
+GREETINGS_BN: dict[str, str] = {
+    "screening_to_opd": "Nomoshkar {name} babu! Eta Swadhikaar theke call. Health camp e apnar screening hoyechilo, apni ekhon kemon feel korchen?",
+    "opd_to_ipd": "Nomoshkar {name} babu! Swadhikaar theke call korchi. Apni OPD-te doctor er sathe dekha korechilen, ekhon apnar shorir kemon ache?",
+    "recovery_protocol": "Nomoshkar {name} babu! Apni hospital theke bari eshechen, recovery kemon cholche? Amra Swadhikaar theke khobor nite call korechi.",
+    "chronic_management": "Nomoshkar {name} babu! Swadhikaar theke apnar daily health check-in call. Aaj apni kemon feel korchen?",
+    "follow_up": "Nomoshkar {name} babu! Swadhikaar theke call korchi. Apnar khobor nite, ekhon kemon achen?",
+    "elderly_checkin": "Nomoshkar {name} babu! Swadhikaar theke weekly health check-in call. Aaj apnar kemon lagche?",
+    "newborn_vaccination": "Nomoshkar {name} babu! Swadhikaar theke call korchi. Apnar bachhar vaccination er somoy hoyeche, remind korate call kora.",
+    "case_taking": "Nomoshkar {name} babu. Doctor babur kache jawar aage ami apnar shomosya likhe nicchi jate apnar somoy bache. Bolun, ki oshubidha hochhe?",
+}
+
+def get_greeting(call_type: str, language: str, name: str) -> str:
+    lang = (language or "hindi").lower()
+    if any(k in lang for k in ["tamil", "tanglish", "ta"]):
+        tmpl = GREETINGS_TA.get(call_type, GREETINGS_TA["follow_up"])
+    elif any(k in lang for k in ["bengali", "benglish", "bangla", "bn"]):
+        tmpl = GREETINGS_BN.get(call_type, GREETINGS_BN["follow_up"])
+    else:
+        tmpl = GREETINGS.get(call_type, GREETINGS["follow_up"])
+    return tmpl.format(name=name)
 
 # CRITICAL trigger keywords — for real-time escalation detection (patient speech)
 _CRITICAL_KEYWORDS_HI = [
@@ -377,6 +448,54 @@ _CRITICAL_KEYWORDS_HI = [
     "bleeding ho rahi",
     "pani aa raha",
 ]
+
+_CRITICAL_KEYWORDS_TA = [
+    # Chest / cardiac (Tamil / Tanglish)
+    "marbu vali",
+    "nenju vali",
+    "nenjula pain",
+    "marbula baaram",
+    # Breathing
+    "swasam vida",
+    "swasam kashtam",
+    "moochu thinaral",
+    "moochu vida mudiyala",
+    # Consciousness
+    "mayakkam",
+    "mayangi vizhunthuten",
+    # Neurological / Stroke
+    "kaal kai varala",
+    "thideer thalavali",
+    # Bleeding
+    "ratham varudhu",
+    # Seizures
+    "kaaka vali",
+    "fits",
+]
+
+_CRITICAL_KEYWORDS_BN = [
+    # Chest / cardiac (Bengali / Benglish)
+    "buke betha",
+    "buke bhaar",
+    "buke chap",
+    # Breathing
+    "saas nite koshto",
+    "saas bondho",
+    "haphani",
+    # Consciousness
+    "ogyan hoye geche",
+    "matha ghure pore gelam",
+    # Neurological / Stroke
+    "hath pa cholche na",
+    "prochondho matha betha",
+    # Bleeding
+    "rokto porchhe",
+    "rokto berocche",
+    # Seizures
+    "mrigi",
+]
+
+_CRITICAL_KEYWORDS_HI = _CRITICAL_KEYWORDS_HI + _CRITICAL_KEYWORDS_TA + _CRITICAL_KEYWORDS_BN
 
 # HIGH trigger keywords — for elevated risk detection (patient speech)
 _HIGH_KEYWORDS_HI = [
@@ -446,6 +565,27 @@ _HIGH_KEYWORDS_HI = [
     "dast",
     "diarrhea",
 ]
+
+_HIGH_KEYWORDS_TA = [
+    "marunthu sapdala",
+    "tablet maranthuten",
+    "kaichal",
+    "sugar athigam",
+    "thalavali",
+    "kan theriyala",
+]
+
+_HIGH_KEYWORDS_BN = [
+    "oushodh khaini",
+    "goli khete bhule gechi",
+    "jor",
+    "jwor",
+    "sugar bere geche",
+    "matha betha",
+    "chokhe jhapsa",
+]
+
+_HIGH_KEYWORDS_HI = _HIGH_KEYWORDS_HI + _HIGH_KEYWORDS_TA + _HIGH_KEYWORDS_BN
 
 # Agent-side escalation indicators — when the agent itself tells the patient
 # to seek emergency help, that IS the escalation signal
@@ -904,8 +1044,7 @@ class SwadhikaarAgent(VoiceAgent):
         # We wrap this in a delayed task because Gemini Realtime API is in preview
         # and its WebSocket can take a long time to connect on the first turn,
         # which causes timeouts.
-        greeting_template = GREETINGS.get(call_type, GREETINGS["follow_up"])
-        greeting = greeting_template.format(name=patient_name)
+        greeting = get_greeting(call_type, self._language, patient_name)
 
         async def delayed_greeting():
             # In FAST pipeline keep this near-immediate; in LIVE give model time to settle.
@@ -1727,11 +1866,11 @@ async def entrypoint(ctx: JobContext) -> None:
         },
     }
 
-    # ── FAST PIPELINE ───────────────────────────────────────────────
-    # STT: Deepgram Nova-3, LLM: Groq primary with Gemini fallback
-    logger.info(
-        "FAST PIPELINE: Deepgram STT + Groq primary LLM + fallback + configurable TTS"
-    )
+    # ── SOVEREIGN SPEECH PIPELINE ──────────────────────────────────────────
+    # Primary: Gnani.ai Prisma v3.0 Indic STT
+    # Fallback: Deepgram Nova-3 multilingual STT
+    primary_stt_provider = os.getenv("PRIMARY_STT_PROVIDER", "gnani").strip().lower()
+    gnani_key = os.getenv("GNANI_API_KEY", "").strip()
 
     # Multilingual STT & mid-convo language switching:
     # 1. If DEEPGRAM_STT_LANGUAGE is configured (e.g. "multi" or "hi"), use it so callers
@@ -1748,16 +1887,30 @@ async def entrypoint(ctx: JobContext) -> None:
     else:
         effective_stt_language = stt_language
 
-    logger.info("Deepgram STT configured with language: %s (caller language: %s)", effective_stt_language, language)
-
-    stt = deepgram_plugin.STT(
-        model=os.getenv("DEEPGRAM_STT_MODEL", "nova-3"),
-        language=effective_stt_language,
-        interim_results=True,
-        smart_format=True,
-        no_delay=True,
-        endpointing_ms=300,  # end-of-speech detection: 300ms
-    )
+    if primary_stt_provider == "gnani" and gnani_key and GnaniPrismaSTT is not None:
+        logger.info(
+            "SOVEREIGN PIPELINE: Gnani.ai Prisma v3.0 STT initialized (code-mix auto, caller language: %s)",
+            language,
+        )
+        stt = GnaniPrismaSTT(
+            model=os.getenv("GNANI_STT_MODEL", "prisma-v3.0"),
+            language="indic-auto",
+            api_key=gnani_key,
+        )
+    else:
+        logger.info(
+            "FALLBACK PIPELINE: Deepgram STT configured with language: %s (caller language: %s)",
+            effective_stt_language,
+            language,
+        )
+        stt = deepgram_plugin.STT(
+            model=os.getenv("DEEPGRAM_STT_MODEL", "nova-3"),
+            language=effective_stt_language,
+            interim_results=True,
+            smart_format=True,
+            no_delay=True,
+            endpointing_ms=300,  # end-of-speech detection: 300ms
+        )
     # ── LLM CHAIN: Gemini (Primary) -> Groq (Fallback) -> LiveKit Inference (Tertiary) ──
     # 1. Primary: Direct Google Gemini (1,000,000 TPM limit on free tier, supports tool calling + Hindi)
     google_model = os.getenv("GOOGLE_LLM_MODEL", "gemini-2.5-flash").strip()
@@ -1807,14 +1960,21 @@ async def entrypoint(ctx: JobContext) -> None:
     # ponytail: ordered "pick one, degrade if unavailable" selector — NOT a runtime
     # failover chain, and deliberately not tts.FallbackAdapter. That adapter takes a
     # list of *already-constructed* instances, so every provider would have to hold
-    # credentials at startup; only MURF_API_KEY is set here. Switch to
-    # livekit.agents.tts.FallbackAdapter once a second Indic provider is funded; the
-    # list is already in the right order for it.
+    # credentials at startup. Gnani Timbre v3.0 is the primary sovereign Indic voice
+    # engine; Murf/Rime/Sarvam/Google act as multi-tier fallbacks.
     #
-    # Providers are murf / rime / sarvam / google, chosen with FAST_TTS_PROVIDER.
-    # Cartesia and Deepgram TTS were removed: neither has a key, and Deepgram's
-    # configured voice was aura-asteria-en, so leaving it in the chain meant one
-    # failed Indic lookup away from reading a Bhojpuri advisory in English.
+    # Providers are gnani / murf / rime / sarvam / google, chosen with FAST_TTS_PROVIDER.
+    def _gnani_tts():
+        if GnaniTimbreTTS is None:
+            raise RuntimeError("GnaniTimbreTTS adapter not available")
+        voice = GNANI_VOICES.get(bcp47_code, "Shivani")
+        return GnaniTimbreTTS(
+            model=os.getenv("GNANI_TTS_MODEL", "timbre-v3.0"),
+            voice=voice,
+            language=bcp47_code,
+            speed=float(os.getenv("GNANI_SPEED", "1.0")),
+        )
+
     def _murf_tts():
         # Voice, locale and style all travel together from MURF_VOICES, because they
         # are one fact about the language, not three settings. A global MURF_STYLE is
@@ -1902,13 +2062,14 @@ async def entrypoint(ctx: JobContext) -> None:
     # (name, plugin, builder, languages it can speak). None = no list we verified
     # ourselves, so try it and let the provider reject what it cannot say.
     tts_chain = [
+        ("gnani", GnaniTimbreTTS, _gnani_tts, GNANI_LANGS),
         ("murf", murf_plugin, _murf_tts, frozenset(MURF_VOICES)),
         ("rime", rime_plugin, _rime_tts, frozenset(RIME_VOICES)),
         ("sarvam", sarvam_plugin, _sarvam_tts, SARVAM_LANGS),
         ("google", google_plugin, _google_tts, None),
     ]
     candidates = tts_candidates(
-        tts_chain, os.getenv("FAST_TTS_PROVIDER", "murf").strip().lower(), bcp47_code
+        tts_chain, os.getenv("FAST_TTS_PROVIDER", "gnani").strip().lower(), bcp47_code
     )
 
     tts = None

@@ -49,8 +49,24 @@ interface ChatMessage {
   toolData?: any;
 }
 
+type LanguageMode = "hi" | "en" | "ta" | "bn";
+
+const WELCOME_MESSAGES: Record<LanguageMode, string> = {
+  hi: "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप कैसा महसूस कर रहे हैं? आप बोलकर या लिखकर लक्षण पूछ सकते हैं।",
+  ta: "வணக்கம் Ramesh ji! நான் உங்கள் Sahara AI நல்வாழ்வு தோழன். உங்க உடம்பு இப்போ எப்படி இருக்கு? அறிகுறிகளைப் பேசி அல்லது டைப் செய்து கேட்கலாம்.",
+  bn: "নমস্কার Ramesh বাবু! আমি সাহারা — আপনার AI স্বাস্থ্য সাথী। আপনি এখন কেমন বোধ করছেন? আপনার লক্ষণগুলি মুখে বলুন বা টাইপ করে জানান।",
+  en: "Hello Ramesh ji! I am Sahara — your AI health companion. How are you feeling today? You can speak or type your symptoms.",
+};
+
+const RESET_MESSAGES: Record<LanguageMode, string> = {
+  hi: "नमस्ते रमेश जी! नया सत्र शुरू हो चुका है। आप आज क्या पूछना या जांचना चाहते हैं?",
+  ta: "வணக்கம் Ramesh ji! புதிய அமர்வு தொடங்கிவிட்டது. இன்று நீங்கள் என்ன கேட்க விரும்புகிறீர்கள்?",
+  bn: "নমস্কার Ramesh বাবু! নতুন সেশন শুরু হয়েছে। আজ আপনি কী জানতে বা চেক করতে চান?",
+  en: "Hello Ramesh ji! New session started. What would you like to check or consult today?",
+};
+
 export default function PatientChatGPTPage() {
-  const [lang, setLang] = useState<"hi" | "en">("hi");
+  const [lang, setLang] = useState<LanguageMode>("hi");
   const [viewMode, setViewMode] = useState<"chat" | "voice">("chat");
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [audioLevel, setAudioLevel] = useState(0);
@@ -64,10 +80,7 @@ export default function PatientChatGPTPage() {
     {
       id: "msg-0",
       sender: "sahara",
-      text:
-        lang === "hi"
-          ? "नमस्ते रमेश जी! मैं सहारा हूँ — आपका AI स्वास्थ्य साथी। आप कैसा महसूस कर रहे हैं? आप बोलकर या लिखकर लक्षण पूछ सकते हैं।"
-          : "Hello Ramesh ji! I am Sahara — your AI health companion. How are you feeling today? You can speak or type your symptoms.",
+      text: WELCOME_MESSAGES["hi"],
       timestamp: "Just now",
     },
   ]);
@@ -92,8 +105,41 @@ export default function PatientChatGPTPage() {
   const handleCopyText = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setIsCopiedId(id);
-    toast.success(lang === "hi" ? "कॉपी कर लिया गया" : "Copied to clipboard");
+    const copyToasts: Record<LanguageMode, string> = {
+      hi: "कॉपी कर लिया गया",
+      ta: "Copied pannappattadhu",
+      bn: "Copy kora hoyeche",
+      en: "Copied to clipboard",
+    };
+    toast.success(copyToasts[lang]);
     setTimeout(() => setIsCopiedId(null), 2000);
+  };
+
+  // Switch Language Mode across Hinglish, Tanglish, Benglish & English
+  const handleSwitchLanguage = (newLang: LanguageMode) => {
+    setLang(newLang);
+    stopSpeaking();
+    setMessages((prev) => {
+      if (prev.length <= 1) {
+        return [
+          {
+            id: "msg-0",
+            sender: "sahara",
+            text: WELCOME_MESSAGES[newLang],
+            timestamp: "Just now",
+          },
+        ];
+      }
+      return prev;
+    });
+
+    const activeToasts: Record<LanguageMode, string> = {
+      hi: "Hinglish (हिन्दी) मोड सक्रिय — Timbre v3.0 (Shivani)",
+      ta: "Tanglish (தமிழ்) mode active — Timbre v3.0 (Lakshmi)",
+      bn: "Benglish (বাংলা) mode active — Timbre v3.0 (Riyaa)",
+      en: "English mode active — Timbre v3.0 (Shivani)",
+    };
+    toast.info(activeToasts[newLang]);
   };
 
   // Reset conversation
@@ -103,15 +149,18 @@ export default function PatientChatGPTPage() {
       {
         id: `msg-${Date.now()}`,
         sender: "sahara",
-        text:
-          lang === "hi"
-            ? "नमस्ते रमेश जी! नया सत्र शुरू हो चुका है। आप आज क्या पूछना या जांचना चाहते हैं?"
-            : "Hello Ramesh ji! New session started. What would you like to check or consult today?",
+        text: RESET_MESSAGES[lang],
         timestamp: "Just now",
       },
     ]);
     setOrbState("idle");
-    toast.info(lang === "hi" ? "नया चैट शुरू किया गया" : "New chat started");
+    const resetToasts: Record<LanguageMode, string> = {
+      hi: "नया चैट शुरू किया गया",
+      ta: "Puthiya chat thodangappattadhu",
+      bn: "Notun chat shuru hoyeche",
+      en: "New chat started",
+    };
+    toast.info(resetToasts[lang]);
   };
 
   // Voice Microphone Toggle
@@ -155,12 +204,12 @@ export default function PatientChatGPTPage() {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
         stream.getTracks().forEach((t) => t.stop());
 
-        // Call Gnani Prisma v3.0 STT
+        // Call Gnani Prisma v3.0 STT with Sovereign Indic-Auto Code-Mixing
         let recognizedText = "";
         try {
           const fd = new FormData();
           fd.append("audio", audioBlob, "patient_intake.wav");
-          fd.append("language_code", lang === "hi" ? "hi-IN" : "en-IN");
+          fd.append("language_code", "indic-auto");
           fd.append("model", "prisma-v3.0");
 
           const res = await fetch("/api/gnani/stt", { method: "POST", body: fd });
@@ -173,10 +222,15 @@ export default function PatientChatGPTPage() {
         }
 
         if (!recognizedText) {
-          recognizedText =
-            lang === "hi"
-              ? "मुझे सिरदर्द और चक्कर आ रहे हैं"
-              : "I have headache and dizziness";
+          if (lang === "ta") {
+            recognizedText = "Enakku severe headache and dizziness irukku";
+          } else if (lang === "bn") {
+            recognizedText = "Amar matha ghurche and chest heaviness lagche";
+          } else if (lang === "hi") {
+            recognizedText = "मुझे सिरदर्द और चक्कर आ रहे हैं";
+          } else {
+            recognizedText = "I have severe headache and dizziness";
+          }
         }
 
         handleProcessUserQuery(recognizedText);
@@ -187,7 +241,13 @@ export default function PatientChatGPTPage() {
       setAudioLevel(0.65);
     } catch (err) {
       console.error("Mic access error", err);
-      toast.error(lang === "hi" ? "माइक्रोफ़ोन अनुमति नहीं मिली" : "Microphone permission denied");
+      const micErrors: Record<LanguageMode, string> = {
+        hi: "माइक्रोफ़ोन अनुमति नहीं मिली",
+        ta: "Microphone anumathi kidaikkavillai",
+        bn: "Microphone er onumoti paowa jayni",
+        en: "Microphone permission denied",
+      };
+      toast.error(micErrors[lang]);
       setOrbState("idle");
     }
   };
@@ -214,23 +274,72 @@ export default function PatientChatGPTPage() {
       let toolCardType: ChatMessage["toolCard"] = undefined;
       let toolData: any = undefined;
 
-      if (
+      const isEmergency =
         q.includes("सीने") ||
         q.includes("chest") ||
         q.includes("सांस") ||
         q.includes("breath") ||
         q.includes("चक्कर") ||
         q.includes("सिरदर्द") ||
-        q.includes("headache")
-      ) {
-        replyText =
-          lang === "hi"
-            ? "⚠️ आपके लक्षण महत्वपूर्ण हैं। हमने आपके लक्षणों का क्लीनिकल ट्राइएज किया है और आपातकालीन प्रोटोकॉल तैयार किया है।"
-            : "⚠️ These symptoms require clinical attention. We conducted acute triage and generated a pre-alert SBAR summary.";
+        q.includes("headache") ||
+        q.includes("dizziness") ||
+        q.includes("marbu") ||
+        q.includes("vali") ||
+        q.includes("nenju") ||
+        q.includes("swasam") ||
+        q.includes("moochu") ||
+        q.includes("mayakkam") ||
+        q.includes("buke") ||
+        q.includes("betha") ||
+        q.includes("heaviness") ||
+        q.includes("saas") ||
+        q.includes("koshto") ||
+        q.includes("kosto") ||
+        q.includes("matha") ||
+        q.includes("ghurche");
+
+      const isMedicine =
+        q.includes("दवा") ||
+        q.includes("medicine") ||
+        q.includes("bp") ||
+        q.includes("sugar") ||
+        q.includes("सस्ता") ||
+        q.includes("जन औषधि") ||
+        q.includes("marunthu") ||
+        q.includes("tablets") ||
+        q.includes("salt") ||
+        q.includes("oushodh") ||
+        q.includes("goli") ||
+        q.includes("aushadhi");
+
+      const isHospital =
+        q.includes("अस्पताल") ||
+        q.includes("hospital") ||
+        q.includes("pmjay") ||
+        q.includes("आयुष्मान") ||
+        q.includes("aaspathiri") ||
+        q.includes("hashpatal") ||
+        q.includes("bed") ||
+        q.includes("doctor");
+
+      if (isEmergency) {
+        if (lang === "ta") {
+          replyText =
+            "⚠️ Unga symptoms acute-ah irukku. Naanga clinical triage panni 108 Emergency SBAR pre-alert dispatch desk-ku anupiyullom. Immediate rest edukavum.";
+        } else if (lang === "bn") {
+          replyText =
+            "⚠️ Apnar symptoms guruttopurno. Amra acute clinical triage korechi ebong 108 EMS pre-alert SBAR dispatch desk e pathiyechi. Ekhoni rest nin.";
+        } else if (lang === "hi") {
+          replyText =
+            "⚠️ आपके लक्षण महत्वपूर्ण हैं। हमने आपके लक्षणों का क्लीनिकल ट्राइएज किया है और आपातकालीन 108 SBAR प्रोटोकॉल तैयार किया है।";
+        } else {
+          replyText =
+            "⚠️ These symptoms require immediate clinical attention. We conducted acute triage and generated a pre-alert SBAR summary for 108 EMS.";
+        }
         toolCardType = "emergency";
         toolData = {
           title: "Acute Clinical Triage Pre-Alert (Red/Amber Path)",
-          sbar: "S: Acute Headache & Dizziness. B: Male, 58Y, Hypertensive. A: Borderline hypertensive urgency. R: 108 EMS desk alerted.",
+          sbar: "S: Acute Chest Heaviness / Headache & Dizziness. B: Male, 58Y, Hypertensive on Telma 40. A: Suspected hypertensive urgency / acute event. R: 108 EMS desk alerted.",
         };
         setOrbState("emergency");
 
@@ -244,26 +353,28 @@ export default function PatientChatGPTPage() {
             coords: { lat: 28.6139, lng: 77.209 },
             triage: "red",
             sbar: {
-              situation: "Severe headache and dizziness reported via patient companion",
+              situation: "Severe chest heaviness, headache or dizziness reported via code-mixed patient intake",
               background: "Male, 58Y, Hypertensive on Telma 40",
-              assessment: "Suspected hypertensive urgency / vertigo episode",
+              assessment: "Suspected hypertensive urgency / cardiac risk",
               recommendation: "Immediate vitals check & 108 CAD ambulance standby",
             },
             timestamp: Date.now(),
           },
         });
-      } else if (
-        q.includes("दवा") ||
-        q.includes("medicine") ||
-        q.includes("bp") ||
-        q.includes("sugar") ||
-        q.includes("सस्ता") ||
-        q.includes("जन औषधि")
-      ) {
-        replyText =
-          lang === "hi"
-            ? "आपकी नियमित BP की दवा Telma 40 है। आप जन औषधि केंद्र से यही सॉल्ट (Telmisartan 40mg) केवल ₹32 में प्राप्त कर सकते हैं, जिससे आपकी 88% की बचत होगी।"
-            : "Your regular BP medicine is Telma 40. The same generic salt (Telmisartan 40mg) is available at Jan Aushadhi Kendra for only ₹32, saving 88%.";
+      } else if (isMedicine) {
+        if (lang === "ta") {
+          replyText =
+            "Unga regular BP medicine Telma 40. Idhe generic salt (Telmisartan 40mg) Jan Aushadhi Kendra-la mattum ₹32-ku kedaikkum, ungalukku 88% direct savings kedaikkum!";
+        } else if (lang === "bn") {
+          replyText =
+            "Apnar regular BP medicine Telma 40. Eki generic salt (Telmisartan 40mg) Jan Aushadhi Kendra-te matro ₹32 te paben, jar fole 88% pocket savings hobe!";
+        } else if (lang === "hi") {
+          replyText =
+            "आपकी नियमित BP की दवा Telma 40 है। आप जन औषधि केंद्र से यही सॉल्ट (Telmisartan 40mg) केवल ₹32 में प्राप्त कर सकते हैं, जिससे आपकी 88% की बचत होगी।";
+        } else {
+          replyText =
+            "Your regular BP medicine is Telma 40. The same generic salt (Telmisartan 40mg) is available at Jan Aushadhi Kendra for only ₹32, saving 88%.";
+        }
         toolCardType = "savings";
         toolData = {
           brandedName: "Telma 40 (Telmisartan 40mg)",
@@ -273,23 +384,36 @@ export default function PatientChatGPTPage() {
           savingsPct: 88,
         };
         setOrbState("speaking");
-      } else if (
-        q.includes("अस्पताल") ||
-        q.includes("hospital") ||
-        q.includes("pmjay") ||
-        q.includes("आयुष्मान")
-      ) {
-        replyText =
-          lang === "hi"
-            ? "आपके नज़दीक सिविल अस्पताल (Civil Hospital) 2.4 किमी दूरी पर है, जहाँ आयुष्मान भारत PM-JAY के तहत मुफ़्त इलाज व 14 आपातकालीन बेड उपलब्ध हैं।"
-            : "Civil Hospital is 2.4 km away with PM-JAY cashless treatment and 14 emergency beds currently open.";
+      } else if (isHospital) {
+        if (lang === "ta") {
+          replyText =
+            "Unga location-ku kitta Civil Hospital 2.4 km dhoorathula irukku. Anga Ayushman Bharat PM-JAY cashless treatment & 14 emergency beds available-ah irukku.";
+        } else if (lang === "bn") {
+          replyText =
+            "Apnar kache Civil Hospital matro 2.4 km dure ache, jekhane PM-JAY cashless treatment ebong 14 ti emergency bed available ache.";
+        } else if (lang === "hi") {
+          replyText =
+            "आपके नज़दीक सिविल अस्पताल (Civil Hospital) 2.4 किमी दूरी पर है, जहाँ आयुष्मान भारत PM-JAY के तहत मुफ़्त इलाज व 14 आपातकालीन बेड उपलब्ध हैं।";
+        } else {
+          replyText =
+            "Civil Hospital is 2.4 km away with PM-JAY cashless treatment and 14 emergency beds currently open.";
+        }
         toolCardType = "hospital";
         setOrbState("speaking");
       } else {
-        replyText =
-          lang === "hi"
-            ? "मैंने आपकी जानकारी नोट कर ली है। कृपया थोड़ा पानी पिएं और विश्राम करें। यदि कोई भी असहजता महसूस हो तो तुरंत मुझे बताएं।"
-            : "I have recorded your notes. Please drink some water and rest. If you feel any worsening discomfort, let me know immediately.";
+        if (lang === "ta") {
+          replyText =
+            "Unga details note pannikitten. Konjam water kudichitu rest edunga. Edhavadhu discomfort irundha udane enakku sollunga.";
+        } else if (lang === "bn") {
+          replyText =
+            "Ami apnar kotha note kore niyechi. Ektu jol khan ebong rest nin. Kono rokom koshto hole sathe sathe janaben.";
+        } else if (lang === "hi") {
+          replyText =
+            "मैंने आपकी जानकारी नोट कर ली है। कृपया थोड़ा पानी पिएं और विश्राम करें। यदि कोई भी असहजता महसूस हो तो तुरंत मुझे बताएं।";
+        } else {
+          replyText =
+            "I have recorded your notes. Please drink some water and rest. If you feel any worsening discomfort, let me know immediately.";
+        }
         toolCardType = "vitals";
         setOrbState("speaking");
       }
@@ -305,7 +429,7 @@ export default function PatientChatGPTPage() {
 
       setMessages((prev) => [...prev, botMsg]);
 
-      // Voice Output via Gnani Timbre TTS
+      // Voice Output via Gnani Timbre TTS (hi -> Shivani, ta -> Lakshmi, bn -> Riyaa)
       speak(replyText, lang);
 
       setTimeout(() => {
@@ -318,29 +442,45 @@ export default function PatientChatGPTPage() {
     {
       icon: Stethoscope,
       hi: "मुझे सिरदर्द और चक्कर आ रहे हैं",
+      ta: "Enakku severe headache and dizziness irukku",
+      bn: "Amar matha ghurche and buke heaviness lagche",
       en: "I have headache and dizziness",
       descHi: "लक्षणों का त्वरित क्लीनिकल ट्राइएज",
+      descTa: "Acute symptom clinical triage",
+      descBn: "Acute symptom clinical triage",
       descEn: "Acute symptom clinical triage",
     },
     {
       icon: Pill,
       hi: "मेरी आज की दवाइयों का समय बताओ",
+      ta: "Enoda innaiku BP medicine schedule kaatunga",
+      bn: "Ajker daily medicine schedule ta bolun",
       en: "Show my medicines for today",
       descHi: "खुराक शेड्यूल व नियमितता",
+      descTa: "Daily dose schedule & adherence",
+      descBn: "Daily dose schedule & adherence",
       descEn: "Daily dose schedule & adherence",
     },
     {
       icon: Hospital,
       hi: "नज़दीकी PM-JAY अस्पताल कहाँ है?",
+      ta: "Nearest PM-JAY hospital and emergency beds sollunga",
+      bn: "Kacher PM-JAY hospital e emergency bed ache?",
       en: "Where is nearest PM-JAY hospital?",
       descHi: "मुफ़्त इलाज व इमरजेंसी बेड स्थिति",
+      descTa: "Cashless coverage & bed status",
+      descBn: "Cashless coverage & bed status",
       descEn: "Cashless coverage & bed status",
     },
     {
       icon: Sparkles,
       hi: "BP की दवा का सस्ता जन औषधि विकल्प?",
+      ta: "BP tablet-ku cheap Jan Aushadhi generic alternative?",
+      bn: "BP oushodher sosta Jan Aushadhi generic alternative?",
       en: "Cheaper Jan Aushadhi generic for BP?",
       descHi: "88% तक की सॉल्ट बचत तुलना",
+      descTa: "Generic salt savings up to 88%",
+      descBn: "Generic salt savings up to 88%",
       descEn: "Generic salt savings up to 88%",
     },
   ];
@@ -354,7 +494,13 @@ export default function PatientChatGPTPage() {
           <div className="flex items-center gap-2">
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold text-sm tracking-tight text-foreground">
-              {lang === "hi" ? "सहारा AI" : "Sahara Health AI"}
+              {lang === "ta"
+                ? "Sahara AI (சகாரா)"
+                : lang === "bn"
+                ? "Sahara AI (সাহারা)"
+                : lang === "hi"
+                ? "सहारा AI"
+                : "Sahara Health AI"}
             </span>
             <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 text-teal-400 border-teal-500/30">
               Gnani Voice
@@ -375,7 +521,7 @@ export default function PatientChatGPTPage() {
               }`}
             >
               <MessageSquare className="h-3 w-3" />
-              <span>{lang === "hi" ? "चैट" : "Chat"}</span>
+              <span>{lang === "ta" ? "சாட்" : lang === "bn" ? "চ্যাট" : lang === "hi" ? "चैट" : "Chat"}</span>
             </button>
             <button
               type="button"
@@ -387,7 +533,7 @@ export default function PatientChatGPTPage() {
               }`}
             >
               <Headphones className="h-3 w-3" />
-              <span>{lang === "hi" ? "वॉयस मोड" : "Voice Mode"}</span>
+              <span>{lang === "ta" ? "வாய்ஸ்" : lang === "bn" ? "ভয়েস" : lang === "hi" ? "वॉयस" : "Voice"}</span>
             </button>
           </div>
         </div>
@@ -401,28 +547,50 @@ export default function PatientChatGPTPage() {
             className="hidden md:flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <AlertTriangle className="h-3 w-3" />
-            <span>{lang === "hi" ? "फॉल टेस्ट" : "Test Fall"}</span>
+            <span>{lang === "ta" ? "Fall Test" : lang === "bn" ? "Fall Test" : lang === "hi" ? "फॉल टेस्ट" : "Test Fall"}</span>
           </button>
 
-          {/* Language Toggle */}
+          {/* 4-Language Code-Mixed Toggle Bar */}
           <div className="flex rounded-lg border border-border/60 p-0.5 bg-muted/30">
             <button
               type="button"
-              onClick={() => setLang("hi")}
+              onClick={() => handleSwitchLanguage("hi")}
               className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
                 lang === "hi" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
               }`}
+              title="Hinglish (Timbre v3.0 Shivani)"
             >
-              हिन्दी
+              Hinglish (हि)
             </button>
             <button
               type="button"
-              onClick={() => setLang("en")}
+              onClick={() => handleSwitchLanguage("ta")}
+              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
+                lang === "ta" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Tanglish (Timbre v3.0 Lakshmi)"
+            >
+              Tanglish (த)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchLanguage("bn")}
+              className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
+                lang === "bn" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Benglish (Timbre v3.0 Riyaa)"
+            >
+              Benglish (বা)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchLanguage("en")}
               className={`px-2 py-0.5 text-xs rounded-md font-medium transition-all ${
                 lang === "en" ? "bg-teal-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
               }`}
+              title="English (Indian English)"
             >
-              English
+              EN
             </button>
           </div>
 
@@ -434,7 +602,9 @@ export default function PatientChatGPTPage() {
             title="Reset Chat"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{lang === "hi" ? "नया चैट" : "New Chat"}</span>
+            <span className="hidden sm:inline">
+              {lang === "ta" ? "புதிய சாட்" : lang === "bn" ? "নতুন চ্যাট" : lang === "hi" ? "नया चैट" : "New Chat"}
+            </span>
           </button>
 
           {/* 108 SOS Quick Action */}
@@ -457,7 +627,13 @@ export default function PatientChatGPTPage() {
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-teal-400 animate-pulse" />
               <span className="text-xs text-muted-foreground">
-                {lang === "hi" ? "सॉवरेन वॉइस सत्र सक्रिय" : "Sovereign Voice Session Active"}
+                {lang === "ta"
+                  ? "Sovereign Voice Session Active (Tanglish - Lakshmi)"
+                  : lang === "bn"
+                  ? "Sovereign Voice Session Active (Benglish - Riyaa)"
+                  : lang === "hi"
+                  ? "सॉवरेन वॉइस सत्र सक्रिय (Hinglish - Shivani)"
+                  : "Sovereign Voice Session Active (Indian English)"}
               </span>
             </div>
             <Button
@@ -467,7 +643,7 @@ export default function PatientChatGPTPage() {
               className="text-xs text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4 mr-1" />
-              {lang === "hi" ? "चैट पर लौटें" : "Back to Chat"}
+              {lang === "ta" ? "சாட் திரும்பு" : lang === "bn" ? "চ্যাটে ফিরুন" : lang === "hi" ? "चैट पर लौटें" : "Back to Chat"}
             </Button>
           </div>
 
@@ -510,7 +686,11 @@ export default function PatientChatGPTPage() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              {lang === "hi"
+              {lang === "ta"
+                ? "மைக்கை அழுத்திப் பேசுங்கள். சஹாரா உடனடியாகப் பதிலளிக்கும்."
+                : lang === "bn"
+                ? "মাইক চেপে কথা বলুন। সাহারা তৎক্ষণাৎ উত্তর দেবে।"
+                : lang === "hi"
                 ? "माइक दबाकर बोलें। समाप्त करने के बाद सहारा तुरंत जवाब देगा।"
                 : "Tap the mic and speak. Sahara will transcribe and respond verbally."}
             </p>
@@ -540,10 +720,20 @@ export default function PatientChatGPTPage() {
                   </div>
 
                   <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground mb-2">
-                    {lang === "hi" ? "नमस्ते रमेश जी, आज आपकी सेहत कैसी है?" : "Hello Ramesh ji, how are you feeling today?"}
+                    {lang === "ta"
+                      ? "வணக்கம் Ramesh ji, இன்று உங்கள் உடல்நலம் எப்படி இருக்கிறது?"
+                      : lang === "bn"
+                      ? "নমস্কার Ramesh বাবু, আজ আপনার শরীর কেমন আছে?"
+                      : lang === "hi"
+                      ? "नमस्ते रमेश जी, आज आपकी सेहत कैसी है?"
+                      : "Hello Ramesh ji, how are you feeling today?"}
                   </h1>
                   <p className="text-sm text-muted-foreground max-w-md mb-8">
-                    {lang === "hi"
+                    {lang === "ta"
+                      ? "அறிகுறிகளைச் சொல்லுங்கள், மாத்திரை அட்டவணையை சரிபார்க்கவும் அல்லது அருகிலுள்ள PM-JAY மருத்துவமனையைக் கண்டறியவும்."
+                      : lang === "bn"
+                      ? "লক্ষণ জানান, ওষুধের সময়সূচী চেক করুন বা কাছের PM-JAY হাসপাতাল খুঁজুন।"
+                      : lang === "hi"
                       ? "लक्षण बताएं, अपनी नियमित दवाओं के बारे में पूछें या नजदीकी PM-JAY अस्पताल खोजें।"
                       : "Describe your symptoms, check dose schedules, or locate nearby PM-JAY hospitals."}
                   </p>
@@ -552,11 +742,16 @@ export default function PatientChatGPTPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl text-left">
                     {starterPrompts.map((item, idx) => {
                       const Icon = item.icon;
+                      const promptText =
+                        lang === "ta" ? item.ta : lang === "bn" ? item.bn : lang === "hi" ? item.hi : item.en;
+                      const promptDesc =
+                        lang === "ta" ? item.descTa : lang === "bn" ? item.descBn : lang === "hi" ? item.descHi : item.descEn;
+
                       return (
                         <button
                           key={idx}
                           type="button"
-                          onClick={() => handleProcessUserQuery(lang === "hi" ? item.hi : item.en)}
+                          onClick={() => handleProcessUserQuery(promptText)}
                           className="group p-3.5 rounded-2xl border border-border/70 bg-card hover:bg-muted/50 hover:border-teal-500/40 transition-all flex items-start gap-3 shadow-xs hover:shadow-sm"
                         >
                           <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 group-hover:bg-teal-500/20 transition-colors shrink-0">
@@ -564,10 +759,10 @@ export default function PatientChatGPTPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-foreground group-hover:text-teal-400 transition-colors line-clamp-1">
-                              {lang === "hi" ? item.hi : item.en}
+                              {promptText}
                             </div>
                             <div className="text-xs text-muted-foreground line-clamp-1">
-                              {lang === "hi" ? item.descHi : item.descEn}
+                              {promptDesc}
                             </div>
                           </div>
                         </button>
@@ -617,7 +812,9 @@ export default function PatientChatGPTPage() {
                                 className="flex items-center gap-1 hover:text-teal-400 transition-colors"
                               >
                                 <Volume2 className="h-3 w-3" />
-                                <span>{lang === "hi" ? "सुनें" : "Listen"}</span>
+                                <span>
+                                  {lang === "ta" ? "கேளுங்கள்" : lang === "bn" ? "শুনুন" : lang === "hi" ? "सुनें" : "Listen"}
+                                </span>
                               </button>
 
                               <button
@@ -628,12 +825,16 @@ export default function PatientChatGPTPage() {
                                 {isCopiedId === msg.id ? (
                                   <>
                                     <Check className="h-3 w-3 text-emerald-400" />
-                                    <span className="text-emerald-400">{lang === "hi" ? "कॉपी हुआ" : "Copied"}</span>
+                                    <span className="text-emerald-400">
+                                      {lang === "ta" ? "Copied" : lang === "bn" ? "Copied" : lang === "hi" ? "कॉपी हुआ" : "Copied"}
+                                    </span>
                                   </>
                                 ) : (
                                   <>
                                     <Copy className="h-3 w-3" />
-                                    <span>{lang === "hi" ? "कॉपी" : "Copy"}</span>
+                                    <span>
+                                      {lang === "ta" ? "Copy" : lang === "bn" ? "Copy" : lang === "hi" ? "कॉपी" : "Copy"}
+                                    </span>
                                   </>
                                 )}
                               </button>
@@ -679,7 +880,13 @@ export default function PatientChatGPTPage() {
                         <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "150ms" }} />
                         <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-bounce" style={{ animationDelay: "300ms" }} />
                         <span className="ml-1.5 font-medium">
-                          {lang === "hi" ? "सहारा सोच रहा है..." : "Sahara is thinking..."}
+                          {lang === "ta"
+                            ? "Sahara yosikkuthu..."
+                            : lang === "bn"
+                            ? "Sahara bhabche..."
+                            : lang === "hi"
+                            ? "सहारा सोच रहा है..."
+                            : "Sahara is thinking..."}
                         </span>
                       </div>
                     </div>
@@ -720,7 +927,11 @@ export default function PatientChatGPTPage() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder={
-                    lang === "hi"
+                    lang === "ta"
+                      ? "சஹாராவிடம் கேளுங்கள்... (அறிகுறிகள், மருந்துகள், PM-JAY மருத்துவமனை)"
+                      : lang === "bn"
+                      ? "সাহারার কাছে জানতে চান... (লক্ষণ, ওষুধ, PM-JAY হাসপাতাল)"
+                      : lang === "hi"
                       ? "सहारा से कुछ भी पूछें... (लक्षण, दवाइयाँ, PM-JAY अस्पताल)"
                       : "Ask Sahara anything... (symptoms, medications, hospitals)"
                   }
@@ -753,7 +964,11 @@ export default function PatientChatGPTPage() {
 
               {/* Minimal Disclaimer */}
               <p className="text-[11px] text-muted-foreground/60 text-center">
-                {lang === "hi"
+                {lang === "ta"
+                  ? "சஹாரா ஒரு AI சுகாதாரத் தோழன். அவசர நிலைகளில் உடனே 108-ஐ அழைக்கவும்."
+                  : lang === "bn"
+                  ? "সাহারা একটি AI স্বাস্থ্য সঙ্গী। জরুরি পরিস্থিতিতে অবিলম্বে 108 ডায়াল করুন।"
+                  : lang === "hi"
                   ? "सहारा एक AI स्वास्थ्य साथी है। किसी भी गंभीर आपातकाल में तुरंत 108 पर कॉल करें।"
                   : "Sahara is an AI health companion. In critical emergencies, immediately dial 108."}
               </p>

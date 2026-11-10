@@ -16,14 +16,20 @@ export interface SpeakOptions {
 
 export async function speak(
   text: string,
-  lang: "en" | "hi" = "hi",
+  lang: "en" | "hi" | "ta" | "bn" = "hi",
   options?: SpeakOptions
 ) {
   if (typeof window === "undefined" || !text.trim()) return;
 
   stopSpeaking();
 
-  const bcp47 = lang === "hi" ? "hi-IN" : "en-IN";
+  const bcp47Map: Record<string, string> = {
+    hi: "hi-IN",
+    ta: "ta-IN",
+    bn: "bn-IN",
+    en: "en-IN",
+  };
+  const bcp47 = bcp47Map[lang] || "hi-IN";
 
   // 1. Try Gnani.ai Timbre v3.0 REST synthesis first (High-fidelity Sovereign Indic TTS)
   try {
@@ -107,6 +113,10 @@ function fallbackBrowserSpeak(
       (v) =>
         (bcp47.startsWith("hi") &&
           (v.lang.includes("hi") || v.name.toLowerCase().includes("hindi"))) ||
+        (bcp47.startsWith("ta") &&
+          (v.lang.includes("ta") || v.name.toLowerCase().includes("tamil"))) ||
+        (bcp47.startsWith("bn") &&
+          (v.lang.includes("bn") || v.name.toLowerCase().includes("bengali"))) ||
         (bcp47.startsWith("en") &&
           (v.lang.includes("en-IN") || v.name.toLowerCase().includes("india")))
     );

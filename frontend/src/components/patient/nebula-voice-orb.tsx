@@ -17,7 +17,7 @@ export interface NebulaVoiceOrbProps {
   audioLevel?: number;
   theme?: "blue" | "emerald" | "cyan" | "emergency";
   onClick?: () => void;
-  lang?: "hi" | "en";
+  lang?: "hi" | "en" | "ta" | "bn";
 }
 
 const VERTEX_SHADER_SRC = `
@@ -614,18 +614,49 @@ export function NebulaVoiceOrb({
   }, []);
 
   // State label translation
-  const stateLabel =
+  const getStateText = () => {
+    switch (state) {
+      case "connecting":
+        if (lang === "ta") return "Connect aagudhu…";
+        if (lang === "bn") return "Connect hochhe…";
+        return lang === "hi" ? "जुड़ रहा है…" : "Connecting…";
+      case "listening":
+        if (lang === "ta") return "Ketkuren… (Pesunga)";
+        if (lang === "bn") return "Shunchi… (Bolun)";
+        return lang === "hi" ? "सुन रहा हूँ… (बोलिए)" : "Listening… (Speak now)";
+      case "thinking":
+        if (lang === "ta") return "Yosikkuren…";
+        if (lang === "bn") return "Bhabchi…";
+        return lang === "hi" ? "सोच रहा हूँ…" : "Thinking…";
+      case "speaking":
+        if (lang === "ta") return "Sahara pesudhu…";
+        if (lang === "bn") return "Sahara bolche…";
+        return lang === "hi" ? "सहारा बोल रहा है…" : "Sahara speaking…";
+      case "emergency":
+        if (lang === "ta") return "Emergency SOS Active";
+        if (lang === "bn") return "Apatkalin SOS Active";
+        return lang === "hi" ? "आपातकाल SOS सक्रिय" : "Emergency SOS Active";
+      default:
+        if (lang === "ta") return "Pesa tap pannunga";
+        if (lang === "bn") return "Kotha bolte tap korun";
+        return lang === "hi" ? "बात करने के लिए टैप करें" : "Tap to Speak";
+    }
+  };
+
+  const stateColor =
     state === "connecting"
-      ? { text: lang === "hi" ? "जुड़ रहा है…" : "Connecting…", color: "bg-amber-500/20 text-amber-300 border-amber-500/30" }
+      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
       : state === "listening"
-      ? { text: lang === "hi" ? "सुन रहा हूँ… (बोलिए)" : "Listening… (Speak now)", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" }
+      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
       : state === "thinking"
-      ? { text: lang === "hi" ? "सोच रहा हूँ…" : "Thinking…", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30" }
+      ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
       : state === "speaking"
-      ? { text: lang === "hi" ? "सहारा बोल रहा है…" : "Sahara speaking…", color: "bg-teal-500/20 text-teal-300 border-teal-500/30" }
+      ? "bg-teal-500/20 text-teal-300 border-teal-500/30"
       : state === "emergency"
-      ? { text: lang === "hi" ? "आपातकाल SOS सक्रिय" : "Emergency SOS Active", color: "bg-red-500/20 text-red-300 border-red-500/30" }
-      : { text: lang === "hi" ? "बात करने के लिए टैप करें" : "Tap to Speak", color: "bg-muted text-muted-foreground border-border" };
+      ? "bg-red-500/20 text-red-300 border-red-500/30"
+      : "bg-muted text-muted-foreground border-border";
+
+  const stateLabel = { text: getStateText(), color: stateColor };
 
   return (
     <div className="flex flex-col items-center justify-center select-none py-2">

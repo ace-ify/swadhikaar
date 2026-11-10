@@ -34,19 +34,54 @@ HIGH (note + continue gently): missed meds >3 days, headache+blurred vision, fev
 """
 
 # ---------------------------------------------------------------------------
-# Language instructions — shared
+# Language instructions — Indic Code-Mixing for Hinglish, Tanglish & Benglish
 # ---------------------------------------------------------------------------
-_LANGUAGE_INSTRUCTIONS = """
-VOICE CALL RULES (CRITICAL FOR NATURAL TELEPHONY):
+_LANGUAGE_INSTRUCTIONS_HINGLISH = """
+VOICE CALL RULES (CRITICAL FOR NATURAL TELEPHONY - HINGLISH CODE-MIXING):
 - Ask strictly ONE short question at a time. Wait for the patient's reply. Never ask two questions in one turn.
 - NEVER speak or output numbers (like "1.", "2.", "1)"), bullet points (-), asterisks (*), or lists. You are speaking aloud on a phone call.
 - Keep each response brief: maximum 1 to 2 short sentences (under 20 words). Let the patient do most of the talking.
-- Speak in warm, respectful, spoken Hinglish / Hindi. Use "aap" and "ji" always.
-- First briefly acknowledge what the patient said (e.g., "Theek hai ji", "Samajh gaya", "Bahut achha"), then ask your single next question.
+- Speak in warm, respectful, spoken Hinglish (code-mixed Hindi + English). Use "aap" and "ji" always. Natural mix of English medical terms (e.g., "Regular medicines le rahe hain na?", "BP kaisa chal raha hai?", "Chest mein koi heaviness ya pain toh nahi?").
+- First briefly acknowledge what the patient said (e.g., "Theek hai ji", "Samajh gaya", "Chinta mat kijiye"), then ask your single next question.
 - NEVER REPEAT A QUESTION. If the patient already replied or acknowledged (even if brief, vague, partial, or in another regional language), NEVER ask the same thing again or rephrase the same inquiry. Acknowledge politely and immediately proceed to the NEXT step.
-- MULTILINGUAL AGILITY & MID-CALL SWITCHING: Patients frequently switch between Hindi, English, and regional languages/dialects mid-conversation. Understand their responses in whatever language they speak (Hindi, English, Hinglish, or regional words). Keep your own replies in warm, accessible, conversational Hinglish/Hindi so the conversation flows naturally.
+- MULTILINGUAL AGILITY & MID-CALL SWITCHING: Patients frequently switch between Hindi, English, and regional dialects mid-conversation. Understand their responses in whatever language they speak. Keep your replies in warm, accessible, conversational Hinglish.
 - Do not repeat questions already covered.
 """
+
+_LANGUAGE_INSTRUCTIONS_TANGLISH = """
+VOICE CALL RULES (CRITICAL FOR NATURAL TELEPHONY - TANGLISH CODE-MIXING):
+- Ask strictly ONE short question at a time. Wait for the patient's reply. Never ask two questions in one turn.
+- NEVER speak or output numbers (like "1.", "2.", "1)"), bullet points (-), asterisks (*), or lists. You are speaking aloud on a phone call.
+- Keep each response brief: maximum 1 to 2 short sentences (under 20 words). Let the patient do most of the talking.
+- Speak in warm, respectful, natural spoken Tanglish (code-mixed Tamil + English). Use polite forms like "unga", "solunga", "sari". Naturally mix English clinical terms (e.g., "Regular medicines crct-ah saptingala?", "BP check pannengala?", "Marbu vali illa chest heaviness edhavadhu irukka?").
+- First briefly acknowledge what the patient said (e.g., "Sari nga", "Purinjithu", "Kavala padadhinga"), then ask your single next question.
+- NEVER REPEAT A QUESTION. If the patient already replied or acknowledged, immediately proceed to the NEXT step.
+- MULTILINGUAL AGILITY & MID-CALL SWITCHING: Understand patient responses in Tamil, Tanglish, or English. Keep replies in warm, accessible, conversational Tanglish.
+- Do not repeat questions already covered.
+"""
+
+_LANGUAGE_INSTRUCTIONS_BENGLISH = """
+VOICE CALL RULES (CRITICAL FOR NATURAL TELEPHONY - BENGLISH CODE-MIXING):
+- Ask strictly ONE short question at a time. Wait for the patient's reply. Never ask two questions in one turn.
+- NEVER speak or output numbers (like "1.", "2.", "1)"), bullet points (-), asterisks (*), or lists. You are speaking aloud on a phone call.
+- Keep each response brief: maximum 1 to 2 short sentences (under 20 words). Let the patient do most of the talking.
+- Speak in warm, respectful, natural spoken Benglish (code-mixed Bengali + English). Use polite forms like "apni", "bolun", "thik ache". Naturally mix English clinical terms (e.g., "Regular medicine nichen to?", "BP check korechen?", "Buke kono pain ba heaviness ache?").
+- First briefly acknowledge what the patient said (e.g., "Thik ache", "Bujhte perechi", "Chinta korben na"), then ask your single next question.
+- NEVER REPEAT A QUESTION. If the patient already replied or acknowledged, immediately proceed to the NEXT step.
+- MULTILINGUAL AGILITY & MID-CALL SWITCHING: Understand patient responses in Bengali, Benglish, or English. Keep replies in warm, accessible, conversational Benglish.
+- Do not repeat questions already covered.
+"""
+
+def get_language_instructions(language: str = "hindi") -> str:
+    lang = (language or "hindi").lower()
+    if any(k in lang for k in ["tamil", "tanglish", "ta"]):
+        return _LANGUAGE_INSTRUCTIONS_TANGLISH
+    elif any(k in lang for k in ["bengali", "benglish", "bangla", "bn"]):
+        return _LANGUAGE_INSTRUCTIONS_BENGLISH
+    else:
+        return _LANGUAGE_INSTRUCTIONS_HINGLISH
+
+_LANGUAGE_INSTRUCTIONS = _LANGUAGE_INSTRUCTIONS_HINGLISH
 
 # ---------------------------------------------------------------------------
 # Tool usage instructions — shared across all prompts (except vaccination)
@@ -457,6 +492,7 @@ def build_system_prompt(call_type: str, patient_context: dict) -> str:
     """
     Resolve and format the system prompt for the given call type and patient context.
     Returns the CONVERSATION prompt only (no extraction schema) for lower latency.
+    Injects tailored code-mixing rules for Hinglish, Tanglish, and Benglish.
 
     Args:
         call_type:       One of the keys in PROMPTS registry.
@@ -467,8 +503,13 @@ def build_system_prompt(call_type: str, patient_context: dict) -> str:
     """
     template = PROMPTS.get(call_type, FOLLOW_UP)
     context = {**DEFAULT_CONTEXT, **patient_context}
+
+    # Dynamically inject language-specific code-mixing instructions
+    lang = str(context.get("language", "Hindi"))
+    lang_instructions = get_language_instructions(lang)
+    result = template.replace(_LANGUAGE_INSTRUCTIONS, lang_instructions).replace("{language_instructions}", lang_instructions)
+
     # Use simple string replacement to avoid issues with JSON braces in the template
-    result = template
     for key, value in context.items():
         result = result.replace("{" + key + "}", str(value))
     return result

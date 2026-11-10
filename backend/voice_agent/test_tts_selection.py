@@ -27,7 +27,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from agent import LANGUAGES, MURF_VOICES, RIME_VOICES, SARVAM_LANGS, tts_candidates
+from agent import (
+    LANGUAGES,
+    MURF_VOICES,
+    RIME_VOICES,
+    SARVAM_LANGS,
+    GNANI_VOICES,
+    GNANI_LANGS,
+    tts_candidates,
+)
 
 # GET /v1/speech/voices?model=FALCON on 2026-08-25 — the streaming catalogue.
 # Hardcoded on purpose: a test that re-fetched would need a key and would pass on a
@@ -124,13 +132,17 @@ def test_every_patient_language_reaches_a_voice():
 
 # (name, plugin, builder, langs) — the plugin only has to be non-None to count as
 # installed, and tts_candidates never calls the builder.
-def _chain(murf=object(), rime=object(), sarvam=object(), google=object()):
-    return [
+def _chain(gnani=None, murf=object(), rime=object(), sarvam=object(), google=object()):
+    chain = []
+    if gnani is not None:
+        chain.append(("gnani", gnani, lambda: "gnani-tts", GNANI_LANGS))
+    chain.extend([
         ("murf", murf, lambda: "murf-tts", frozenset(MURF_VOICES)),
         ("rime", rime, lambda: "rime-tts", frozenset(RIME_VOICES)),
         ("sarvam", sarvam, lambda: "sarvam-tts", SARVAM_LANGS),
         ("google", google, lambda: "google-tts", None),
-    ]
+    ])
+    return chain
 
 
 def _names(*args, **kwargs):
@@ -240,6 +252,29 @@ def test_nothing_available_yields_nothing_rather_than_wrong_language():
     the wrong language logs as success and delivers nothing useful to the patient."""
     empty = _chain(murf=None, rime=None, sarvam=None, google=None)
     assert _names(empty, "murf", "hi-IN") == []
+
+
+def test_gnani_leads_when_preferred_for_all_indic_locales():
+    """Gnani Timbre v3.0 is the primary sovereign Indic voice engine."""
+    chain = _chain(gnani=object())
+    for bcp47 in ("hi-IN", "en-IN", "ta-IN", "te-IN", "kn-IN", "mr-IN", "gu-IN", "bn-IN", "as-IN"):
+        assert _names(chain, "gnani", bcp47)[0] == "gnani"
+
+
+def test_gnani_voice_mapping_covers_every_project_language():
+    """Every supported language in LANGUAGES must have a corresponding Gnani Timbre voice."""
+    for lang_name, (_, bcp47) in LANGUAGES.items():
+        assert bcp47 in GNANI_LANGS, f"{lang_name} ({bcp47}) missing in GNANI_LANGS"
+        assert bcp47 in GNANI_VOICES, f"{bcp47} missing in GNANI_VOICES"
+
+
+def test_gnani_absent_plugin_falls_back_to_murf():
+    """If Gnani plugin is None or uninstalled, tts_candidates gracefully falls back."""
+    chain = [
+        ("gnani", None, lambda: "gnani-tts", GNANI_LANGS),
+        ("murf", object(), lambda: "murf-tts", frozenset(MURF_VOICES)),
+    ]
+    assert _names(chain, "gnani", "hi-IN")[0] == "murf"
 
 
 if __name__ == "__main__":

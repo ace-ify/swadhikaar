@@ -112,21 +112,19 @@ LIVEKIT_URL=wss://<livekit-project>.livekit.cloud
 LIVEKIT_API_KEY=<livekit-api-key>
 LIVEKIT_API_SECRET=<livekit-api-secret>
 
+# Sovereign Indic Voice Engine (Gnani.ai)
+PRIMARY_STT_PROVIDER=gnani
+FAST_TTS_PROVIDER=gnani
+GNANI_API_KEY=<gnani-api-key>
+GNANI_STT_MODEL=prisma-v3.0
+GNANI_TTS_MODEL=timbre-v3.0
+
+# Multi-tier Speech & LLM Fallbacks
 GOOGLE_API_KEY=<google-api-key>
 DEEPGRAM_API_KEY=<deepgram-api-key>
-
 GROQ_API_KEY=<groq-api-key>
-GROQ_MODEL=llama-3.3-70b-versatile
-
-VOICE_PIPELINE=fast
-FAST_TTS_PROVIDER=deepgram
-```
-
-Optional provider keys (only if selected):
-
-```env
+MURF_API_KEY=<murf-api-key>
 SARVAM_API_KEY=<sarvam-api-key>
-CARTESIA_API_KEY=<cartesia-api-key>
 ```
 
 ### Supabase function secrets
@@ -235,15 +233,20 @@ on `public` by default and RLS policies cannot substitute for a missing `GRANT`.
 
 ## Voice Pipeline
 
-Swadhikaar runs a single production voice path:
-- STT: Deepgram
-- LLM: Groq primary, Gemini fallback
-- TTS: provider-selectable (Sarvam/Cartesia/Deepgram)
+Swadhikaar runs a sovereign Indic-first voice intelligence pipeline:
+- **Primary STT:** Gnani.ai Prisma v3.0 (Sub-200ms Indic auto code-mixing Hinglish transcription)
+- **Primary TTS:** Gnani.ai Timbre v3.0 (Empathetic 24kHz vernacular voice synthesis with authentic currency & numeral cadence)
+- **Primary LLM:** Sovereign Indic Triage Engine (Evon v3.3 architecture with Gemini 2.5 Flash & Groq failover)
+
+Resilient Multi-Tier Fallback Chain:
+- **STT Fallback:** Deepgram Nova-3 (automatic failover if Gnani key is unset or network error occurs)
+- **TTS Fallback:** Murf Falcon -> Sarvam Bulbul -> Rime Coda -> Google Cloud
+- **LLM Failover:** Google Gemini 2.5 Flash -> Groq Llama 3.3 70B -> LiveKit Cloud Inference
 
 Runtime behavior:
-- `VOICE_PIPELINE` is `fast`.
-- `FAST_TTS_PROVIDER` defaults to `deepgram`.
-- If `GROQ_API_KEY` is missing or Groq returns `429`, the turn falls back to Gemini text LLM.
+- `PRIMARY_STT_PROVIDER` defaults to `gnani`.
+- `FAST_TTS_PROVIDER` defaults to `gnani`.
+- Both STT and TTS automatically failover to secondary providers if keys are missing or provider limits are exceeded.
 
 ## Development Notes
 
