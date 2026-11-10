@@ -1,7 +1,23 @@
-# Swadhikaar
+# Swadhikaar (स्वाधिकार)
 
 > **Built for the Great Indian AI Internship Challenge by Gnani.ai**  
-> *Sovereign Indic Voice AI for Citizen Healthcare Operations*
+> *Sovereign Indic Voice AI for Universal Healthcare, Emergency Operations & Generic Access*
+
+[![1-Page Executive Solution Pitch](https://img.shields.io/badge/📄_Executive_Pitch-1--Page_PDF-0d9488?style=for-the-badge)](./Swadhikaar_Solution_Pitch.pdf)
+[![Live Platform Demo](https://img.shields.io/badge/🌐_Live_Demo-swadhikaar.vercel.app-0f766e?style=for-the-badge)](https://swadhikaar.vercel.app)
+[![Targeting Code-Mixed Voice Award](https://img.shields.io/badge/🎙️_Targeting_Award-Hinglish_|_Tanglish_|_Benglish-teal?style=for-the-badge)](https://swadhikaar.vercel.app/patient)
+
+---
+
+### 📌 Fast Links for Judges & Evaluators
+* **📄 Executive 1-Page Solution Pitch:** [`Swadhikaar_Solution_Pitch.pdf`](./Swadhikaar_Solution_Pitch.pdf) *(Complies strictly with the 1-page solution pitch mandate)*
+* **🌐 Production Live Demo:** [swadhikaar.vercel.app](https://swadhikaar.vercel.app)
+* **🎙️ Code-Mixed Voice Intake (Door 1):** [swadhikaar.vercel.app/patient](https://swadhikaar.vercel.app/patient) *(Supports Hinglish, Tanglish & Benglish with Gnani Prisma v3.0 `indic-auto` STT and Timbre v3.0 TTS)*
+* **🚑 Emergency EMS CAD (Door 4):** [swadhikaar.vercel.app/dispatch](https://swadhikaar.vercel.app/dispatch) *(Instant SBAR handoff, AVPU, CPR timer)*
+* **🏥 Clinical Ops / Doctor Copilot (Door 3):** [swadhikaar.vercel.app/ops](https://swadhikaar.vercel.app/ops)
+* **👩‍⚕️ ASHA Offline-First Field Portal (Door 2):** [swadhikaar.vercel.app/asha](https://swadhikaar.vercel.app/asha)
+
+---
 
 Swadhikaar is an Indic voice-first care operations platform for proactive patient outreach, prescription literacy, hospital readiness (PM-JAY), triage, and longitudinal follow-up — powered by **Gnani.ai Prisma v3.0 (STT)** and **Gnani.ai Timbre v3.0 (TTS)**.
 
