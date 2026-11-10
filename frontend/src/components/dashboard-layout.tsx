@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth-context";
 import { useAccessibility } from "@/context/accessibility-context";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Type,
   LayoutDashboard,
@@ -229,28 +230,9 @@ export function DashboardHeader({
         </h2>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-5">
-        {role === "patient" && (
-          <div className="flex items-center gap-3 border-r border-border/50 pr-4 sm:pr-5">
-            {/* No "Caregiver Linked: Suresh" here. It was a literal with no row behind
-                it, telling the patient someone was receiving their alerts. */}
-            <button
-              onClick={() => setFontSize && setFontSize(fontSize === "normal" ? "large" : "normal")}
-              className="flex items-center justify-center h-8 w-8 rounded-full border border-border/40 bg-muted/20 hover:bg-accent hover:text-accent-foreground text-foreground/80 transition-colors shadow-sm"
-              title="Toggle Large Text"
-            >
-              <Type className="h-3.5 w-3.5" />
-            </button>
-
-            <button
-              onClick={() => setLanguage && setLanguage(language === "en" ? "hi" : "en")}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border/40 bg-muted/20 hover:bg-accent hover:text-accent-foreground text-[11px] font-bold text-foreground/80 transition-colors shadow-sm"
-              title="Toggle Language"
-            >
-              {language === "en" ? "अ Hindi" : "A English"}
-            </button>
-          </div>
-        )}
+      <div className="flex items-center gap-3 sm:gap-4">
+        <ThemeToggle />
+        <div className="h-4 w-px bg-border/50" />
 
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-foreground/90">{userName}</span>
